@@ -1,12 +1,12 @@
 /**
  * Copyright 2025 Angel-Leduc TA
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     https://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -165,7 +165,7 @@ void draw_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PComman
 
     VkSemaphore wait_semaphores[]      = {(*sync)->image_available_semaphores[current_frame]};
     VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    
+
     VkSemaphore signal_semaphores[]    = {(*sync)->render_finished_semaphores[image_index]};
 
     VkSubmitInfo submit_info = {

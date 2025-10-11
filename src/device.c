@@ -1,12 +1,12 @@
 /**
  * Copyright 2025 Angel-Leduc TA
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     https://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -157,7 +157,7 @@ bool check_device_extensions(VkPhysicalDevice device, ExtensionList requiered_ex
     free(available_extensions);
 
     return true;
-    
+
 ERROR:
     perror("check_device_extensions");
     free(available_extensions);
@@ -206,7 +206,7 @@ bool is_suitable(VkPhysicalDevice device, VkSurfaceKHR surface, ExtensionList re
     vkGetPhysicalDeviceFeatures2(device, &available_features);
 
     bool has_descriptor_indexing_features = available_features.features.shaderSampledImageArrayDynamicIndexing &&
-                                            descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing && 
+                                            descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing &&
                                             descriptor_indexing_features.runtimeDescriptorArray &&
                                             descriptor_indexing_features.descriptorBindingVariableDescriptorCount;
 
