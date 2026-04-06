@@ -48,6 +48,8 @@ struct PWindow_T {
     bool framebuffer_resized;
     PCamera* camera;
     float last_frame_time;
+    float mouse_offset_x;
+    float mouse_offset_y;
     float mouse_last_x;
     float mouse_last_y;
     bool first_time_mouse;

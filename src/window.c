@@ -61,6 +61,10 @@ PWindow* create_window(PWindowInfo* window_info)
 
     window->last_frame_time  = 0.0f;
     window->first_time_mouse = true;
+    window->mouse_last_x     = 0.0f;
+    window->mouse_last_y     = 0.0f;
+    window->mouse_offset_x   = 0.0f;
+    window->mouse_offset_y   = 0.0f;
 
     glfwShowWindow(window->window);
 
@@ -116,38 +120,19 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
         pigment_window->mouse_last_y     = (float) height / 2.0f;
         pigment_window->first_time_mouse = false;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+        if(glfwRawMouseMotionSupported())
+        {
+            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+        return;
     }
 
-    float xoffset                = (float) xpos - (float) pigment_window->mouse_last_x;
-    float yoffset                = (float) pigment_window->mouse_last_y - (float) ypos;
+    pigment_window->mouse_offset_x += (float)xpos - pigment_window->mouse_last_x;
+    pigment_window->mouse_offset_y += pigment_window->mouse_last_y - (float)ypos;
+
     pigment_window->mouse_last_x = (float) xpos;
     pigment_window->mouse_last_y = (float) ypos;
-
-    float sensitivity = 0.05f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-
-    pigment_window->camera->yaw += xoffset;
-    pigment_window->camera->pitch += yoffset;
-
-    if(pigment_window->camera->pitch > 89.0f)
-    {
-        pigment_window->camera->pitch = 89.0f;
-    }
-    if(pigment_window->camera->pitch < -89.0f)
-    {
-        pigment_window->camera->pitch = -89.0f;
-    }
-
-    vec3 front = {
-        (float)(cos(glm_rad(pigment_window->camera->pitch)) * sin(glm_rad(pigment_window->camera->yaw))),
-        (float)(cos(glm_rad(pigment_window->camera->pitch)) * cos(glm_rad(pigment_window->camera->yaw))),
-        (float)(sin(glm_rad(pigment_window->camera->pitch)))
-    };
-
-    glm_vec3_normalize(front);
-
-    memcpy(pigment_window->camera->front, front, sizeof(front));
 }
 
 void handle_inputs(PWindow* window)
@@ -191,6 +176,39 @@ void handle_inputs(PWindow* window)
     if(glfwGetKey(window->window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
     {
         glm_vec3_muladds(window->camera->up, -speed, window->camera->position);
+    }
+
+    float xoffset = window->mouse_offset_x;
+    float yoffset = window->mouse_offset_y;
+    window->mouse_offset_x = 0.0f;
+    window->mouse_offset_y = 0.0f;
+
+    float sensitivity = 0.05f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    if(xoffset != 0.0f || yoffset != 0.0f)
+    {
+        window->camera->yaw += xoffset;
+        window->camera->pitch += yoffset;
+
+        if(window->camera->pitch > 89.0f)
+        {
+            window->camera->pitch = 89.0f;
+        }
+        if(window->camera->pitch < -89.0f)
+        {
+            window->camera->pitch = -89.0f;
+        }
+
+        vec3 front = {
+            (float)(cos(glm_rad(window->camera->pitch)) * sin(glm_rad(window->camera->yaw))),
+            (float)(cos(glm_rad(window->camera->pitch)) * cos(glm_rad(window->camera->yaw))),
+            (float)(sin(glm_rad(window->camera->pitch)))
+        };
+
+        glm_vec3_normalize(front);
+        memcpy(window->camera->front, front, sizeof(front));
     }
 }
 
