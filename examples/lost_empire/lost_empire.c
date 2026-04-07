@@ -1,7 +1,7 @@
-#include "pigment.h"
+#include <pigment.h>
 
-#include "models.h"
-#include "lib/loader.h"
+#include <models.h>
+#include <lib/loader.h>
 
 #define MODEL_NAME "lost_empire"
 

@@ -38,7 +38,6 @@ struct Pigment_T {
     PBuffers* buffers;
     PCamera* camera;
     PModel* model;
-    PVertexDescription* vertex_description;
     uint32_t max_frames_in_flight;
 };
 
@@ -142,6 +141,11 @@ struct PVertexDescription_T {
     uint32_t attribute_descriptions_size;
 };
 
+struct PDrawPushConstants_T {
+    mat4            world_matrix;
+    VkDeviceAddress vertex_buffer;
+};
+
 struct PBuffers_T {
     VkBuffer vertex_buffer;
     VkBuffer index_buffer;
@@ -149,6 +153,7 @@ struct PBuffers_T {
     VkDeviceMemory vertex_buffer_memory;
     VkDeviceMemory index_buffer_memory;
     VkDeviceMemory* uniform_buffers_memory;
+    VkDeviceAddress vertex_buffer_address;
     uint32_t vertices_size;
     uint32_t indices_size;
     void** uniform_buffers_mapped;

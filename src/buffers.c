@@ -60,7 +60,15 @@ int create_vertex_buffer(PBuffers* buffers, Vertex* vertices, uint32_t vertices_
     memcpy(data, vertices, (size_t) buffer_size);
     vkUnmapMemory(device->logical_device, staging_buffer_memory);
 
-    if(create_buffer(&buffers->vertex_buffer, &buffers->vertex_buffer_memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
+    if(create_buffer(
+        &buffers->vertex_buffer,
+        &buffers->vertex_buffer_memory,
+        buffer_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -69,6 +77,13 @@ int create_vertex_buffer(PBuffers* buffers, Vertex* vertices, uint32_t vertices_
 
     vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
     vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
+
+    VkBufferDeviceAddressInfo addr_info = {
+        .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .buffer = buffers->vertex_buffer
+    };
+    buffers->vertex_buffer_address = vkGetBufferDeviceAddress(
+        device->logical_device, &addr_info);
 
     return PIGMENT_SUCCESS;
 
@@ -243,10 +258,16 @@ int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize 
     VkMemoryRequirements memory_requirements;
     vkGetBufferMemoryRequirements(device->logical_device, *buffer, &memory_requirements);
 
+    VkMemoryAllocateFlagsInfo flags_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
+    };
+
     VkMemoryAllocateInfo allocate_info = {
         .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize  = memory_requirements.size,
-        .memoryTypeIndex = find_memory_type(device->physical_device, memory_requirements.memoryTypeBits, properties)
+        .memoryTypeIndex = find_memory_type(device->physical_device, memory_requirements.memoryTypeBits, properties),
+        .pNext           = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ? &flags_info : NULL
     };
 
     if(vkAllocateMemory(device->logical_device, &allocate_info, NULL, buffer_memory) != VK_SUCCESS)

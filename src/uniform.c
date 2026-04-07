@@ -21,20 +21,10 @@ extern void get_view_matrix(PCamera* camera, UniformBufferObject* ubo);
 
 void update_uniform_buffer(PBuffers* buffers, PSwapchain* swapchain, PCamera* camera)
 {
-    mat4 model = GLM_MAT4_IDENTITY_INIT;
-    vec3 rotation_axis = {0.0f, 1.0f, 0.0f};
-    vec3 pivot = {0.0f, 0.0f, 0.0f};
-
-    glm_rotate_at(model, pivot, glm_rad(90.0f), rotation_axis);
-
-    vec3 rotation_axis2 = {0.0f, 0.0f, 1.0f};
-    glm_rotate_at(model, pivot, glm_rad(90.0f), rotation_axis2);
-
     mat4 projection;
     glm_perspective(glm_rad(45.0f), (float) swapchain->extent.width / (float) swapchain->extent.height, 0.1f, 1000.0f, projection);
 
     UniformBufferObject ubo;
-    glm_mat4_copy(model, ubo.model);
     get_view_matrix(camera, &ubo);
     glm_mat4_copy(projection, ubo.projection);
 

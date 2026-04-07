@@ -83,7 +83,7 @@ typedef struct PCommands_T PCommands;
 
 typedef struct PSync_T PSync;
 
-typedef struct PVertexDescription_T PVertexDescription;
+typedef struct PDrawPushConstants_T PDrawPushConstants;
 
 typedef struct PBuffers_T PBuffers;
 
@@ -112,15 +112,16 @@ typedef enum {
 #include <cglm/cglm.h>
 
 typedef struct Vertex {
-    vec3 pos;
-    vec3 color;
-    vec2 texture_coord;
-    uint32_t texture_index;
-    uint32_t sampler_index;
-} Vertex;
+    vec3     pos;            // 12 bytes
+    float    uv_x;           // 4 bytes  — pad vec3
+    vec3     normal;         // 12 bytes  — ajout
+    float    uv_y;           // 4 bytes  — pad vec3
+    vec4     color;          // 16 bytes  — vec3 -> vec4
+    uint32_t texture_index;  // 4 bytes
+    uint32_t sampler_index;  // 4 bytes
+} __attribute__((aligned(16))) Vertex;
 
 typedef struct UniformBufferObject {
-    alignas(16) mat4 model;
     alignas(16) mat4 view;
     alignas(16) mat4 projection;
 } UniformBufferObject;

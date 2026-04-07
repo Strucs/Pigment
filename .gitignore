@@ -3,3 +3,4 @@ build
 **/.DS_Store
 powermake_config.json
 **/.spv
+.cache

@@ -22,7 +22,7 @@
 #define VERTEX_SHADER_TYPE 0
 #define FRAGMENT_SHADER_TYPE 1
 
-PPipeline* create_graphic_pipeline(PRenderPass* render_pass, PDescriptor* descriptor, PDevice* device, PVertexDescription* vertex_description);
+PPipeline* create_graphic_pipeline(PRenderPass* render_pass, PDescriptor* descriptor, PDevice* device);
 void destroy_pipeline(PPipeline* pipeline, PDevice* device);
 
 #endif

@@ -114,9 +114,14 @@ void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapc
     vkCmdSetViewport(command_buffer, 0, 1, &viewport);
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
-    VkBuffer vertex_buffers[] = {buffers->vertex_buffer};
-    VkDeviceSize offsets[]    = {0};
-    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
+    PDrawPushConstants push = {0};
+    glm_mat4_identity(push.world_matrix);
+    push.vertex_buffer = buffers->vertex_buffer_address;
+
+    vkCmdPushConstants(command_buffer, pipeline->pipeline_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(PDrawPushConstants), &push);
+
     vkCmdBindIndexBuffer(command_buffer, buffers->index_buffer, 0, VK_INDEX_TYPE_UINT32);
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, 1, &descriptor->descriptor_sets[swapchain->current_frame], 0, NULL);
     vkCmdDrawIndexed(command_buffer, buffers->indices_size, 1, 0, 0, 0);

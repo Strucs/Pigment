@@ -6,7 +6,7 @@
 layout (binding = 1) uniform sampler _sampler[MAX_SAMPLERS];
 layout (binding = 2) uniform texture2D _texture[];
 
-layout (location = 0) in vec3 fragColor;
+layout (location = 0) in vec4 fragColor;
 layout (location = 1) in vec2 fragTexCoord;
 layout (location = 2) flat in int inTexIndex;
 layout (location = 3) flat in int inSamplerIndex;

@@ -114,13 +114,13 @@ VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, 
 
 VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count)
 {
-    for(size_t i = 0; i < present_modes_count; i++)
-    {
-        if(available_present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
-        {
-            return available_present_modes[i];
-        }
-    }
+    // for(size_t i = 0; i < present_modes_count; i++)
+    // {
+    //     if(available_present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+    //     {
+    //         return available_present_modes[i];
+    //     }
+    // }
 
     return VK_PRESENT_MODE_FIFO_KHR;
 }

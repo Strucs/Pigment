@@ -29,9 +29,9 @@ PCamera* create_camera(void)
         return NULL;
     }
 
-    vec3 position = {0.f, 0.0f, 0.5f};
-    vec3 front    = {-1.0f, 0.0f, 0.0f};
-    vec3 up       = {0.0f, 0.0f, 1.0f};
+    vec3 position = {0.0f, 0.0f, 0.0f};
+    vec3 front    = {0.0f, 0.0f, -1.0f};
+    vec3 up       = {0.0f, 1.0f, 0.0f};
 
     memcpy(camera->position, position, sizeof(position));
     memcpy(camera->front, front, sizeof(front));
@@ -41,7 +41,7 @@ PCamera* create_camera(void)
 
     camera->roll  = 0.0f;
     camera->pitch = 0.0f;
-    camera->yaw   = 0.0f;
+    camera->yaw   = -90.0f;
 
     return camera;
 }

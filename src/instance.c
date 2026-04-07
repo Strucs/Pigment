@@ -48,7 +48,7 @@ PInstance* create_instance(PAppInfo* info)
 
     const char* layers[] = {
         "VK_LAYER_KHRONOS_validation",
-        //"VK_LAYER_LUNARG_monitor"
+        // "VK_LAYER_LUNARG_monitor"
     };
 
     instance->layers = calloc(1, sizeof(*(instance->layers)));
@@ -77,7 +77,7 @@ PInstance* create_instance(PAppInfo* info)
     app_info.applicationVersion = info != NULL ? info->app_version : PIGMENT_MAKE_VERSION(0,0,1);
     app_info.pEngineName        = "Pigment";
     app_info.engineVersion      = VK_MAKE_VERSION(0, 0, 3);
-    app_info.apiVersion         = VK_API_VERSION_1_2;
+    app_info.apiVersion         = VK_API_VERSION_1_3;
 
     if(get_extensions(instance) != PIGMENT_SUCCESS)
     {
@@ -105,9 +105,12 @@ PInstance* create_instance(PAppInfo* info)
         create_info.pNext             = NULL;
     }
 
-    if(vkCreateInstance(&create_info, NULL, &(instance->vulkan_instance)) != VK_SUCCESS)
+    int res;
+
+    if((res = vkCreateInstance(&create_info, NULL, &(instance->vulkan_instance))) != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to create an instance\n");
+        printf("%d\n", res);
         goto ERROR;
     }
 
@@ -158,32 +161,27 @@ int get_extensions(PInstance* instance)
         goto ERROR;
     }
 
-    instance->extensions->size = glfw_extensions_count + 2;
+    const char* extra_extensions[] = {
+        #ifdef __APPLE__
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+        #endif
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+        #if VLAYERS_ENABLED
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        #endif
+    };
 
-    if(VLAYERS_ENABLED)
-    {
-        instance->extensions->size++;
+    uint32_t extra_count = sizeof(extra_extensions) / sizeof(*extra_extensions);
 
-        instance->extensions->names = malloc(instance->extensions->size * sizeof(*instance->extensions->names));
-        if(instance->extensions->names == NULL)
-        {
-            goto ERROR;
-        }
-
-        memcpy(instance->extensions->names, glfw_extensions, glfw_extensions_count * sizeof(*glfw_extensions));
-        instance->extensions->names[instance->extensions->size - 3] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-        instance->extensions->names[instance->extensions->size - 2] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
-        instance->extensions->names[instance->extensions->size - 1] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-        return PIGMENT_SUCCESS;
-    }
+    instance->extensions->size  = glfw_extensions_count + extra_count;
     instance->extensions->names = malloc(instance->extensions->size * sizeof(*instance->extensions->names));
     if(instance->extensions->names == NULL)
     {
         goto ERROR;
     }
+
     memcpy(instance->extensions->names, glfw_extensions, glfw_extensions_count * sizeof(*glfw_extensions));
-    instance->extensions->names[instance->extensions->size - 2] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-    instance->extensions->names[instance->extensions->size - 1] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+    memcpy(instance->extensions->names + glfw_extensions_count, extra_extensions, extra_count * sizeof(*extra_extensions));
 
     return PIGMENT_SUCCESS;
 

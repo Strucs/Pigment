@@ -25,7 +25,6 @@
 #include "pipeline.h"
 #include "commands.h"
 #include "synchronization.h"
-#include "vertex.h"
 #include "buffers.h"
 #include "descriptor.h"
 #include "texture.h"
@@ -43,12 +42,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
 
     pigment->max_frames_in_flight = max_frame_in_flight;
     pigment->model = model;
-
-    pigment->vertex_description = create_vertex_description();
-    if(pigment->vertex_description == NULL)
-    {
-        goto ERROR;
-    }
 
     pigment->window = create_window(window_info);
     if(pigment->window == NULL)
@@ -105,7 +98,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
     {
         goto ERROR;
     }
-    pigment->pipeline   = create_graphic_pipeline(pigment->render_pass, pigment->descriptor, pigment->device, pigment->vertex_description);
+    pigment->pipeline   = create_graphic_pipeline(pigment->render_pass, pigment->descriptor, pigment->device);
     if(pigment->pipeline == NULL)
     {
         goto ERROR;
@@ -161,7 +154,6 @@ void destroy_pigment(Pigment* pigment)
     destroy_textures(pigment->textures, pigment->device);
     destroy_samplers(pigment->samplers, pigment->device);
     destroy_commands(pigment->commands, pigment->device, pigment->max_frames_in_flight);
-    destroy_vertex_description(pigment->vertex_description);
     destroy_render_pass(pigment->render_pass, pigment->device);
     destroy_device(pigment->device);
     destroy_surface(pigment->surface, pigment->instance);

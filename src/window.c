@@ -202,9 +202,9 @@ void handle_inputs(PWindow* window)
         }
 
         vec3 front = {
-            (float)(cos(glm_rad(window->camera->pitch)) * sin(glm_rad(window->camera->yaw))),
-            (float)(cos(glm_rad(window->camera->pitch)) * cos(glm_rad(window->camera->yaw))),
-            (float)(sin(glm_rad(window->camera->pitch)))
+            (float)(cos(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch))),
+            (float)(sin(glm_rad(window->camera->pitch))),
+            (float)(sin(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch)))
         };
 
         glm_vec3_normalize(front);

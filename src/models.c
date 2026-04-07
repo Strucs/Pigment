@@ -94,18 +94,20 @@ void load_model_multi_textures(const char* filepath, float x_pos, float y_pos, f
         for(size_t j = 0; j < attrib.num_faces; j++)
         {
             Vertex vertex = {
-                .pos = {
-                        attrib.vertices[3 * attrib.faces[j].v_idx + 0],
-                        attrib.vertices[3 * attrib.faces[j].v_idx + 1],
-                        attrib.vertices[3 * attrib.faces[j].v_idx + 2],
-                        },
-
-                .color = {1.0f, 1.0f, 1.0f},
-
-                .texture_coord = {attrib.texcoords[2 * attrib.faces[j].vt_idx + 0], 1.0f - attrib.texcoords[2 * attrib.faces[j].vt_idx + 1]},
-
+                .pos    = {
+                    attrib.vertices[3 * attrib.faces[j].v_idx + 0],
+                    attrib.vertices[3 * attrib.faces[j].v_idx + 1],
+                    attrib.vertices[3 * attrib.faces[j].v_idx + 2],
+                },
+                .uv_x   = attrib.texcoords[2 * attrib.faces[j].vt_idx + 0],
+                .normal = {
+                    attrib.normals[3 * attrib.faces[j].vn_idx + 0],
+                    attrib.normals[3 * attrib.faces[j].vn_idx + 1],
+                    attrib.normals[3 * attrib.faces[j].vn_idx + 2],
+                },
+                .uv_y          = 1.0f - attrib.texcoords[2 * attrib.faces[j].vt_idx + 1],
+                .color         = {1.0f, 1.0f, 1.0f, 1.0f}, // vec4
                 .texture_index = 0,
-
                 .sampler_index = NEAREST,
             };
 
@@ -161,18 +163,20 @@ void load_model(const char* filepath, float x_pos, float y_pos, float z_pos, flo
         for(size_t j = 0; j < attrib.num_faces; j++)
         {
             Vertex vertex = {
-                .pos = {
-                        attrib.vertices[3 * attrib.faces[j].v_idx + 0],
-                        attrib.vertices[3 * attrib.faces[j].v_idx + 1],
-                        attrib.vertices[3 * attrib.faces[j].v_idx + 2],
-                        },
-
-                .color = {1.0f, 1.0f, 1.0f},
-
-                .texture_coord = {attrib.texcoords[2 * attrib.faces[j].vt_idx + 0], 1.0f - attrib.texcoords[2 * attrib.faces[j].vt_idx + 1]},
-
-                .texture_index = texture_index,
-
+                .pos    = {
+                    attrib.vertices[3 * attrib.faces[j].v_idx + 0],
+                    attrib.vertices[3 * attrib.faces[j].v_idx + 1],
+                    attrib.vertices[3 * attrib.faces[j].v_idx + 2],
+                },
+                .uv_x   = attrib.texcoords[2 * attrib.faces[j].vt_idx + 0],
+                .normal = {
+                    attrib.normals[3 * attrib.faces[j].vn_idx + 0],
+                    attrib.normals[3 * attrib.faces[j].vn_idx + 1],
+                    attrib.normals[3 * attrib.faces[j].vn_idx + 2],
+                },
+                .uv_y          = 1.0f - attrib.texcoords[2 * attrib.faces[j].vt_idx + 1],
+                .color         = {1.0f, 1.0f, 1.0f, 1.0f}, // vec4
+                .texture_index = (int) texture_index,
                 .sampler_index = NEAREST,
             };
 
@@ -267,40 +271,40 @@ void load_cube(float size, float x_pos, float y_pos, float z_pos, uint16_t textu
 
     Vertex vertices[] = {
         // +X face
-        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {1.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {1.0f, 0.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, 1.0f, {1.0f, 0.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, 1.0f, {1.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
 
         // -X face
-        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {-1.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {-1.0f, 0.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 1.0f, {-1.0f, 0.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 1.0f, {-1.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
 
         // +Y face
-        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {0.0f, 1.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {0.0f, 1.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, 1.0f, {0.0f, 1.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, 1.0f, {0.0f, 1.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
 
         // -Y face
-        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {0.0f, -1.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {0.0f, -1.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 1.0f, {0.0f, -1.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 1.0f, {0.0f, -1.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
 
         // +Z face
-        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {0.0f, 0.0f, 1.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {0.0f, 0.0f, 1.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, 1.0f, {0.0f, 0.0f, 1.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] + half_cube_size}, 1.0f, {0.0f, 0.0f, 1.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
 
         // -Z face
-        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, texture_index, filtering_mode},
-        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {0.0f, 0.0f, -1.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {0.0f, 0.0f, -1.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] - half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, 1.0f, {0.0f, 0.0f, -1.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
+        {{cube_center[0] + half_cube_size, cube_center[1] + half_cube_size, cube_center[2] - half_cube_size}, 1.0f, {0.0f, 0.0f, -1.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
     };
 
     uint32_t vertices_size = sizeof(vertices) / sizeof(vertices[0]);

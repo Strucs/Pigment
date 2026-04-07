@@ -369,10 +369,17 @@ int create_logical_device(PDevice* device, PInstance* instance, PSurface* surfac
         .descriptorBindingVariableDescriptorCount  = VK_TRUE
     };
 
+    VkPhysicalDeviceBufferDeviceAddressFeatures bda_features = {
+        .sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+        .bufferDeviceAddress = VK_TRUE,
+        .pNext               = &descriptor_indexing_features
+    };
+
+
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = enabled_features,
-        .pNext    = &descriptor_indexing_features
+        .pNext    = &bda_features
     };
 
     VkDeviceCreateInfo create_info = {
@@ -432,6 +439,7 @@ PDevice* create_device(PInstance* instance, PSurface* surface)
         VK_KHR_MAINTENANCE1_EXTENSION_NAME,
         VK_KHR_MAINTENANCE3_EXTENSION_NAME,
         VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         #ifdef __APPLE__
         "VK_KHR_portability_subset"
         #endif
