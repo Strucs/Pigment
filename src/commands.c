@@ -24,7 +24,6 @@ VkCommandPool create_command_pool(PDevice* device, PSurface* surface);
 VkCommandBuffer* create_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers);
 void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
-void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor);
 
 PCommands* create_commands(PDevice* device, PSurface* surface)
 {
@@ -157,59 +156,6 @@ void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, ui
     };
 
     vkCmdPipelineBarrier2(command_buffer, &dep_to_present);
-}
-
-void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor)
-{
-    VkCommandBufferBeginInfo command_buffer_begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
-    };
-
-    if(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info) != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to begin recording command buffer!\n");
-        return;
-    }
-
-    cmd_begin_rendering(command_buffer, swapchain, image_index);
-
-    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->graphic_pipeline);
-
-    VkViewport viewport = {
-        viewport.x        = 0.0f,
-        viewport.y        = 0.0f,
-        viewport.width    = (float) swapchain->extent.width,
-        viewport.height   = (float) swapchain->extent.height,
-        viewport.minDepth = 0.0f,
-        viewport.maxDepth = 1.0f,
-    };
-
-    VkRect2D scissor = {
-        {0, 0},
-        swapchain->extent
-    };
-
-    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-    vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-
-    PDrawPushConstants push = {0};
-    glm_mat4_identity(push.world_matrix);
-    push.vertex_buffer = buffers->vertex_buffer_address;
-
-    vkCmdPushConstants(command_buffer, pipeline->pipeline_layout,
-                       VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(PDrawPushConstants), &push);
-
-    vkCmdBindIndexBuffer(command_buffer, buffers->index_buffer, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, 1, &descriptor->descriptor_sets[swapchain->current_frame], 0, NULL);
-    vkCmdDrawIndexed(command_buffer, buffers->indices_size, 1, 0, 0, 0);
-
-    cmd_end_rendering(command_buffer, swapchain, image_index);
-
-    if(vkEndCommandBuffer(command_buffer) != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to record command buffer!\n");
-    }
 }
 
 VkCommandPool create_command_pool(PDevice* device, PSurface* surface)

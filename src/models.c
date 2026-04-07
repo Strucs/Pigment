@@ -106,7 +106,7 @@ void load_model_multi_textures(const char* filepath, float x_pos, float y_pos, f
                     attrib.normals[3 * attrib.faces[j].vn_idx + 2],
                 },
                 .uv_y          = 1.0f - attrib.texcoords[2 * attrib.faces[j].vt_idx + 1],
-                .color         = {1.0f, 1.0f, 1.0f, 1.0f}, // vec4
+                .color         = {1.0f, 1.0f, 1.0f, 1.0f},
                 .texture_index = 0,
                 .sampler_index = NEAREST,
             };
@@ -175,7 +175,7 @@ void load_model(const char* filepath, float x_pos, float y_pos, float z_pos, flo
                     attrib.normals[3 * attrib.faces[j].vn_idx + 2],
                 },
                 .uv_y          = 1.0f - attrib.texcoords[2 * attrib.faces[j].vt_idx + 1],
-                .color         = {1.0f, 1.0f, 1.0f, 1.0f}, // vec4
+                .color         = {1.0f, 1.0f, 1.0f, 1.0f},
                 .texture_index = (int) texture_index,
                 .sampler_index = NEAREST,
             };

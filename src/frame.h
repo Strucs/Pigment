@@ -19,6 +19,7 @@
 
 #include "defines.h"
 
-void draw_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PDescriptor* descriptor, PPipeline* pipeline, PSurface* surface, PWindow* window, PDevice* device, const uint32_t max_frame);
+bool begin_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PDescriptor* descriptor, PPipeline* pipeline, PSurface* surface, PWindow* window, PDevice* device, uint32_t max_frame, uint32_t* out_image_index);
+void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevice* device, uint32_t image_index, uint32_t max_frame);
 
 #endif

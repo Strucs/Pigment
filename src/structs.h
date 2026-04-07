@@ -38,6 +38,7 @@ struct Pigment_T {
     PCamera* camera;
     PModel* model;
     uint32_t max_frames_in_flight;
+    uint32_t current_image_index;
 };
 
 struct PWindow_T {

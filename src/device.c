@@ -455,7 +455,7 @@ PDevice* create_device(PInstance* instance, PSurface* surface)
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
         #ifdef __APPLE__
-        VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+        "VK_KHR_portability_subset"
         #endif
     };
 

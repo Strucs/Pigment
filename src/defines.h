@@ -110,13 +110,13 @@ typedef enum {
 #include <cglm/cglm.h>
 
 typedef struct Vertex {
-    vec3     pos;            // 12 bytes
-    float    uv_x;           // 4 bytes  — pad vec3
-    vec3     normal;         // 12 bytes  — ajout
-    float    uv_y;           // 4 bytes  — pad vec3
-    vec4     color;          // 16 bytes  — vec3 -> vec4
-    uint32_t texture_index;  // 4 bytes
-    uint32_t sampler_index;  // 4 bytes
+    vec3     pos;
+    float    uv_x;
+    vec3     normal;
+    float    uv_y;
+    vec4     color;
+    uint32_t texture_index;
+    uint32_t sampler_index;
 } __attribute__((aligned(16))) Vertex;
 
 typedef struct UniformBufferObject {

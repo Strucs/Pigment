@@ -139,6 +139,7 @@ void destroy_pigment(Pigment* pigment)
         return;
     }
 
+    device_wait_idle(pigment->device);
     destroy_camera(pigment->camera);
     destroy_sync(pigment->sync, pigment->device, pigment->swapchain, pigment->max_frames_in_flight);
     destroy_swapchain(pigment->swapchain, pigment->device);
@@ -156,6 +157,73 @@ void destroy_pigment(Pigment* pigment)
     free(pigment);
 }
 
+bool pigment_should_run(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return false;
+    }
+
+    return !window_should_close(pigment->window);
+}
+
+void pigment_poll_events(void)
+{
+    poll_events();
+}
+
+void pigment_handle_inputs(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return;
+    }
+
+    handle_inputs(pigment->window);
+}
+
+bool pigment_begin_frame(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return false;
+    }
+
+    return begin_frame(pigment->buffers, &pigment->swapchain, &pigment->sync, pigment->commands, pigment->descriptor, pigment->pipeline, pigment->surface, pigment->window, pigment->device, pigment->max_frames_in_flight, &pigment->current_image_index);
+}
+
+void pigment_draw_buffers(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return;
+    }
+
+    uint32_t current_frame  = pigment->swapchain->current_frame;
+    VkCommandBuffer cmd     = pigment->commands->command_buffers[current_frame];
+
+    PDrawPushConstants push = {0};
+    glm_mat4_identity(push.world_matrix);
+    push.vertex_buffer = pigment->buffers->vertex_buffer_address;
+
+    vkCmdPushConstants(cmd, pigment->pipeline->pipeline_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(PDrawPushConstants), &push);
+
+    vkCmdBindIndexBuffer(cmd, pigment->buffers->index_buffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(cmd, pigment->buffers->indices_size, 1, 0, 0, 0);
+}
+
+void pigment_end_frame(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return;
+    }
+
+    end_frame(&pigment->swapchain, &pigment->sync, pigment->commands, pigment->device, pigment->current_image_index, pigment->max_frames_in_flight);
+}
+
 void pigment_run(Pigment* pigment)
 {
     if(pigment == NULL)
@@ -163,22 +231,15 @@ void pigment_run(Pigment* pigment)
         return;
     }
 
-    while(!window_should_close(pigment->window))
+    while(pigment_should_run(pigment))
     {
-        poll_events();
-        handle_inputs(pigment->window);
-        pigment_draw_frame(pigment);
+        pigment_poll_events();
+        pigment_handle_inputs(pigment);
+
+        if(!pigment_begin_frame(pigment))
+        {
+            continue;
+        }
+        pigment_end_frame(pigment);
     }
-
-    device_wait_idle(pigment->device);
-}
-
-void pigment_draw_frame(Pigment* pigment)
-{
-    if(pigment == NULL)
-    {
-        return;
-    }
-
-    draw_frame(pigment->buffers, &(pigment->swapchain), &(pigment->sync), pigment->commands, pigment->descriptor, pigment->pipeline, pigment->surface, pigment->window, pigment->device, pigment->max_frames_in_flight);
 }

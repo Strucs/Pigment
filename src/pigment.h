@@ -23,7 +23,12 @@
 Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* model, TexturesToLoad* textures_to_load, StringArray* texture_paths, uint32_t max_frame_in_flight);
 void destroy_pigment(Pigment* pigment);
 
-void pigment_draw_frame(Pigment* pigment);
+bool pigment_should_run(Pigment* pigment);
+void pigment_poll_events(void);
+void pigment_handle_inputs(Pigment* pigment);
+bool pigment_begin_frame(Pigment* pigment);
+void pigment_draw_buffers(Pigment* pigment);
+void pigment_end_frame(Pigment* pigment);
 void pigment_run(Pigment* pigment);
 
 #endif

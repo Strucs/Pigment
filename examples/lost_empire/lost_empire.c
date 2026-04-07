@@ -58,7 +58,18 @@ int main(void)
         goto FREE;
     }
 
-    pigment_run(pigment);
+    while(pigment_should_run(pigment))
+    {
+        pigment_poll_events();
+        pigment_handle_inputs(pigment);
+
+        if(!pigment_begin_frame(pigment))
+            continue;
+
+        pigment_draw_buffers(pigment);
+
+        pigment_end_frame(pigment);
+    }
 
     error_code = 0;
 

@@ -19,7 +19,7 @@
 #include "shaders.h"
 
 VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModule shader_module, char type, const char* entry_point);
-VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info();
+VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void);
 VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(void);
 VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void);
 VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(void);
@@ -209,7 +209,7 @@ VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModul
     return shader_stage_info;
 }
 
-VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info()
+VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void)
 {
     VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
         .sType                                = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
