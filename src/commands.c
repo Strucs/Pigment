@@ -22,7 +22,9 @@ extern QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfac
 
 VkCommandPool create_command_pool(PDevice* device, PSurface* surface);
 VkCommandBuffer* create_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers);
-void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, PRenderPass* render_pass, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor);
+void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
+void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
+void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor);
 
 PCommands* create_commands(PDevice* device, PSurface* surface)
 {
@@ -58,7 +60,97 @@ void destroy_commands(PCommands* commands, PDevice* device, const uint32_t comma
     free(commands);
 }
 
-void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, PRenderPass* render_pass, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor)
+void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index)
+{
+    VkImageSubresourceRange subresource_range = {
+        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel   = 0,
+        .levelCount     = 1,
+        .baseArrayLayer = 0,
+        .layerCount     = 1
+    };
+
+    VkImageMemoryBarrier barrier_to_render = {
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask       = 0,
+        .dstAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image               = swapchain->images[image_index],
+        .subresourceRange    = subresource_range
+    };
+
+    vkCmdPipelineBarrier(command_buffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0, 0, NULL, 0, NULL, 1, &barrier_to_render);
+
+    VkClearColorValue clear_color_value = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearDepthStencilValue clear_depth_stencil_value = {1.0f, 0};
+
+    VkRenderingAttachmentInfoKHR color_attachment = {
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView   = swapchain->image_views[image_index],
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue  = { .color = clear_color_value }
+    };
+
+    VkRenderingAttachmentInfoKHR depth_attachment = {
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView   = swapchain->depth_image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue  = { .depthStencil = clear_depth_stencil_value }
+    };
+
+    VkRenderingInfoKHR rendering_info = {
+        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+        .renderArea           = {{0, 0}, swapchain->extent},
+        .layerCount           = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments    = &color_attachment,
+        .pDepthAttachment     = &depth_attachment
+    };
+
+    vkCmdBeginRendering(command_buffer, &rendering_info);
+}
+
+void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index)
+{
+    vkCmdEndRendering(command_buffer);
+
+    VkImageSubresourceRange subresource_range = {
+        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel   = 0,
+        .levelCount     = 1,
+        .baseArrayLayer = 0,
+        .layerCount     = 1
+    };
+
+    VkImageMemoryBarrier barrier_to_present = {
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask       = 0,
+        .oldLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image               = swapchain->images[image_index],
+        .subresourceRange    = subresource_range
+    };
+
+    vkCmdPipelineBarrier(command_buffer,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0, 0, NULL, 0, NULL, 1, &barrier_to_present);
+}
+
+void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor)
 {
     VkCommandBufferBeginInfo command_buffer_begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
@@ -70,30 +162,7 @@ void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapc
         return;
     }
 
-    VkRect2D render_area = {
-        {0, 0},
-        swapchain->extent
-    };
-
-    VkClearColorValue clear_color_value = {
-        {0.0f, 0.0f, 0.0f, 1.0f}
-    };
-    VkClearDepthStencilValue clear_depth_stencil_value = {1.0f, 0};
-
-    VkClearValue clear_values[2] = {0};
-    clear_values[0].color        = clear_color_value;
-    clear_values[1].depthStencil = clear_depth_stencil_value;
-
-    VkRenderPassBeginInfo render_pass_begin_info = {
-        .sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass      = render_pass->render_pass,
-        .framebuffer     = swapchain->framebuffers[image_index],
-        .renderArea      = render_area,
-        .clearValueCount = sizeof(clear_values) / sizeof(clear_values[0]),
-        .pClearValues    = clear_values
-    };
-
-    vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+    cmd_begin_rendering(command_buffer, swapchain, image_index);
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->graphic_pipeline);
 
@@ -126,7 +195,7 @@ void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapc
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, 1, &descriptor->descriptor_sets[swapchain->current_frame], 0, NULL);
     vkCmdDrawIndexed(command_buffer, buffers->indices_size, 1, 0, 0, 0);
 
-    vkCmdEndRenderPass(command_buffer);
+    cmd_end_rendering(command_buffer, swapchain, image_index);
 
     if(vkEndCommandBuffer(command_buffer) != VK_SUCCESS)
     {

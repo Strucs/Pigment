@@ -27,6 +27,7 @@ VkFormat find_supported_format(VkFormat* candidates, uint32_t candidates_number,
 int create_depth_resources(PSwapchain* swapchain, PCommands* commands, PDevice* device)
 {
     VkFormat depth_format = find_depth_format(device->physical_device);
+    swapchain->depth_format = depth_format;
 
     if(create_image(&swapchain->depth_image, &swapchain->depth_image_memory, swapchain->extent.width, swapchain->extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
     {

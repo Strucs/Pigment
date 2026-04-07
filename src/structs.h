@@ -28,7 +28,6 @@ struct Pigment_T {
     PSurface* surface;
     PDevice* device;
     PSwapchain* swapchain;
-    PRenderPass* render_pass;
     PDescriptor* descriptor;
     PPipeline* pipeline;
     PCommands* commands;
@@ -108,20 +107,16 @@ struct PSwapchain_T {
     uint32_t image_count;
     VkFormat image_format;
     VkExtent2D extent;
-    VkFramebuffer* framebuffers;
     uint32_t current_frame;
     VkImage depth_image;
     VkDeviceMemory depth_image_memory;
     VkImageView depth_image_view;
+    VkFormat depth_format;
 };
 
 struct PPipeline_T {
     VkPipeline graphic_pipeline;
     VkPipelineLayout pipeline_layout;
-};
-
-struct PRenderPass_T {
-    VkRenderPass render_pass;
 };
 
 struct PCommands_T {

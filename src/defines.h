@@ -77,8 +77,6 @@ typedef struct PSwapchain_T PSwapchain;
 
 typedef struct PPipeline_T PPipeline;
 
-typedef struct PRenderPass_T PRenderPass;
-
 typedef struct PCommands_T PCommands;
 
 typedef struct PSync_T PSync;

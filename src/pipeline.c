@@ -30,7 +30,7 @@ VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPi
 VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
 VkPipelineLayout create_pipeline_layout(VkDescriptorSetLayout* descriptor_set_layout, VkDevice device);
 
-PPipeline* create_graphic_pipeline(PRenderPass* render_pass, PDescriptor* descriptor, PDevice* device)
+PPipeline* create_graphic_pipeline(PSwapchain* swapchain, PDescriptor* descriptor, PDevice* device)
 {
     PPipeline* pipeline = NULL;
     char* vertex_shader_code = NULL;
@@ -129,8 +129,16 @@ PPipeline* create_graphic_pipeline(PRenderPass* render_pass, PDescriptor* descri
 
     pipeline->pipeline_layout = create_pipeline_layout(&descriptor->descriptor_set_layout, device->logical_device);
 
+    VkPipelineRenderingCreateInfoKHR rendering_create_info = {
+        .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+        .colorAttachmentCount    = 1,
+        .pColorAttachmentFormats = &swapchain->image_format,
+        .depthAttachmentFormat   = swapchain->depth_format
+    };
+
     VkGraphicsPipelineCreateInfo pipeline_create_info = {
         .sType                        = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext                        = &rendering_create_info,
         .stageCount                   = sizeof(shader_stages_create_info) / sizeof(shader_stages_create_info[0]),
         .pStages                      = shader_stages_create_info,
         .pVertexInputState            = &vertex_input_state_create_info,
@@ -142,8 +150,7 @@ PPipeline* create_graphic_pipeline(PRenderPass* render_pass, PDescriptor* descri
         .pColorBlendState             = &color_blend_state_create_info,
         .pDynamicState                = &dynamic_state_create_info,
         .layout                       = pipeline->pipeline_layout,
-        .renderPass                   = render_pass->render_pass,
-        .subpass                      = 0,
+        .renderPass                   = VK_NULL_HANDLE,
         .basePipelineHandle           = VK_NULL_HANDLE
     };
 

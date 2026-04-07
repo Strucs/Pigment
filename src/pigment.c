@@ -70,11 +70,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
         goto ERROR;
     }
     create_image_views(pigment->swapchain, pigment->device);
-    pigment->render_pass = create_render_pass(pigment->swapchain, pigment->device);
-    if(pigment->render_pass == NULL)
-    {
-        goto ERROR;
-    }
     pigment->commands    = create_commands(pigment->device, pigment->surface);
     if(pigment->commands == NULL)
     {
@@ -98,13 +93,12 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
     {
         goto ERROR;
     }
-    pigment->pipeline   = create_graphic_pipeline(pigment->render_pass, pigment->descriptor, pigment->device);
+    create_depth_resources(pigment->swapchain, pigment->commands, pigment->device);
+    pigment->pipeline   = create_graphic_pipeline(pigment->swapchain, pigment->descriptor, pigment->device);
     if(pigment->pipeline == NULL)
     {
         goto ERROR;
     }
-    create_depth_resources(pigment->swapchain, pigment->commands, pigment->device);
-    create_framebuffers(pigment->swapchain, pigment->render_pass, pigment->device);
     pigment->buffers = create_buffers(pigment->model, pigment->device, pigment->commands, pigment->max_frames_in_flight);
     if(pigment->buffers == NULL)
     {
@@ -154,7 +148,6 @@ void destroy_pigment(Pigment* pigment)
     destroy_textures(pigment->textures, pigment->device);
     destroy_samplers(pigment->samplers, pigment->device);
     destroy_commands(pigment->commands, pigment->device, pigment->max_frames_in_flight);
-    destroy_render_pass(pigment->render_pass, pigment->device);
     destroy_device(pigment->device);
     destroy_surface(pigment->surface, pigment->instance);
     destroy_instance(pigment->instance);
@@ -187,5 +180,5 @@ void pigment_draw_frame(Pigment* pigment)
         return;
     }
 
-    draw_frame(pigment->buffers, &(pigment->swapchain), &(pigment->sync), pigment->commands, pigment->descriptor, pigment->pipeline, pigment->surface, pigment->window, pigment->render_pass, pigment->device, pigment->max_frames_in_flight);
+    draw_frame(pigment->buffers, &(pigment->swapchain), &(pigment->sync), pigment->commands, pigment->descriptor, pigment->pipeline, pigment->surface, pigment->window, pigment->device, pigment->max_frames_in_flight);
 }

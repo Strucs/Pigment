@@ -86,7 +86,9 @@ PInstance* create_instance(PAppInfo* info)
 
     create_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create_info.pApplicationInfo        = &app_info;
-    create_info.flags   = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    #ifdef __APPLE__
+    create_info.flags                   = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    #endif
     create_info.enabledExtensionCount   = instance->extensions->size;
     create_info.ppEnabledExtensionNames = instance->extensions->names;
 

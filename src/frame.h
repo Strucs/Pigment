@@ -19,8 +19,6 @@
 
 #include "defines.h"
 
-PRenderPass* create_render_pass(PSwapchain* swapchain, PDevice* device);
-void destroy_render_pass(PRenderPass* render_pass, PDevice* device);
-void draw_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PDescriptor* descriptor, PPipeline* pipeline, PSurface* surface, PWindow* window, PRenderPass* render_pass, PDevice* device, const uint32_t max_frame);
+void draw_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PDescriptor* descriptor, PPipeline* pipeline, PSurface* surface, PWindow* window, PDevice* device, const uint32_t max_frame);
 
 #endif

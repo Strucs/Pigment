@@ -23,7 +23,6 @@ extern void destroy_depth_resources(PSwapchain* swapchain, PDevice* device);
 extern QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface);
 
 void destroy_image_views(PSwapchain* swapchain, PDevice* device);
-void destroy_framebuffers(PSwapchain* swapchain, PDevice* device);
 SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceKHR surface);
 void destroy_support_details(SwapChainSupportDetails* details);
 VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);
@@ -255,7 +254,6 @@ void destroy_swapchain(PSwapchain* swapchain, PDevice* device)
     if(swapchain != NULL)
     {
         destroy_depth_resources(swapchain, device);
-        destroy_framebuffers(swapchain, device);
         destroy_image_views(swapchain, device);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
         free(swapchain);
@@ -301,7 +299,6 @@ int create_image_views(PSwapchain* swapchain, PDevice* device)
         swapchain->image_views[i] = create_image_view(swapchain->images[i], swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1, device->logical_device);
     }
 
-    free(swapchain->images);
     return PIGMENT_SUCCESS;
 }
 
@@ -317,63 +314,10 @@ void destroy_image_views(PSwapchain* swapchain, PDevice* device)
     }
 
     free(swapchain->image_views);
+    free(swapchain->images);
 }
 
-int create_framebuffers(PSwapchain* swapchain, PRenderPass* render_pass, PDevice* device)
-{
-    swapchain->framebuffers = malloc(swapchain->image_count * sizeof(*swapchain->framebuffers));
-    if(device == NULL)
-    {
-        goto ERROR;
-    }
-
-    for(size_t i = 0; i < swapchain->image_count; i++)
-    {
-        VkImageView attachments[] = {
-            swapchain->image_views[i],
-            swapchain->depth_image_view
-        };
-
-        VkFramebufferCreateInfo framebuffer_create_info = {
-            .sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass      = render_pass->render_pass,
-            .attachmentCount = sizeof(attachments) / sizeof(attachments[0]),
-            .pAttachments    = attachments,
-            .width           = swapchain->extent.width,
-            .height          = swapchain->extent.height,
-            .layers          = 1
-        };
-
-        if(vkCreateFramebuffer(device->logical_device, &framebuffer_create_info, NULL, &swapchain->framebuffers[i]) != VK_SUCCESS)
-        {
-            fprintf(stderr, "Failed to create framebuffer!\n");
-            goto ERROR;
-        }
-    }
-
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    perror("create_framebuffers");
-    free(swapchain->framebuffers);
-    return PIGMENT_ERROR;
-}
-
-void destroy_framebuffers(PSwapchain* swapchain, PDevice* device)
-{
-    if(swapchain == NULL || swapchain->framebuffers == NULL)
-    {
-        return;
-    }
-    for(size_t i = 0; i < swapchain->image_count; i++)
-    {
-        vkDestroyFramebuffer(device->logical_device, swapchain->framebuffers[i], NULL);
-    }
-
-    free(swapchain->framebuffers);
-}
-
-PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PCommands* commands, PDevice* device, PSurface* surface, PWindow* window, PRenderPass* render_pass)
+PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PCommands* commands, PDevice* device, PSurface* surface, PWindow* window)
 {
     PSwapchain* swapchain;
 
@@ -399,10 +343,6 @@ PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PCommands* comman
         goto ERROR;
     }
     if(create_depth_resources(swapchain, commands, device) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-    if(create_framebuffers(swapchain, render_pass, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
