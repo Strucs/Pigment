@@ -93,7 +93,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
     {
         goto ERROR;
     }
-    create_depth_resources(pigment->swapchain, pigment->commands, pigment->device);
+    create_depth_resources(pigment->swapchain, pigment->device);
     pigment->pipeline   = create_graphic_pipeline(pigment->swapchain, pigment->descriptor, pigment->device);
     if(pigment->pipeline == NULL)
     {

@@ -18,13 +18,12 @@
 #include "structs.h"
 
 extern int create_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
-extern int transition_image_layout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels, VkCommandPool command_pool, PDevice* device);
 extern VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device);
 
 VkFormat find_depth_format(VkPhysicalDevice physical_device);
 VkFormat find_supported_format(VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features, VkPhysicalDevice physical_device);
 
-int create_depth_resources(PSwapchain* swapchain, PCommands* commands, PDevice* device)
+int create_depth_resources(PSwapchain* swapchain, PDevice* device)
 {
     VkFormat depth_format = find_depth_format(device->physical_device);
     swapchain->depth_format = depth_format;
@@ -35,10 +34,6 @@ int create_depth_resources(PSwapchain* swapchain, PCommands* commands, PDevice* 
     }
     swapchain->depth_image_view = create_image_view(swapchain->depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1, device->logical_device);
     if(swapchain->depth_image_view == NULL)
-    {
-        goto ERROR;
-    }
-    if(transition_image_layout(swapchain->depth_image, depth_format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, commands->command_pool, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }

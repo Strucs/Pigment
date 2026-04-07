@@ -317,7 +317,7 @@ void destroy_image_views(PSwapchain* swapchain, PDevice* device)
     free(swapchain->images);
 }
 
-PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PCommands* commands, PDevice* device, PSurface* surface, PWindow* window)
+PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PDevice* device, PSurface* surface, PWindow* window)
 {
     PSwapchain* swapchain;
 
@@ -342,7 +342,7 @@ PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PCommands* comman
     {
         goto ERROR;
     }
-    if(create_depth_resources(swapchain, commands, device) != PIGMENT_SUCCESS)
+    if(create_depth_resources(swapchain, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }

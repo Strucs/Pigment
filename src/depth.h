@@ -19,6 +19,6 @@
 
 #include "defines.h"
 
-int create_depth_resources(PSwapchain* swapchain, PCommands* commands, PDevice* device);
+int create_depth_resources(PSwapchain* swapchain, PDevice* device);
 
 #endif

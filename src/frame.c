@@ -18,7 +18,7 @@
 #include "structs.h"
 #include "synchronization.h"
 
-extern PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PCommands* commands, PDevice* device, PSurface* surface, PWindow* window);
+extern PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PDevice* device, PSurface* surface, PWindow* window);
 extern void update_uniform_buffer(PBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
 extern void record_commands(VkCommandBuffer command_buffer, PPipeline* pipeline, PSwapchain* swapchain, uint32_t image_index, PBuffers* buffers, PDescriptor* descriptor);
 
@@ -30,7 +30,7 @@ void draw_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PComman
 
         window->framebuffer_resized = false;
         destroy_sync(*sync, device, (*swapchain), max_frame);
-        *swapchain = recreate_swapchain(*swapchain, commands, device, surface, window);
+        *swapchain = recreate_swapchain(*swapchain, device, surface, window);
         if(*swapchain == NULL)
         {
             fprintf(stderr, "Failed to recreate swap chain!\n");

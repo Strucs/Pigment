@@ -194,24 +194,37 @@ bool is_suitable(VkPhysicalDevice device, VkSurfaceKHR surface, ExtensionList re
     free(indices);
     indices = NULL;
 
-    VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+    VkPhysicalDeviceVulkan12Features vk12_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    };
+
+    VkPhysicalDeviceVulkan13Features vk13_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        .pNext = &vk12_features
     };
 
     VkPhysicalDeviceFeatures2 available_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &descriptor_indexing_features
+        .pNext = &vk13_features
     };
 
     vkGetPhysicalDeviceFeatures2(device, &available_features);
 
-    bool has_descriptor_indexing_features = available_features.features.shaderSampledImageArrayDynamicIndexing &&
-                                            descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing &&
-                                            descriptor_indexing_features.runtimeDescriptorArray &&
-                                            descriptor_indexing_features.descriptorBindingVariableDescriptorCount;
+    bool has_base_features       = available_features.features.samplerAnisotropy &&
+                                   available_features.features.shaderSampledImageArrayDynamicIndexing;
 
+    bool has_descriptor_indexing = vk12_features.descriptorIndexing &&
+                                   vk12_features.shaderSampledImageArrayNonUniformIndexing &&
+                                   vk12_features.runtimeDescriptorArray &&
+                                   vk12_features.descriptorBindingVariableDescriptorCount;
 
-    return is_completed && extensions_supported && suitable_swap_chain && available_features.features.samplerAnisotropy && has_descriptor_indexing_features;
+    bool has_bda                 = vk12_features.bufferDeviceAddress;
+
+    bool has_dynamic_rendering   = vk13_features.dynamicRendering;
+    bool has_sync2               = vk13_features.synchronization2;
+
+    return is_completed && extensions_supported && suitable_swap_chain &&
+           has_base_features && has_descriptor_indexing && has_bda && has_dynamic_rendering && has_sync2;
 
 ERROR:
     perror("is_suitable");
@@ -357,34 +370,29 @@ int create_logical_device(PDevice* device, PInstance* instance, PSurface* surfac
         queue_create_infos[i].pQueuePriorities = &queue_priority;
     }
 
-    VkPhysicalDeviceFeatures enabled_features = {
-        .samplerAnisotropy                      = VK_TRUE,
-        .shaderSampledImageArrayDynamicIndexing = VK_TRUE
-    };
-
-    VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features = {
-        .sType                                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+    VkPhysicalDeviceVulkan12Features vk12_features = {
+        .sType                                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .descriptorIndexing                        = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+        .descriptorBindingVariableDescriptorCount  = VK_TRUE,
         .runtimeDescriptorArray                    = VK_TRUE,
-        .descriptorBindingVariableDescriptorCount  = VK_TRUE
+        .bufferDeviceAddress                       = VK_TRUE
     };
 
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
-        .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+    VkPhysicalDeviceVulkan13Features vk13_features = {
+        .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         .dynamicRendering = VK_TRUE,
-        .pNext            = &descriptor_indexing_features
-    };
-
-    VkPhysicalDeviceBufferDeviceAddressFeatures bda_features = {
-        .sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-        .bufferDeviceAddress = VK_TRUE,
-        .pNext               = &dynamic_rendering_features
+        .synchronization2 = VK_TRUE,
+        .pNext            = &vk12_features
     };
 
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .features = enabled_features,
-        .pNext    = &bda_features
+        .features = {
+            .samplerAnisotropy                      = VK_TRUE,
+            .shaderSampledImageArrayDynamicIndexing = VK_TRUE
+        },
+        .pNext    = &vk13_features
     };
 
     VkDeviceCreateInfo create_info = {
