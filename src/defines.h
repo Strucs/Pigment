@@ -106,6 +106,13 @@ typedef enum {
     LINEAR  = 1
 } FilteringMode;
 
+typedef enum {
+    P_PRESENT_MODE_IMMEDIATE    = 0, // no vsync, uncapped, may tear
+    P_PRESENT_MODE_MAILBOX      = 1, // triple buffering, no tearing
+    P_PRESENT_MODE_FIFO         = 2, // vsync (guaranteed available)
+    P_PRESENT_MODE_FIFO_RELAXED = 3, // vsync, tears if frame is late
+} PPresentMode;
+
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 

@@ -64,7 +64,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
     {
         goto ERROR;
     }
-    pigment->swapchain = create_swapchain(pigment->device, pigment->surface, pigment->window);
+    pigment->swapchain = create_swapchain(pigment->device, pigment->surface, pigment->window, P_PRESENT_MODE_MAILBOX);
     if(pigment->swapchain == NULL)
     {
         goto ERROR;
@@ -180,6 +180,29 @@ void pigment_handle_inputs(Pigment* pigment)
     }
 
     handle_inputs(pigment->window);
+
+    // TODO: replace with proper input API (migrating to SDL3)
+    static bool v_was_pressed = false;
+    bool v_pressed = glfwGetKey(pigment->window->window, GLFW_KEY_V) == GLFW_PRESS;
+    if(v_pressed && !v_was_pressed)
+    {
+        PPresentMode current = pigment->swapchain->preferred_present_mode;
+        PPresentMode next    = (current == P_PRESENT_MODE_MAILBOX) ? P_PRESENT_MODE_FIFO : P_PRESENT_MODE_MAILBOX;
+        pigment_set_present_mode(pigment, next);
+        printf("Present mode: %s\n", next == P_PRESENT_MODE_MAILBOX ? "MAILBOX" : "FIFO");
+    }
+    v_was_pressed = v_pressed;
+}
+
+void pigment_set_present_mode(Pigment* pigment, PPresentMode mode)
+{
+    if(pigment == NULL)
+    {
+        return;
+    }
+
+    pigment->swapchain->preferred_present_mode = mode;
+    pigment->window->framebuffer_resized       = true;
 }
 
 bool pigment_begin_frame(Pigment* pigment)

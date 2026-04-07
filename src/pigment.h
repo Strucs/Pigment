@@ -26,6 +26,7 @@ void destroy_pigment(Pigment* pigment);
 bool pigment_should_run(Pigment* pigment);
 void pigment_poll_events(void);
 void pigment_handle_inputs(Pigment* pigment);
+void pigment_set_present_mode(Pigment* pigment, PPresentMode mode);
 bool pigment_begin_frame(Pigment* pigment);
 void pigment_draw_buffers(Pigment* pigment);
 void pigment_end_frame(Pigment* pigment);

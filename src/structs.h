@@ -113,6 +113,7 @@ struct PSwapchain_T {
     VkDeviceMemory depth_image_memory;
     VkImageView depth_image_view;
     VkFormat depth_format;
+    PPresentMode preferred_present_mode;
 };
 
 struct PPipeline_T {

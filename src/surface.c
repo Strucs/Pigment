@@ -26,7 +26,7 @@ void destroy_image_views(PSwapchain* swapchain, PDevice* device);
 SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceKHR surface);
 void destroy_support_details(SwapChainSupportDetails* details);
 VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);
-VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count);
+VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
 VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, GLFWwindow* window);
 VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device);
 
@@ -111,15 +111,15 @@ VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, 
     return available_formats[0];
 }
 
-VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count)
+VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred)
 {
-    // for(size_t i = 0; i < present_modes_count; i++)
-    // {
-    //     if(available_present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
-    //     {
-    //         return available_present_modes[i];
-    //     }
-    // }
+    VkPresentModeKHR requested = (VkPresentModeKHR) preferred;
+
+    for(size_t i = 0; i < present_modes_count; i++)
+    {
+        if(available_present_modes[i] == requested)
+            return requested;
+    }
 
     return VK_PRESENT_MODE_FIFO_KHR;
 }
@@ -145,7 +145,7 @@ VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, GLFWw
     return actual_extent;
 }
 
-PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window)
+PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window, PPresentMode preferred_present_mode)
 {
     PSwapchain* swapchain = NULL;
     QueueFamilyIndices* indices = NULL;
@@ -164,8 +164,9 @@ PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window
     }
 
     VkSurfaceFormatKHR surface_format = choose_surface_format(support_details->formats, support_details->formats_count);
-    VkPresentModeKHR present_mode     = choose_surface_present_modes(support_details->present_modes, support_details->present_modes_count);
+    VkPresentModeKHR present_mode     = choose_surface_present_modes(support_details->present_modes, support_details->present_modes_count, preferred_present_mode);
     VkExtent2D extent                 = choose_swap_extent(support_details->capabilities, window->window);
+    swapchain->preferred_present_mode = preferred_present_mode;
 
     uint32_t image_count = support_details->capabilities.minImageCount + 1;
     // support_details->capabilities.maxImageCount = 0 means there is no maximum number of images
@@ -337,9 +338,10 @@ PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PDevice* device, 
 
     vkDeviceWaitIdle(device->logical_device);
 
+    PPresentMode preferred = previous_swapchain->preferred_present_mode;
     destroy_swapchain(previous_swapchain, device);
 
-    swapchain = create_swapchain(device, surface, window);
+    swapchain = create_swapchain(device, surface, window, preferred);
     if(swapchain == NULL)
     {
         goto ERROR;
