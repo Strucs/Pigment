@@ -176,9 +176,10 @@ VkCommandPool create_command_pool(PDevice* device, PSurface* surface)
         .queueFamilyIndex = indices->graphics_family.value
     };
 
-    if(vkCreateCommandPool(device->logical_device, &command_pool_create_info, NULL, &command_pool) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateCommandPool(device->logical_device, &command_pool_create_info, NULL, &command_pool)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create command pool!\n");
+        fprintf(stderr, "Failed to create command pool! (result: %d)\n", result);
         command_pool = NULL;
         goto FREE;
     }
@@ -204,9 +205,10 @@ VkCommandBuffer* create_command_buffers(VkCommandPool command_pool, PDevice* dev
         .commandBufferCount = command_buffers_numbers
     };
 
-    if(vkAllocateCommandBuffers(device->logical_device, &command_buffer_allocate_info, command_buffers) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkAllocateCommandBuffers(device->logical_device, &command_buffer_allocate_info, command_buffers)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate command buffers!\n");
+        fprintf(stderr, "Failed to allocate command buffers! (result: %d)\n", result);
         free(command_buffers);
         return NULL;
     }

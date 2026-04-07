@@ -75,7 +75,7 @@ ERROR:
 
 int add_texture(PTextureList* texture_list, const char* texture_path, PCommands* commands, PDevice* device)
 {
-    PTexture texture;
+    PTexture texture = {0};
 
     if(create_texture_image(&texture, texture_path, &texture.image_memory, commands, device) != PIGMENT_SUCCESS)
     {
@@ -88,12 +88,13 @@ int add_texture(PTextureList* texture_list, const char* texture_path, PCommands*
         goto ERROR;
     }
 
-
     texture_list_append(texture_list, texture);
 
     return PIGMENT_SUCCESS;
 
 ERROR:
+    vkDestroyImage(device->logical_device, texture.image, NULL);
+    vkFreeMemory(device->logical_device, texture.image_memory, NULL);
     fprintf(stderr, "Failed to add a texture.\n");
     return PIGMENT_ERROR;
 }
@@ -146,7 +147,9 @@ stbi_uc* load_texture_file(const char* texture_path, int* texture_width, int* te
 int create_texture_image(PTexture* texture, const char* texture_path, VkDeviceMemory* image_memory, PCommands* commands, PDevice* device)
 {
     int texture_width, texture_height;
-    unsigned char* pixels;
+    unsigned char* pixels                = NULL;
+    VkBuffer staging_buffer              = VK_NULL_HANDLE;
+    VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
 
     if(strncmp(texture_path, "default", 8) == 0)
     {
@@ -165,19 +168,28 @@ int create_texture_image(PTexture* texture, const char* texture_path, VkDeviceMe
     VkDeviceSize image_size = (uint64_t) (texture_width * texture_height * 4);
     texture->mip_levels     = (uint32_t) (floor(log2(imax(texture_width, texture_height)))) + 1;
 
-    VkBuffer staging_buffer;
-    VkDeviceMemory staging_buffer_memory;
-
-    create_buffer(&staging_buffer, &staging_buffer_memory, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device);
+    if(create_buffer(&staging_buffer, &staging_buffer_memory, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
 
     void* data;
-    vkMapMemory(device->logical_device, staging_buffer_memory, 0, image_size, 0, &data);
+    VkResult result;
+    if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, image_size, 0, &data)) != VK_SUCCESS)
+    {
+        fprintf(stderr, "Failed to map texture staging buffer memory! (result: %d)\n", result);
+        goto ERROR;
+    }
     memcpy(data, pixels, (size_t) image_size);
     vkUnmapMemory(device->logical_device, staging_buffer_memory);
 
     free(pixels);
+    pixels = NULL;
 
-    create_image(&texture->image, image_memory, (uint32_t) texture_width, (uint32_t) texture_height, texture->mip_levels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device);
+    if(create_image(&texture->image, image_memory, (uint32_t) texture_width, (uint32_t) texture_height, texture->mip_levels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
 
     transition_image_layout(texture->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture->mip_levels, commands->command_pool, device);
     copy_buffer_to_image(staging_buffer, texture->image, (uint32_t) texture_width, (uint32_t) texture_height, commands->command_pool, device);
@@ -190,6 +202,9 @@ int create_texture_image(PTexture* texture, const char* texture_path, VkDeviceMe
     return PIGMENT_SUCCESS;
 
 ERROR:
+    vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
+    vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
+    free(pixels);
     fprintf(stderr, "Failed to create texture image!\n");
     return PIGMENT_ERROR;
 }
@@ -204,6 +219,7 @@ int generate_mipmaps(VkImage image, VkFormat image_format, int32_t texture_width
     if(!(format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
     {
         fprintf(stderr, "Texture image format does not support linear blitting!\n");
+        vkFreeCommandBuffers(device->logical_device, command_pool, 1, &command_buffer);
         return PIGMENT_ERROR;
     }
 
@@ -329,9 +345,10 @@ int create_sampler(PSampler* sampler, FilteringMode filtering_mode, PDevice* dev
         .maxLod                  = VK_LOD_CLAMP_NONE
     };
 
-    if(vkCreateSampler(device->logical_device, &sampler_create_info, NULL, &sampler->sampler) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateSampler(device->logical_device, &sampler_create_info, NULL, &sampler->sampler)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create texture sampler!\n");
+        fprintf(stderr, "Failed to create texture sampler! (result: %d)\n", result);
         return PIGMENT_ERROR;
     }
 
@@ -418,9 +435,10 @@ int create_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, u
         .sharingMode   = VK_SHARING_MODE_EXCLUSIVE
     };
 
-    if(vkCreateImage(device->logical_device, &image_create_info, NULL, image) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateImage(device->logical_device, &image_create_info, NULL, image)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create image!\n");
+        fprintf(stderr, "Failed to create image! (result: %d)\n", result);
         goto ERROR;
     }
 
@@ -433,15 +451,15 @@ int create_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, u
         .memoryTypeIndex = find_memory_type(device->physical_device, memory_requirements.memoryTypeBits, properties)
     };
 
-    if(vkAllocateMemory(device->logical_device, &alloc_info, NULL, image_memory) != VK_SUCCESS)
+    if((result = vkAllocateMemory(device->logical_device, &alloc_info, NULL, image_memory)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate image memory!\n");
+        fprintf(stderr, "Failed to allocate image memory! (result: %d)\n", result);
         goto ERROR;
     }
 
-    if(vkBindImageMemory(device->logical_device, *image, *image_memory, 0))
+    if((result = vkBindImageMemory(device->logical_device, *image, *image_memory, 0)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to bind image memory!\n");
+        fprintf(stderr, "Failed to bind image memory! (result: %d)\n", result);
         goto ERROR;
     }
 

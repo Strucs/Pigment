@@ -29,19 +29,19 @@ PSync* create_sync(PDevice* device, const uint32_t max_frame, const uint32_t swa
         goto ERROR;
     }
 
-    sync->image_available_semaphores = malloc(max_frame * sizeof(*sync->image_available_semaphores));
+    sync->image_available_semaphores = calloc(max_frame, sizeof(*sync->image_available_semaphores));
     if(sync->image_available_semaphores == NULL)
     {
         goto ERROR;
     }
 
-    sync->render_finished_semaphores = malloc(swapchain_image_count * sizeof(*sync->render_finished_semaphores));
+    sync->render_finished_semaphores = calloc(swapchain_image_count, sizeof(*sync->render_finished_semaphores));
     if(sync->render_finished_semaphores == NULL)
     {
         goto ERROR;
     }
 
-    sync->in_flight_fences = malloc(max_frame * sizeof(*sync->in_flight_fences));
+    sync->in_flight_fences = calloc(max_frame, sizeof(*sync->in_flight_fences));
     if(sync->in_flight_fences == NULL)
     {
         goto ERROR;
@@ -76,6 +76,21 @@ ERROR:
     perror("create_sync");
     if(sync != NULL)
     {
+        if(sync->image_available_semaphores != NULL)
+        {
+            for(size_t i = 0; i < max_frame; i++)
+                vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
+        }
+        if(sync->in_flight_fences != NULL)
+        {
+            for(size_t i = 0; i < max_frame; i++)
+                vkDestroyFence(device->logical_device, sync->in_flight_fences[i], NULL);
+        }
+        if(sync->render_finished_semaphores != NULL)
+        {
+            for(size_t i = 0; i < swapchain_image_count; i++)
+                vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
+        }
         free(sync->in_flight_fences);
         free(sync->render_finished_semaphores);
         free(sync->image_available_semaphores);
@@ -113,9 +128,10 @@ VkSemaphore create_semaphore(VkDevice device)
 
     VkSemaphoreCreateInfo semaphore_create_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
 
-    if(vkCreateSemaphore(device, &semaphore_create_info, NULL, &semaphore) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateSemaphore(device, &semaphore_create_info, NULL, &semaphore)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create semaphore\n");
+        fprintf(stderr, "Failed to create semaphore (result: %d)\n", result);
         return NULL;
     }
 
@@ -131,9 +147,10 @@ VkFence create_fence(VkDevice device)
         .flags = VK_FENCE_CREATE_SIGNALED_BIT
     };
 
-    if(vkCreateFence(device, &fence_create_info, NULL, &fence) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateFence(device, &fence_create_info, NULL, &fence)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create fence\n");
+        fprintf(stderr, "Failed to create fence (result: %d)\n", result);
         return NULL;
     }
 

@@ -107,12 +107,10 @@ PInstance* create_instance(PAppInfo* info)
         create_info.pNext             = NULL;
     }
 
-    int res;
-
-    if((res = vkCreateInstance(&create_info, NULL, &(instance->vulkan_instance))) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateInstance(&create_info, NULL, &(instance->vulkan_instance))) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create an instance\n");
-        printf("%d\n", res);
+        fprintf(stderr, "Failed to create an instance. (result: %d)\n", result);
         goto ERROR;
     }
 
@@ -274,9 +272,10 @@ void setup_debug_messenger(PInstance* instance)
     VkDebugUtilsMessengerCreateInfoEXT create_info;
     populate_debug_messenger_create_info(&create_info);
 
-    if(create_debug_utils_messenger(instance->vulkan_instance, &create_info, NULL, &instance->debug_messenger) != VK_SUCCESS)
+    VkResult result;
+    if((result = create_debug_utils_messenger(instance->vulkan_instance, &create_info, NULL, &instance->debug_messenger)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to set up debug messenger!\n");
+        fprintf(stderr, "Failed to set up debug messenger! (result: %d)\n", result);
     }
 }
 

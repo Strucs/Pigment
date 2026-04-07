@@ -91,7 +91,7 @@ PPipeline* create_graphic_pipeline(PSwapchain* swapchain, PDescriptor* descripto
         goto ERROR;
     }
     fragment_shader_module = create_shader_module(device->logical_device, fragment_spv, fragment_spv_size);
-    if(fragment_shader_code == NULL)
+    if(fragment_shader_module == NULL)
     {
         goto ERROR;
     }
@@ -154,23 +154,30 @@ PPipeline* create_graphic_pipeline(PSwapchain* swapchain, PDescriptor* descripto
         .basePipelineHandle           = VK_NULL_HANDLE
     };
 
-    if(vkCreateGraphicsPipelines(device->logical_device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &(pipeline->graphic_pipeline)) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateGraphicsPipelines(device->logical_device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &(pipeline->graphic_pipeline))) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create graphics pipeline!\n");
+        fprintf(stderr, "Failed to create graphics pipeline! (result: %d)\n", result);
         goto ERROR;
     }
 
     goto FREE;
 
 ERROR:
-    free(pipeline);
-    pipeline = NULL;
+    if(pipeline != NULL)
+    {
+        vkDestroyPipelineLayout(device->logical_device, pipeline->pipeline_layout, NULL);
+        free(pipeline);
+        pipeline = NULL;
+    }
 
 FREE:
     if(fragment_shader_module != NULL)
         vkDestroyShaderModule(device->logical_device, fragment_shader_module, NULL);
     if(vertex_shader_module != NULL)
         vkDestroyShaderModule(device->logical_device, vertex_shader_module, NULL);
+    free(vertex_spv);
+    free(fragment_spv);
     free(vertex_shader_code);
     free(fragment_shader_code);
 
@@ -337,9 +344,10 @@ VkPipelineLayout create_pipeline_layout(VkDescriptorSetLayout* descriptor_set_la
         .pPushConstantRanges        = &push_constant_range
     };
 
-    if(vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create pipeline layout!\n");
+        fprintf(stderr, "Failed to create pipeline layout! (result: %d)\n", result);
         return NULL;
     }
 

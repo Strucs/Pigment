@@ -12,8 +12,8 @@ struct Vertex {
     vec3  normal;
     float uv_y;
     vec4  color;
-    int  texture_index;
-    int  sampler_index;
+    int   texture_index;
+    int   sampler_index;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {

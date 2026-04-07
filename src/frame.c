@@ -48,12 +48,12 @@ bool begin_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PComma
 
     VkResult result = vkAcquireNextImageKHR(device->logical_device, (*swapchain)->swapchain, UINT64_MAX, (*sync)->image_available_semaphores[current_frame], VK_NULL_HANDLE, out_image_index);
 
-    if(result == VK_ERROR_OUT_OF_DATE_KHR)
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
         window->framebuffer_resized = true;
         return false;
     }
-    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    else if(result != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to acquire swapchain image!\n");
         return false;
@@ -65,16 +65,16 @@ bool begin_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PComma
 
     VkCommandBuffer cmd = commands->command_buffers[current_frame];
 
-    if(vkResetCommandBuffer(cmd, 0) != VK_SUCCESS)
+    if((result = vkResetCommandBuffer(cmd, 0)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to reset command buffer!\n");
+        fprintf(stderr, "Failed to reset command buffer! (result: %d)\n", result);
         return false;
     }
 
     VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    if(vkBeginCommandBuffer(cmd, &begin_info) != VK_SUCCESS)
+    if((result = vkBeginCommandBuffer(cmd, &begin_info)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to begin command buffer!\n");
+        fprintf(stderr, "Failed to begin command buffer! (result: %d)\n", result);
         return false;
     }
 
@@ -107,9 +107,10 @@ void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevic
 
     cmd_end_rendering(cmd, *swapchain, image_index);
 
-    if(vkEndCommandBuffer(cmd) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkEndCommandBuffer(cmd)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to record command buffer!\n");
+        fprintf(stderr, "Failed to record command buffer! (result: %d)\n", result);
         return;
     }
 
@@ -128,9 +129,9 @@ void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevic
         .pSignalSemaphores    = signal_semaphores
     };
 
-    if(vkQueueSubmit(device->graphics_queue, 1, &submit_info, (*sync)->in_flight_fences[current_frame]) != VK_SUCCESS)
+    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, (*sync)->in_flight_fences[current_frame])) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to submit draw command buffer!\n");
+        fprintf(stderr, "Failed to submit draw command buffer! (result: %d)\n", result);
         return;
     }
 
@@ -145,7 +146,7 @@ void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevic
         .pImageIndices      = &image_index
     };
 
-    VkResult result = vkQueuePresentKHR(device->present_queue, &present_info);
+    result = vkQueuePresentKHR(device->present_queue, &present_info);
     if(result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR)
     {
         fprintf(stderr, "Failed to present swap chain image!\n");

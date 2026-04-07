@@ -41,6 +41,8 @@ int create_depth_resources(PSwapchain* swapchain, PDevice* device)
     return PIGMENT_SUCCESS;
 
 ERROR:
+    vkDestroyImage(device->logical_device, swapchain->depth_image, NULL);
+    vkFreeMemory(device->logical_device, swapchain->depth_image_memory, NULL);
     return PIGMENT_ERROR;
 }
 

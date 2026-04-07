@@ -73,7 +73,7 @@ SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceK
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formats_count, details->formats);
 
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details->present_modes_count, NULL);
-    details->present_modes = malloc(details->formats_count * sizeof(*details->present_modes));
+    details->present_modes = malloc(details->present_modes_count * sizeof(*details->present_modes));
     if(details->present_modes == NULL)
     {
         goto ERROR;
@@ -211,9 +211,10 @@ PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window
 
     create_info.oldSwapchain = VK_NULL_HANDLE;
 
-    if(vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain)) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain))) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create swap chain!\n");
+        fprintf(stderr, "Failed to create swap chain! (result: %d)\n", result);
         goto ERROR;
     }
 
@@ -225,7 +226,11 @@ PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window
         goto ERROR;
     }
 
-    vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images);
+    if((result = vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images)) != VK_SUCCESS)
+    {
+        fprintf(stderr, "Failed to get swapchain images! (result: %d)\n", result);
+        goto ERROR;
+    }
 
     swapchain->image_count   = image_count;
     swapchain->image_format  = surface_format.format;
@@ -276,9 +281,10 @@ VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags
         .subresourceRange.layerCount     = 1
     };
 
-    if(vkCreateImageView(device, &view_create_info, NULL, &image_view) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateImageView(device, &view_create_info, NULL, &image_view)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create texture image view!\n");
+        fprintf(stderr, "Failed to create texture image view! (result: %d)\n", result);
         return NULL;
     }
 
@@ -287,7 +293,7 @@ VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags
 
 int create_image_views(PSwapchain* swapchain, PDevice* device)
 {
-    swapchain->image_views = malloc(swapchain->image_count * sizeof(*(swapchain->image_views)));
+    swapchain->image_views = calloc(swapchain->image_count, sizeof(*(swapchain->image_views)));
     if(swapchain->image_views == NULL)
     {
         perror("create_image_views");

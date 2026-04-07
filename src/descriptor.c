@@ -78,9 +78,10 @@ PDescriptor* create_descriptor(PTextureList* textures, PSamplerList* samplers, P
         .pNext        = &descriptor_set_layout_binding_flags
     };
 
-    if(vkCreateDescriptorSetLayout(device->logical_device, &layout_info, NULL, &descriptor->descriptor_set_layout) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateDescriptorSetLayout(device->logical_device, &layout_info, NULL, &descriptor->descriptor_set_layout)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create descriptor set layout!\n");
+        fprintf(stderr, "Failed to create descriptor set layout! (result: %d)\n", result);
         goto ERROR;
     }
 
@@ -144,9 +145,10 @@ int create_descriptor_pool(PDescriptor* descriptor, PTextureList* textures, PSam
         .maxSets       = descriptor_count
     };
 
-    if(vkCreateDescriptorPool(device->logical_device, &pool_info, NULL, &(descriptor->descriptor_pool)) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkCreateDescriptorPool(device->logical_device, &pool_info, NULL, &(descriptor->descriptor_pool))) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create descriptor pool!\n");
+        fprintf(stderr, "Failed to create descriptor pool! (result: %d)\n", result);
         return PIGMENT_ERROR;
     }
 
@@ -210,9 +212,10 @@ int create_descriptor_sets(PDescriptor* descriptor, PBuffers* buffers, PTextureL
         goto ERROR;
     }
 
-    if(vkAllocateDescriptorSets(device->logical_device, &alloc_info, descriptor->descriptor_sets) != VK_SUCCESS)
+    VkResult result;
+    if((result = vkAllocateDescriptorSets(device->logical_device, &alloc_info, descriptor->descriptor_sets)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate descriptor sets!\n");
+        fprintf(stderr, "Failed to allocate descriptor sets! (result: %d)\n", result);
         goto ERROR;
     }
 
