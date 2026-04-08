@@ -340,7 +340,7 @@ int create_sampler(PSampler* sampler, FilteringMode filtering_mode, PDevice* dev
         .unnormalizedCoordinates = VK_FALSE,
         .compareEnable           = VK_FALSE,
         .compareOp               = VK_COMPARE_OP_ALWAYS,
-        .mipmapMode              = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .mipmapMode              = (filtering_mode == NEAREST) ? VK_SAMPLER_MIPMAP_MODE_NEAREST : VK_SAMPLER_MIPMAP_MODE_LINEAR,
         .minLod                  = 0.0f,
         .maxLod                  = VK_LOD_CLAMP_NONE
     };

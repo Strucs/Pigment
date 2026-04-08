@@ -99,7 +99,7 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
     vkCmdPipelineBarrier2(command_buffer, &dep_to_render);
 
     VkClearColorValue clear_color_value = {{0.0f, 0.0f, 0.0f, 1.0f}};
-    VkClearDepthStencilValue clear_depth_stencil_value = {1.0f, 0};
+    VkClearDepthStencilValue clear_depth_stencil_value = {0.0f, 0};
 
     VkRenderingAttachmentInfoKHR color_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,

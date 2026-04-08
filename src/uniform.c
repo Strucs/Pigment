@@ -21,8 +21,18 @@ extern void get_view_matrix(PCamera* camera, UniformBufferObject* ubo);
 
 void update_uniform_buffer(PBuffers* buffers, PSwapchain* swapchain, PCamera* camera)
 {
-    mat4 projection;
-    glm_perspective(glm_rad(45.0f), (float) swapchain->extent.width / (float) swapchain->extent.height, 0.1f, 1000.0f, projection);
+    float fov    = glm_rad(45.0f);
+    float aspect = (float) swapchain->extent.width / (float) swapchain->extent.height;
+    float near   = 0.1f;
+    float f      = 1.0f / tanf(fov / 2.0f);
+
+    // Infinite reverse Z projection (near=1, far=0, no far plane clipping)
+    mat4 projection = {
+        { f / aspect, 0.0f,  0.0f,  0.0f },
+        { 0.0f,       f,     0.0f,  0.0f },
+        { 0.0f,       0.0f,  0.0f, -1.0f },
+        { 0.0f,       0.0f,  near,  0.0f }
+    };
 
     UniformBufferObject ubo;
     get_view_matrix(camera, &ubo);

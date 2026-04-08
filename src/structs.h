@@ -132,12 +132,6 @@ struct PSync_T {
     VkFence* in_flight_fences;
 };
 
-struct PVertexDescription_T {
-    VkVertexInputBindingDescription binding_description;
-    VkVertexInputAttributeDescription* attribute_descriptions;
-    uint32_t attribute_descriptions_size;
-};
-
 struct PDrawPushConstants_T {
     mat4            world_matrix;
     VkDeviceAddress vertex_buffer;
