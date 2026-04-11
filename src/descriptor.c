@@ -19,7 +19,7 @@
 #include "structs.h"
 
 int create_descriptor_pool(PDescriptor* descriptor, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count);
-int create_descriptor_sets(PDescriptor* descriptor, PBuffers* buffers, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count);
+int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count);
 
 PDescriptor* create_descriptor(PTextureList* textures, PSamplerList* samplers, PDevice* device)
 {
@@ -93,7 +93,7 @@ ERROR:
     return NULL;
 }
 
-int update_descriptor(PDescriptor* descriptor, PBuffers* buffers, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count)
+int update_descriptor(PDescriptor* descriptor, PUniformBuffers* buffers, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count)
 {
     if(create_descriptor_pool(descriptor, textures, samplers, device, descriptor_count))
     {
@@ -155,7 +155,7 @@ int create_descriptor_pool(PDescriptor* descriptor, PTextureList* textures, PSam
     return PIGMENT_SUCCESS;
 }
 
-int create_descriptor_sets(PDescriptor* descriptor, PBuffers* buffers, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count)
+int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PTextureList* textures, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count)
 {
     VkDescriptorSetLayout* layouts = NULL;
     uint32_t* variable_desciptor_counts = NULL;

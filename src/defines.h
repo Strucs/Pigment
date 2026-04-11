@@ -33,7 +33,7 @@
 #define PIGMENT_ERROR 1
 
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \
-    ((((uint32_t)(major)) << 22U) | (((uint32_t)(minor)) << 12U) | ((uint32_t)(patch)))
+    ((((uint32_t) (major)) << 22U) | (((uint32_t) (minor)) << 12U) | ((uint32_t) (patch)))
 
 typedef struct {
     bool has_value;
@@ -42,12 +42,12 @@ typedef struct {
 
 typedef struct PAppInfo_T {
     const char* app_name;
-    uint32_t    app_version;
+    uint32_t app_version;
 } PAppInfo;
 
 typedef struct PWindowInfo_T {
-    int   width;
-    int   height;
+    int width;
+    int height;
     char* title;
 } PWindowInfo;
 
@@ -83,7 +83,7 @@ typedef struct PSync_T PSync;
 
 typedef struct PDrawPushConstants_T PDrawPushConstants;
 
-typedef struct PBuffers_T PBuffers;
+typedef struct PUniformBuffers_T PUniformBuffers;
 
 typedef struct PDescriptor_T PDescriptor;
 
@@ -101,30 +101,42 @@ typedef struct PDepthResources_T PDepthResources;
 
 typedef struct PCamera_T PCamera;
 
+typedef struct PMeshBuffers_T PMeshBuffers;
+
 typedef enum {
     NEAREST = 0,
     LINEAR  = 1
 } FilteringMode;
 
 typedef enum {
-    P_PRESENT_MODE_IMMEDIATE    = 0, // no vsync, uncapped, may tear
-    P_PRESENT_MODE_MAILBOX      = 1, // triple buffering, no tearing
-    P_PRESENT_MODE_FIFO         = 2, // vsync (guaranteed available)
-    P_PRESENT_MODE_FIFO_RELAXED = 3, // vsync, tears if frame is late
+    P_PRESENT_MODE_IMMEDIATE    = 0,    // no vsync, uncapped, may tear
+    P_PRESENT_MODE_MAILBOX      = 1,    // triple buffering, no tearing
+    P_PRESENT_MODE_FIFO         = 2,    // vsync (guaranteed available)
+    P_PRESENT_MODE_FIFO_RELAXED = 3,    // vsync, tears if frame is late
 } PPresentMode;
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 
-typedef struct Vertex {
-    vec3     pos;
-    float    uv_x;
-    vec3     normal;
-    float    uv_y;
-    vec4     color;
+typedef struct PDrawCall {
+    PMeshBuffers* mesh;
+    mat4 transform;
+    uint32_t first_index;
+    uint32_t index_count;
+    uint32_t pipeline_id;
+    void* extra_push_data;
+    uint32_t extra_push_size;
+} PDrawCall;
+
+typedef struct PVertex {
+    vec3 pos;
+    float uv_x;
+    vec3 normal;
+    float uv_y;
+    vec4 color;
     uint32_t texture_index;
     uint32_t sampler_index;
-} __attribute__((aligned(16))) Vertex;
+} __attribute__((aligned(16))) PVertex;
 
 typedef struct UniformBufferObject {
     alignas(16) mat4 view;

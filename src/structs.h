@@ -34,9 +34,8 @@ struct Pigment_T {
     PSync* sync;
     PTextureList* textures;
     PSamplerList* samplers;
-    PBuffers* buffers;
+    PUniformBuffers* buffers;
     PCamera* camera;
-    PModel* model;
     uint32_t max_frames_in_flight;
     uint32_t current_image_index;
 };
@@ -133,20 +132,13 @@ struct PSync_T {
 };
 
 struct PDrawPushConstants_T {
-    mat4            world_matrix;
+    mat4 world_matrix;
     VkDeviceAddress vertex_buffer;
 };
 
-struct PBuffers_T {
-    VkBuffer vertex_buffer;
-    VkBuffer index_buffer;
+struct PUniformBuffers_T {
     VkBuffer* uniform_buffers;
-    VkDeviceMemory vertex_buffer_memory;
-    VkDeviceMemory index_buffer_memory;
     VkDeviceMemory* uniform_buffers_memory;
-    VkDeviceAddress vertex_buffer_address;
-    uint32_t vertices_size;
-    uint32_t indices_size;
     void** uniform_buffers_mapped;
 };
 
@@ -180,7 +172,7 @@ struct PSamplerList_T {
 };
 
 struct PModel_T {
-    Vertex* vertices;
+    PVertex* vertices;
     uint32_t vertices_number;
     uint32_t vertices_size;
     uint32_t* indices;
@@ -196,6 +188,14 @@ struct PCamera_T {
     float roll;
     float pitch;
     float yaw;
+};
+
+struct PMeshBuffers_T {
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_buffer_memory;
+    VkDeviceAddress vertex_buffer_address;
+    VkBuffer index_buffer;
+    VkDeviceMemory index_buffer_memory;
 };
 
 #endif

@@ -19,7 +19,7 @@
 
 extern void get_view_matrix(PCamera* camera, UniformBufferObject* ubo);
 
-void update_uniform_buffer(PBuffers* buffers, PSwapchain* swapchain, PCamera* camera)
+void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera)
 {
     float fov    = glm_rad(45.0f);
     float aspect = (float) swapchain->extent.width / (float) swapchain->extent.height;

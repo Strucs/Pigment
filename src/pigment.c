@@ -28,11 +28,10 @@
 #include "buffers.h"
 #include "descriptor.h"
 #include "texture.h"
-#include "models.h"
 #include "camera.h"
 #include "time.h"
 
-Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* model, TexturesToLoad* textures_to_load, StringArray* texture_paths, uint32_t max_frame_in_flight)
+Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, TexturesToLoad* textures_to_load, StringArray* texture_paths, uint32_t max_frame_in_flight)
 {
     Pigment* pigment = malloc(sizeof(*pigment));
     if(pigment == NULL)
@@ -41,7 +40,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
     }
 
     pigment->max_frames_in_flight = max_frame_in_flight;
-    pigment->model = model;
 
     pigment->window = create_window(window_info);
     if(pigment->window == NULL)
@@ -54,12 +52,12 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
         goto ERROR;
     }
     setup_debug_messenger(pigment->instance);
-    pigment->surface   = create_surface(pigment->instance, pigment->window);
+    pigment->surface = create_surface(pigment->instance, pigment->window);
     if(pigment->surface == NULL)
     {
         goto ERROR;
     }
-    pigment->device    = create_device(pigment->instance, pigment->surface);
+    pigment->device = create_device(pigment->instance, pigment->surface);
     if(pigment->device == NULL)
     {
         goto ERROR;
@@ -70,17 +68,17 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
         goto ERROR;
     }
     create_image_views(pigment->swapchain, pigment->device);
-    pigment->commands    = create_commands(pigment->device, pigment->surface);
+    pigment->commands = create_commands(pigment->device, pigment->surface);
     if(pigment->commands == NULL)
     {
         goto ERROR;
     }
-    pigment->textures    = create_textures();
+    pigment->textures = create_textures();
     if(pigment->textures == NULL)
     {
         goto ERROR;
     }
-    pigment->samplers    = create_samplers(pigment->device);
+    pigment->samplers = create_samplers(pigment->device);
     if(pigment->samplers == NULL)
     {
         goto ERROR;
@@ -94,12 +92,12 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
         goto ERROR;
     }
     create_depth_resources(pigment->swapchain, pigment->device);
-    pigment->pipeline   = create_graphic_pipeline(pigment->swapchain, pigment->descriptor, pigment->device);
+    pigment->pipeline = create_graphic_pipeline(pigment->swapchain, pigment->descriptor, pigment->device);
     if(pigment->pipeline == NULL)
     {
         goto ERROR;
     }
-    pigment->buffers = create_buffers(pigment->model, pigment->device, pigment->commands, pigment->max_frames_in_flight);
+    pigment->buffers = create_uniform_buffers(pigment->device, pigment->max_frames_in_flight);
     if(pigment->buffers == NULL)
     {
         goto ERROR;
@@ -111,8 +109,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PModel* mode
     {
         goto ERROR;
     }
-
-    destroy_model(pigment->model);
 
     pigment->camera = create_camera();
     if(pigment->camera == NULL)
@@ -143,7 +139,7 @@ void destroy_pigment(Pigment* pigment)
     destroy_camera(pigment->camera);
     destroy_sync(pigment->sync, pigment->device, pigment->swapchain, pigment->max_frames_in_flight);
     destroy_swapchain(pigment->swapchain, pigment->device);
-    destroy_buffers(pigment->buffers, pigment->device, pigment->max_frames_in_flight);
+    destroy_uniform_buffers(pigment->buffers, pigment->device, pigment->max_frames_in_flight);
     destroy_descriptor(pigment->descriptor, pigment->device);
     destroy_pipeline(pigment->pipeline, pigment->device);
     destroy_textures(pigment->textures, pigment->device);
@@ -155,6 +151,16 @@ void destroy_pigment(Pigment* pigment)
     destroy_window(pigment->window);
 
     free(pigment);
+}
+
+void pigment_show_window(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return;
+    }
+
+    show_window(pigment->window);
 }
 
 bool pigment_should_run(Pigment* pigment)
@@ -183,7 +189,7 @@ void pigment_handle_inputs(Pigment* pigment)
 
     // TODO: replace with proper input API (migrating to SDL3)
     static bool v_was_pressed = false;
-    bool v_pressed = glfwGetKey(pigment->window->window, GLFW_KEY_V) == GLFW_PRESS;
+    bool v_pressed            = glfwGetKey(pigment->window->window, GLFW_KEY_V) == GLFW_PRESS;
     if(v_pressed && !v_was_pressed)
     {
         PPresentMode current = pigment->swapchain->preferred_present_mode;
@@ -212,29 +218,7 @@ bool pigment_begin_frame(Pigment* pigment)
         return false;
     }
 
-    return begin_frame(pigment->buffers, &pigment->swapchain, &pigment->sync, pigment->commands, pigment->descriptor, pigment->pipeline, pigment->surface, pigment->window, pigment->device, pigment->max_frames_in_flight, &pigment->current_image_index);
-}
-
-void pigment_draw_buffers(Pigment* pigment)
-{
-    if(pigment == NULL)
-    {
-        return;
-    }
-
-    uint32_t current_frame  = pigment->swapchain->current_frame;
-    VkCommandBuffer cmd     = pigment->commands->command_buffers[current_frame];
-
-    PDrawPushConstants push = {0};
-    glm_mat4_identity(push.world_matrix);
-    push.vertex_buffer = pigment->buffers->vertex_buffer_address;
-
-    vkCmdPushConstants(cmd, pigment->pipeline->pipeline_layout,
-                       VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(PDrawPushConstants), &push);
-
-    vkCmdBindIndexBuffer(cmd, pigment->buffers->index_buffer, 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(cmd, pigment->buffers->indices_size, 1, 0, 0, 0);
+    return begin_frame(pigment->buffers, &pigment->swapchain, &pigment->sync, pigment->commands, pigment->surface, pigment->window, pigment->device, pigment->max_frames_in_flight, &pigment->current_image_index);
 }
 
 void pigment_end_frame(Pigment* pigment)
@@ -245,24 +229,4 @@ void pigment_end_frame(Pigment* pigment)
     }
 
     end_frame(&pigment->swapchain, &pigment->sync, pigment->commands, pigment->device, pigment->current_image_index, pigment->max_frames_in_flight);
-}
-
-void pigment_run(Pigment* pigment)
-{
-    if(pigment == NULL)
-    {
-        return;
-    }
-
-    while(pigment_should_run(pigment))
-    {
-        pigment_poll_events();
-        pigment_handle_inputs(pigment);
-
-        if(!pigment_begin_frame(pigment))
-        {
-            continue;
-        }
-        pigment_end_frame(pigment);
-    }
 }

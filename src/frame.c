@@ -19,11 +19,11 @@
 #include "synchronization.h"
 
 extern PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PDevice* device, PSurface* surface, PWindow* window);
-extern void update_uniform_buffer(PBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
+extern void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
 extern void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 extern void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 
-bool begin_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PDescriptor* descriptor, PPipeline* pipeline, PSurface* surface, PWindow* window, PDevice* device, uint32_t max_frame, uint32_t* out_image_index)
+bool begin_frame(PUniformBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PSurface* surface, PWindow* window, PDevice* device, uint32_t max_frame, uint32_t* out_image_index)
 {
     if(window->framebuffer_resized)
     {
@@ -80,8 +80,6 @@ bool begin_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PComma
 
     cmd_begin_rendering(cmd, *swapchain, *out_image_index);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->graphic_pipeline);
-
     VkViewport viewport = {
         .x        = 0.0f,
         .y        = 0.0f,
@@ -94,8 +92,6 @@ bool begin_frame(PBuffers* buffers, PSwapchain** swapchain, PSync** sync, PComma
 
     vkCmdSetViewport(cmd, 0, 1, &viewport);
     vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, 1, &descriptor->descriptor_sets[current_frame], 0, NULL);
 
     return true;
 }

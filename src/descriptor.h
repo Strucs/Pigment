@@ -20,7 +20,7 @@
 #include "defines.h"
 
 PDescriptor* create_descriptor(PTextureList* textures, PSamplerList* samplers, PDevice* device);
-int update_descriptor(PDescriptor* descriptor, PBuffers* buffers, PTextureList* texture, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count);
+int update_descriptor(PDescriptor* descriptor, PUniformBuffers* buffers, PTextureList* texture, PSamplerList* samplers, PDevice* device, uint32_t descriptor_count);
 
 void destroy_descriptor(PDescriptor* descriptor, PDevice* device);
 

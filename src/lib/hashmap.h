@@ -25,11 +25,11 @@ typedef struct _vertex_hashmap VertexHashMap;
 
 VertexHashMap* vertex_hashmap_create(void);
 
-bool vertex_hashmap_set_value(VertexHashMap* hashmap, const Vertex* key, uint32_t value);
-int32_t vertex_hashmap_get_value(const VertexHashMap* hashmap, const Vertex* key);
+bool vertex_hashmap_set_value(VertexHashMap* hashmap, const PVertex* key, uint32_t value);
+int32_t vertex_hashmap_get_value(const VertexHashMap* hashmap, const PVertex* key);
 
 int vertex_hashmap_get_nb_keys(const VertexHashMap* hashmap);
-Vertex** vertex_hashmap_get_keys_list(const VertexHashMap* hashmap);
+PVertex** vertex_hashmap_get_keys_list(const VertexHashMap* hashmap);
 
 void vertex_hashmap_free(VertexHashMap** hashmap);
 

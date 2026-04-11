@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-#ifndef BUFFERS_H
-#define BUFFERS_H
+#ifndef MESH_H
+#define MESH_H
 
 #include "defines.h"
 
-PUniformBuffers* create_uniform_buffers(PDevice* device, uint32_t uniform_buffers_count);
-void destroy_uniform_buffers(PUniformBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_count);
+PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size,
+                                   const uint32_t* indices, uint32_t index_count);
+void pigment_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
+void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
 
 #endif

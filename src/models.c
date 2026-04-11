@@ -23,7 +23,7 @@
 
 #define INITIAL_SIZE 262144
 
-void vertices_list_append(PModel* model, Vertex vertex);
+void vertices_list_append(PModel* model, PVertex vertex);
 void indices_list_append(PModel* model, uint32_t indice);
 void load_file(void* ctx __attribute__((unused)), const char* filename, const int is_mtl __attribute__((unused)), const char* obj_filename __attribute__((unused)), char** buffer, size_t* len);
 
@@ -93,7 +93,7 @@ void load_model_multi_textures(const char* filepath, float x_pos, float y_pos, f
     {
         for(size_t j = 0; j < attrib.num_faces; j++)
         {
-            Vertex vertex = {
+            PVertex vertex = {
                 .pos    = {
                     attrib.vertices[3 * attrib.faces[j].v_idx + 0],
                     attrib.vertices[3 * attrib.faces[j].v_idx + 1],
@@ -162,7 +162,7 @@ void load_model(const char* filepath, float x_pos, float y_pos, float z_pos, flo
     {
         for(size_t j = 0; j < attrib.num_faces; j++)
         {
-            Vertex vertex = {
+            PVertex vertex = {
                 .pos    = {
                     attrib.vertices[3 * attrib.faces[j].v_idx + 0],
                     attrib.vertices[3 * attrib.faces[j].v_idx + 1],
@@ -203,7 +203,7 @@ void load_model(const char* filepath, float x_pos, float y_pos, float z_pos, flo
     tinyobj_materials_free(materials, num_materials);
 }
 
-void vertices_list_append(PModel* model, Vertex vertex)
+void vertices_list_append(PModel* model, PVertex vertex)
 {
     if(model->vertices_number >= model->vertices_size)
     {
@@ -269,7 +269,7 @@ void load_cube(float size, float x_pos, float y_pos, float z_pos, uint16_t textu
     vec3 cube_center     = {x_pos, y_pos, z_pos};
     FilteringMode filtering_mode = LINEAR;
 
-    Vertex vertices[] = {
+    PVertex vertices[] = {
         // +X face
         {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] + half_cube_size}, 0.0f, {1.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},
         {{cube_center[0] + half_cube_size, cube_center[1] - half_cube_size, cube_center[2] - half_cube_size}, 0.0f, {1.0f, 0.0f, 0.0f}, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, texture_index, filtering_mode},

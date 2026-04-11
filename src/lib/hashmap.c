@@ -23,26 +23,26 @@
 
 #define HASHSET_SIZE ((1 << 16) + 1)
 
-// Vertex to uint32 hashmap
+// PVertex to uint32 hashmap
 
 typedef struct _vertex_hashmap_node {
-    Vertex key;
+    PVertex key;
     uint32_t value;
     struct _vertex_hashmap_node* next;
 } VertexHashmapNode;
 
 struct _vertex_hashmap {
     VertexHashmapNode* nodes[HASHSET_SIZE];
-    Vertex** key_list;
+    PVertex** key_list;
     int key_list_size;
     int key_list_allocated;
 };
 
-static uint16_t _vertex_hashmap_calc_hash(const Vertex* key)
+static uint16_t _vertex_hashmap_calc_hash(const PVertex* key)
 {
     uint16_t hash  = 0;
     uint16_t* _key = (uint16_t*) key;
-    for(size_t i = 0; i < sizeof(Vertex) / sizeof(uint16_t); i++)
+    for(size_t i = 0; i < sizeof(PVertex) / sizeof(uint16_t); i++)
     {
         hash ^= *_key;
         _key++;
@@ -55,7 +55,7 @@ VertexHashMap* vertex_hashmap_create(void)
     return calloc(1, sizeof(VertexHashMap));
 }
 
-bool _vertex_key_list_append(VertexHashMap* hashmap, Vertex* key)
+bool _vertex_key_list_append(VertexHashMap* hashmap, PVertex* key)
 {
     if(hashmap->key_list_size >= hashmap->key_list_allocated)
     {
@@ -67,7 +67,7 @@ bool _vertex_key_list_append(VertexHashMap* hashmap, Vertex* key)
         {
             hashmap->key_list_allocated *= 2;
         }
-        void* temp = realloc(hashmap->key_list, (size_t) hashmap->key_list_allocated * sizeof(Vertex*));
+        void* temp = realloc(hashmap->key_list, (size_t) hashmap->key_list_allocated * sizeof(PVertex*));
         if(temp == NULL)
         {
             return false;
@@ -80,12 +80,12 @@ bool _vertex_key_list_append(VertexHashMap* hashmap, Vertex* key)
     return true;
 }
 
-static inline bool compare_vertices(const Vertex* v1, const Vertex* v2)
+static inline bool compare_vertices(const PVertex* v1, const PVertex* v2)
 {
-    return memcmp(v1, v2, sizeof(Vertex)) == 0;
+    return memcmp(v1, v2, sizeof(PVertex)) == 0;
 }
 
-bool vertex_hashmap_set_value(VertexHashMap* hashmap, const Vertex* key, uint32_t value)
+bool vertex_hashmap_set_value(VertexHashMap* hashmap, const PVertex* key, uint32_t value)
 {
     uint16_t hash                = _vertex_hashmap_calc_hash(key);
     VertexHashmapNode* last_node = hashmap->nodes[hash];
@@ -127,12 +127,12 @@ int vertex_hashmap_get_nb_keys(const VertexHashMap* hashmap)
     return hashmap->key_list_size;
 }
 
-Vertex** vertex_hashmap_get_keys_list(const VertexHashMap* hashmap)
+PVertex** vertex_hashmap_get_keys_list(const VertexHashMap* hashmap)
 {
     return hashmap->key_list;
 }
 
-int32_t vertex_hashmap_get_value(const VertexHashMap* hashmap, const Vertex* key)
+int32_t vertex_hashmap_get_value(const VertexHashMap* hashmap, const PVertex* key)
 {
     uint16_t hash           = _vertex_hashmap_calc_hash(key);
     VertexHashmapNode* node = hashmap->nodes[hash];

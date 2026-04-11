@@ -24,6 +24,7 @@ void destroy_window(PWindow* window);
 bool window_should_close(PWindow* window);
 void poll_events(void);
 void handle_inputs(PWindow* window);
+void show_window(PWindow* window);
 void set_mouse_handler(PWindow* window);
 
 #endif

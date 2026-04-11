@@ -20,9 +20,8 @@
 int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
 uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter, VkMemoryPropertyFlags properties);
 void copy_buffer(VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool, PDevice* device);
-int create_vertex_buffer(PBuffers* buffers, Vertex* vertices, uint32_t vertices_size, PDevice* device, VkCommandPool command_pool);
-int create_index_buffer(PBuffers* buffers, const uint32_t* indices, uint32_t indices_size, PDevice* device, VkCommandPool command_pool);
-int create_uniform_buffers(PBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_numbers);
+int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, PDevice* device, VkCommandPool command_pool);
+int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, PDevice* device, VkCommandPool command_pool);
 VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice* device);
 void end_single_usage_commands(VkCommandBuffer* command_buffer, VkCommandPool command_pool, PDevice* device);
 
@@ -43,34 +42,32 @@ uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter
     return 0;
 }
 
-int create_vertex_buffer(PBuffers* buffers, Vertex* vertices, uint32_t vertices_size, PDevice* device, VkCommandPool command_pool)
+int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, PDevice* device, VkCommandPool command_pool)
 {
-    VkDeviceSize buffer_size = sizeof(vertices[0]) * vertices_size;
-
     VkBuffer staging_buffer              = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
 
-    if(create_buffer(&staging_buffer, &staging_buffer_memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
+    if(create_buffer(&staging_buffer, &staging_buffer_memory, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    void* data;
+    void* mapped;
 
     VkResult result;
-    if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, buffer_size, 0, &data)) != VK_SUCCESS)
+    if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, size, 0, &mapped)) != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to map vertex staging buffer memory! (result: %d)\n", result);
         goto ERROR;
     }
 
-    memcpy(data, vertices, (size_t) buffer_size);
+    memcpy(mapped, data, (size_t) size);
     vkUnmapMemory(device->logical_device, staging_buffer_memory);
 
     if(create_buffer(
-        &buffers->vertex_buffer,
-        &buffers->vertex_buffer_memory,
-        buffer_size,
+        buffer,
+        memory,
+        size,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT |
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
         VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -80,17 +77,17 @@ int create_vertex_buffer(PBuffers* buffers, Vertex* vertices, uint32_t vertices_
         goto ERROR;
     }
 
-    copy_buffer(staging_buffer, buffers->vertex_buffer, buffer_size, command_pool, device);
+    copy_buffer(staging_buffer, *buffer, size, command_pool, device);
 
     vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
     vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
 
     VkBufferDeviceAddressInfo addr_info = {
         .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = buffers->vertex_buffer
+        .buffer = *buffer
     };
-    buffers->vertex_buffer_address = vkGetBufferDeviceAddress(
-        device->logical_device, &addr_info);
+
+    *address = vkGetBufferDeviceAddress(device->logical_device, &addr_info);
 
     return PIGMENT_SUCCESS;
 
@@ -100,9 +97,9 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-int create_index_buffer(PBuffers* buffers, const uint32_t* indices, uint32_t indices_size, PDevice* device, VkCommandPool command_pool)
+int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, PDevice* device, VkCommandPool command_pool)
 {
-    VkDeviceSize buffer_size = sizeof(indices[0]) * indices_size;
+    VkDeviceSize buffer_size = sizeof(*indices) * index_count;
 
     VkBuffer staging_buffer              = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
@@ -112,24 +109,24 @@ int create_index_buffer(PBuffers* buffers, const uint32_t* indices, uint32_t ind
         goto ERROR;
     }
 
-    void* data;
+    void* mapped;
 
     VkResult result;
-    if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, buffer_size, 0, &data)) != VK_SUCCESS)
+    if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, buffer_size, 0, &mapped)) != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to map index staging buffer memory! (result: %d)\n", result);
         goto ERROR;
     }
 
-    memcpy(data, indices, (size_t) buffer_size);
+    memcpy(mapped, indices, (size_t) buffer_size);
     vkUnmapMemory(device->logical_device, staging_buffer_memory);
 
-    if(create_buffer(&buffers->index_buffer, &buffers->index_buffer_memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
+    if(create_buffer(buffer, memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    copy_buffer(staging_buffer, buffers->index_buffer, buffer_size, command_pool, device);
+    copy_buffer(staging_buffer, *buffer, buffer_size, command_pool, device);
 
     vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
     vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
@@ -142,113 +139,100 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-int create_uniform_buffers(PBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_numbers)
+PUniformBuffers* create_uniform_buffers(PDevice* device, uint32_t uniform_buffers_count)
 {
     VkDeviceSize buffer_size = sizeof(UniformBufferObject);
 
-    buffers->uniform_buffers = NULL;
+    PUniformBuffers* buffers = calloc(1, sizeof(*buffers));
+    if(buffers == NULL)
+    {
+        perror("calloc buffers");
+        return NULL;
+    }
+
+    buffers->uniform_buffers        = NULL;
     buffers->uniform_buffers_memory = NULL;
     buffers->uniform_buffers_mapped = NULL;
 
-    buffers->uniform_buffers = calloc(uniform_buffers_numbers, sizeof(*buffers->uniform_buffers));
+    buffers->uniform_buffers = calloc(uniform_buffers_count, sizeof(*buffers->uniform_buffers));
     if(buffers->uniform_buffers == NULL)
     {
         goto ERROR;
     }
 
-    buffers->uniform_buffers_memory = calloc(uniform_buffers_numbers, sizeof(*buffers->uniform_buffers_memory));
+    buffers->uniform_buffers_memory = calloc(uniform_buffers_count, sizeof(*buffers->uniform_buffers_memory));
     if(buffers->uniform_buffers_memory == NULL)
     {
         goto ERROR;
     }
 
-    buffers->uniform_buffers_mapped = malloc(uniform_buffers_numbers * sizeof(*buffers->uniform_buffers_mapped));
+    buffers->uniform_buffers_mapped = malloc(uniform_buffers_count * sizeof(*buffers->uniform_buffers_mapped));
     if(buffers->uniform_buffers_mapped == NULL)
     {
         goto ERROR;
     }
 
-    for(size_t i = 0; i < uniform_buffers_numbers; i++)
+    for(size_t i = 0; i < uniform_buffers_count; i++)
     {
         if(create_buffer(&buffers->uniform_buffers[i], &buffers->uniform_buffers_memory[i], buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
         {
             goto ERROR;
         }
 
-        VkResult result;
-        if((result = vkMapMemory(device->logical_device, buffers->uniform_buffers_memory[i], 0, buffer_size, 0, &buffers->uniform_buffers_mapped[i])) != VK_SUCCESS)
+        VkResult result = vkMapMemory(device->logical_device, buffers->uniform_buffers_memory[i], 0, buffer_size, 0, &buffers->uniform_buffers_mapped[i]);
+
+        if(result != VK_SUCCESS)
         {
             fprintf(stderr, "Failed to map uniform buffer memory! (result: %d)\n", result);
             goto ERROR;
         }
     }
 
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    if(buffers->uniform_buffers != NULL)
-    {
-        for(size_t i = 0; i < uniform_buffers_numbers; i++)
-        {
-            vkDestroyBuffer(device->logical_device, buffers->uniform_buffers[i], NULL);
-            vkFreeMemory(device->logical_device, buffers->uniform_buffers_memory[i], NULL);
-        }
-    }
-    free(buffers->uniform_buffers_mapped);
-    buffers->uniform_buffers_mapped = NULL;
-    free(buffers->uniform_buffers_memory);
-    buffers->uniform_buffers_memory = NULL;
-    free(buffers->uniform_buffers);
-    buffers->uniform_buffers = NULL;
-    return PIGMENT_ERROR;
-}
-
-PBuffers* create_buffers(PModel* model, PDevice* device, PCommands* commands, const uint32_t uniform_buffers_numbers)
-{
-    PBuffers* buffers = calloc(1, sizeof(*buffers));
-    if(buffers == NULL)
-    {
-        goto ERROR;
-    }
-
-    buffers->vertices_size = model->vertices_number;
-    buffers->indices_size  = model->indices_number;
-
-    if(create_vertex_buffer(buffers, model->vertices, model->vertices_number, device, commands->command_pool) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-    if(create_index_buffer(buffers, model->indices, model->indices_number, device, commands->command_pool) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-    if(create_uniform_buffers(buffers, device, uniform_buffers_numbers) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-
     return buffers;
 
 ERROR:
-    perror("create_buffers");
-    destroy_buffers(buffers, device, uniform_buffers_numbers);
+    if(buffers != NULL)
+    {
+        if(buffers->uniform_buffers != NULL)
+        {
+            for(size_t i = 0; i < uniform_buffers_count; i++)
+            {
+                if(buffers->uniform_buffers[i] != VK_NULL_HANDLE)
+                {
+                    vkDestroyBuffer(device->logical_device, buffers->uniform_buffers[i], NULL);
+                }
+
+                if(buffers->uniform_buffers_memory != NULL && buffers->uniform_buffers_memory[i] != VK_NULL_HANDLE)
+                {
+                    vkFreeMemory(device->logical_device, buffers->uniform_buffers_memory[i], NULL);
+                }
+            }
+        }
+
+        free(buffers->uniform_buffers_mapped);
+        free(buffers->uniform_buffers_memory);
+        free(buffers->uniform_buffers);
+        free(buffers);
+    }
+
+    perror("create_uniform_buffers");
     return NULL;
 }
 
-void destroy_buffers(PBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_numbers)
+void destroy_uniform_buffers(PUniformBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_count)
 {
     if(buffers != NULL)
     {
         if(buffers->uniform_buffers != NULL)
         {
-            for(size_t i = 0; i < uniform_buffers_numbers; i++)
+            for(size_t i = 0; i < uniform_buffers_count; i++)
             {
                 vkDestroyBuffer(device->logical_device, buffers->uniform_buffers[i], NULL);
             }
         }
         if(buffers->uniform_buffers_memory != NULL)
         {
-            for(size_t i = 0; i < uniform_buffers_numbers; i++)
+            for(size_t i = 0; i < uniform_buffers_count; i++)
             {
                 vkFreeMemory(device->logical_device, buffers->uniform_buffers_memory[i], NULL);
             }
@@ -260,12 +244,6 @@ void destroy_buffers(PBuffers* buffers, PDevice* device, const uint32_t uniform_
         buffers->uniform_buffers_memory = NULL;
         free(buffers->uniform_buffers);
         buffers->uniform_buffers = NULL;
-
-        vkDestroyBuffer(device->logical_device, buffers->vertex_buffer, NULL);
-        vkFreeMemory(device->logical_device, buffers->vertex_buffer_memory, NULL);
-
-        vkDestroyBuffer(device->logical_device, buffers->index_buffer, NULL);
-        vkFreeMemory(device->logical_device, buffers->index_buffer_memory, NULL);
 
         free(buffers);
     }

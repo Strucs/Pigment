@@ -28,7 +28,7 @@ PWindow* create_window(PWindowInfo* window_info)
         goto ERROR;
     }
 
-    if (window_info->title == NULL)
+    if(window_info->title == NULL)
     {
         fprintf(stderr, "Window title cannot be NULL!\n");
         goto ERROR;
@@ -41,7 +41,7 @@ PWindow* create_window(PWindowInfo* window_info)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     window->window = glfwCreateWindow(window_info->width, window_info->height, window_info->title, NULL, NULL);
-    if (window->window == NULL)
+    if(window->window == NULL)
     {
         goto ERROR;
     }
@@ -50,25 +50,22 @@ PWindow* create_window(PWindowInfo* window_info)
 
     glfwSetFramebufferSizeCallback(window->window, framebuffer_resize_callback);
 
-    GLFWmonitor* primary = glfwGetPrimaryMonitor();
+    GLFWmonitor* primary    = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(primary);
-    if (mode)
+    if(mode)
     {
-        int xpos = (mode->width  - window_info->width)  / 2;
+        int xpos = (mode->width - window_info->width) / 2;
         int ypos = (mode->height - window_info->height) / 2;
         glfwSetWindowPos(window->window, xpos, ypos);
     }
 
+    window->info             = window_info;
     window->last_frame_time  = 0.0f;
     window->first_time_mouse = true;
     window->mouse_last_x     = 0.0f;
     window->mouse_last_y     = 0.0f;
     window->mouse_offset_x   = 0.0f;
     window->mouse_offset_y   = 0.0f;
-
-    glfwShowWindow(window->window);
-
-    window->info = window_info;
 
     return window;
 
@@ -94,6 +91,11 @@ bool window_should_close(PWindow* window)
     return glfwWindowShouldClose(window->window);
 }
 
+void show_window(PWindow* window)
+{
+    glfwShowWindow(window->window);
+}
+
 void poll_events(void)
 {
     glfwPollEvents();
@@ -103,8 +105,8 @@ static void framebuffer_resize_callback(GLFWwindow* window, int width __attribut
 {
     PWindow* pigment_window             = glfwGetWindowUserPointer(window);
     pigment_window->framebuffer_resized = true;
-    pigment_window->info->width          = width;
-    pigment_window->info->height         = height;
+    pigment_window->info->width         = width;
+    pigment_window->info->height        = height;
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
@@ -128,8 +130,8 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
         return;
     }
 
-    pigment_window->mouse_offset_x += (float)xpos - pigment_window->mouse_last_x;
-    pigment_window->mouse_offset_y += pigment_window->mouse_last_y - (float)ypos;
+    pigment_window->mouse_offset_x += (float) xpos - pigment_window->mouse_last_x;
+    pigment_window->mouse_offset_y += pigment_window->mouse_last_y - (float) ypos;
 
     pigment_window->mouse_last_x = (float) xpos;
     pigment_window->mouse_last_y = (float) ypos;
@@ -178,8 +180,8 @@ void handle_inputs(PWindow* window)
         glm_vec3_muladds(window->camera->up, -speed, window->camera->position);
     }
 
-    float xoffset = window->mouse_offset_x;
-    float yoffset = window->mouse_offset_y;
+    float xoffset          = window->mouse_offset_x;
+    float yoffset          = window->mouse_offset_y;
     window->mouse_offset_x = 0.0f;
     window->mouse_offset_y = 0.0f;
 
@@ -202,9 +204,9 @@ void handle_inputs(PWindow* window)
         }
 
         vec3 front = {
-            (float)(cos(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch))),
-            (float)(sin(glm_rad(window->camera->pitch))),
-            (float)(sin(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch)))
+            (float) (cos(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch))),
+            (float) (sin(glm_rad(window->camera->pitch))),
+            (float) (sin(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch)))
         };
 
         glm_vec3_normalize(front);
