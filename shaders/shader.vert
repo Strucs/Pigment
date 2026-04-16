@@ -12,8 +12,6 @@ struct Vertex {
     vec3  normal;
     float uv_y;
     vec4  color;
-    int   texture_index;
-    int   sampler_index;
 };
 
 layout(buffer_reference, std430) readonly buffer VertexBuffer {
@@ -23,11 +21,13 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer {
 layout(push_constant) uniform constants {
     mat4         world_matrix;
     VertexBuffer vertex_buffer;
+    int          image_index;
+    int          sampler_index;
 } push;
 
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) flat out int fragTexIndex;
+layout(location = 2) flat out int fragImageIndex;
 layout(location = 3) flat out int fragSamplerIndex;
 
 void main()
@@ -36,8 +36,8 @@ void main()
 
     fragColor        = v.color;
     fragTexCoord     = vec2(v.uv_x, v.uv_y);
-    fragTexIndex     = v.texture_index;
-    fragSamplerIndex = v.sampler_index;
+    fragImageIndex   = push.image_index;
+    fragSamplerIndex = push.sampler_index;
 
     gl_Position = ubo.proj * ubo.view * push.world_matrix * vec4(v.pos, 1.0);
 }

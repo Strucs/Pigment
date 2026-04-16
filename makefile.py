@@ -3,11 +3,13 @@ import os
 import shutil
 
 def build_static_lib(config: powermake.Config):
-    files = powermake.get_files(f"./src/**/*.c")
+    config.add_includedirs("src/core", "src/loader", "src/external")
 
-    headers = powermake.get_files(f"./src/**/*.h")
+    files = powermake.get_files("./src/**/*.c")
 
-    shaders = powermake.get_files(f"./shaders/*")
+    headers = powermake.get_files("./src/**/*.h")
+
+    shaders = powermake.get_files("./shaders/*")
 
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
@@ -15,13 +17,20 @@ def build_static_lib(config: powermake.Config):
     powermake.utils.makedirs(shaders_dir)
 
     for file in headers:
-        dir = os.path.dirname(file)
-        parts = os.path.normpath(dir).split(os.sep)
-        if len(parts) >= 2:
-            new_dir = os.path.join(*parts[1:])
+        parts = os.path.normpath(file).split(os.sep)
+        # parts = ['src', '<module>', ... , 'file.h']
+        if len(parts) < 3:
+            continue
+        module = parts[1]
+        if module == "external":
+            continue
+        if module == "core" and parts[-1] == "structs.h":
+            continue
+        rest_parts = parts[2:-1]
+        if module == "core":
+            new_dir = os.path.join(include_dir, *rest_parts)
         else:
-            new_dir = ''
-        new_dir = os.path.join(include_dir, new_dir)
+            new_dir = os.path.join(include_dir, module, *rest_parts)
         powermake.utils.makedirs(new_dir)
         shutil.copy2(file, new_dir)
 
@@ -32,7 +41,12 @@ def build_static_lib(config: powermake.Config):
 
     powermake.archive_files(config, objects)
 
+    config.remove_includedirs("src/core", "src/loader", "src/external")
+
 def build_example(config: powermake.Config, example_name: str):
+    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
+    config.add_includedirs(include_dir)
+
     example_files = powermake.get_files(f"./examples/{example_name}/**/*.c")
 
     objects = powermake.compile_files(config, example_files)
@@ -46,7 +60,6 @@ def build_example(config: powermake.Config, example_name: str):
 def on_build(config: powermake.Config):
 
     config.target_name = "pigment"
-    config.add_includedirs("./src")
 
     config.add_flags("-Wsecurity", "-pedantic")
     config.remove_flags("-Wconversion", "-Wsign-conversion")

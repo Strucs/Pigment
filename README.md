@@ -33,8 +33,8 @@ You can compile those examples with :
 python makefile.py -rvd --"example_name"
 ```
 
-For instance, to compile [lost_empire](examples/lost_empire) example, run :
+For instance, to compile [suzanne_and_cube](examples/suzanne_and_cube) example, run :
 
 ```sh
-python makefile.py -rvd --lost_empire
+python makefile.py -rvd --suzanne_and_cube
 ```
