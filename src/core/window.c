@@ -21,10 +21,10 @@ static void framebuffer_resize_callback(GLFWwindow* window, int, int);
 
 PWindow* create_window(PWindowInfo* window_info)
 {
-    PWindow* window = malloc(sizeof(*window));
+    PWindow* window = calloc(1, sizeof(*window));
     if(window == NULL)
     {
-        perror("malloc");
+        perror("calloc");
         goto ERROR;
     }
 
@@ -99,6 +99,14 @@ void show_window(PWindow* window)
 void poll_events(void)
 {
     glfwPollEvents();
+}
+
+void get_framebuffer_size(PWindow* window, uint32_t* out_width, uint32_t* out_height)
+{
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(window->window, &width, &height);
+    *out_width  = (uint32_t) width;
+    *out_height = (uint32_t) height;
 }
 
 static void framebuffer_resize_callback(GLFWwindow* window, int width __attribute__((unused)), int height __attribute__((unused)))

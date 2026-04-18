@@ -11,9 +11,10 @@ int main(void)
     };
 
     PWindowInfo window_info = {
-        .width  = 1280,
-        .height = 720,
-        .title  = "Lost Empire"
+        .width                  = 1280,
+        .height                 = 720,
+        .title                  = "Lost Empire",
+        .preferred_present_mode = P_PRESENT_MODE_DEFAULT
     };
 
     Pigment* pigment        = NULL;
@@ -52,14 +53,15 @@ int main(void)
         goto FREE;
     }
 
-    upload_mesh_textures(pigment, asset);
+    upload_mesh_textures(pigment, asset, 0);
 
     gpu_mesh = pigment_upload_mesh(
         pigment,
         asset->vertices,
         asset->vertex_count * sizeof(PVertex),
         asset->indices,
-        asset->index_count
+        asset->index_count,
+        0
     );
 
     uint32_t draw_count = asset->surface_count;
@@ -87,14 +89,15 @@ int main(void)
         goto FREE;
     }
 
-    upload_mesh_textures(pigment, asset2);
+    upload_mesh_textures(pigment, asset2, 0);
 
     gpu_mesh2 = pigment_upload_mesh(
         pigment,
         asset2->vertices,
         asset2->vertex_count * sizeof(PVertex),
         asset2->indices,
-        asset2->index_count
+        asset2->index_count,
+        0
     );
 
     uint32_t draw_count2 = asset2->surface_count;

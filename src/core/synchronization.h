@@ -21,5 +21,6 @@
 
 PSync* create_sync(PDevice* device, const uint32_t max_frame, const uint32_t swapchain_image_count);
 void destroy_sync(PSync* sync, PDevice* device, PSwapchain* swapchain, const uint32_t max_frame);
+int resize_render_finished_semaphores(PSync* sync, uint32_t old_count, uint32_t new_count, PDevice* device);
 
 #endif

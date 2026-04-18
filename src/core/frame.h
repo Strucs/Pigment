@@ -19,8 +19,8 @@
 
 #include "defines.h"
 
-bool begin_frame(PUniformBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PSurface* surface, PWindow* window, PDevice* device, PCamera* camera, uint32_t max_frame, uint32_t* out_image_index);
-void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevice* device, uint32_t image_index, uint32_t max_frame);
+bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PWindow* window, PDevice* device, PCamera* camera, uint32_t* out_image_index);
+void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index, uint32_t max_frame);
 void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
 
 #endif

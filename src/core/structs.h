@@ -34,21 +34,18 @@ typedef struct {
 
 struct Pigment {
     PWindow* window;
+    PWindowRenderer* window_renderer;
     PInstance* instance;
-    PSurface* surface;
     PDevice* device;
-    PSwapchain* swapchain;
     PDescriptor* descriptor;
     PPipeline* pipeline;
-    PCommands* commands;
-    PSync* sync;
+    PCommandPools* command_pools;
     PImageList* images;
     PSamplerList* samplers;
     PUniformBuffers* buffers;
     uint32_t max_frames_in_flight;
     uint32_t max_images;
     uint32_t max_samplers;
-    uint32_t current_image_index;
 };
 
 struct PWindow {
@@ -62,6 +59,14 @@ struct PWindow {
     float mouse_last_x;
     float mouse_last_y;
     bool first_time_mouse;
+};
+
+struct PWindowRenderer {
+    PSurface* surface;
+    PSwapchain* swapchain;
+    PSync* sync;
+    PCommandBuffers* command_buffers;
+    uint32_t current_image_index;
 };
 
 struct PInstance {
@@ -123,7 +128,6 @@ struct PSwapchain {
     VkDeviceMemory depth_image_memory;
     VkImageView depth_image_view;
     VkFormat depth_format;
-    PPresentMode preferred_present_mode;
 };
 
 struct PPipeline {
@@ -131,9 +135,15 @@ struct PPipeline {
     VkPipelineLayout pipeline_layout;
 };
 
-struct PCommands {
-    VkCommandPool command_pool;
-    VkCommandBuffer* command_buffers;
+struct PCommandPools {
+    VkCommandPool* pools;
+    uint32_t pool_count;
+    uint32_t pool_capacity;
+};
+
+struct PCommandBuffers {
+    VkCommandBuffer* buffers;
+    VkCommandPool source_pool;
 };
 
 struct PSync {

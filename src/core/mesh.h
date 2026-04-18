@@ -19,8 +19,7 @@
 
 #include "defines.h"
 
-PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size,
-                                   const uint32_t* indices, uint32_t index_count);
+PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count, uint32_t pool_index);
 void pigment_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
 
 #endif

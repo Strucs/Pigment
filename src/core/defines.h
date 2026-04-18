@@ -17,7 +17,6 @@
 #ifndef DEFINES_H
 #define DEFINES_H
 
-
 #include <stdint.h>
 
 #ifdef NDEBUG
@@ -32,7 +31,7 @@
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \
     ((((uint32_t) (major)) << 22U) | (((uint32_t) (minor)) << 12U) | ((uint32_t) (patch)))
 
-#define PIGMENT_DEFAULT_MAX_IMAGES 1024
+#define PIGMENT_DEFAULT_MAX_IMAGES 128
 #define PIGMENT_DEFAULT_MAX_SAMPLERS 16
 #define PIGMENT_DEFAULT_MAX_FRAMES_IN_FLIGHT 2
 
@@ -41,15 +40,27 @@ typedef struct PAppInfo {
     uint32_t app_version;
 } PAppInfo;
 
+typedef enum {
+    P_PRESENT_MODE_IMMEDIATE    = 0,    // no vsync, uncapped, may tear
+    P_PRESENT_MODE_MAILBOX      = 1,    // triple buffering, no tearing
+    P_PRESENT_MODE_FIFO         = 2,    // vsync (guaranteed available)
+    P_PRESENT_MODE_FIFO_RELAXED = 3,    // vsync, tears if frame is late
+} PPresentMode;
+
+#define P_PRESENT_MODE_DEFAULT P_PRESENT_MODE_MAILBOX
+
 typedef struct PWindowInfo {
     int width;
     int height;
     char* title;
+    PPresentMode preferred_present_mode;
 } PWindowInfo;
 
 typedef struct Pigment Pigment;
 
 typedef struct PWindow PWindow;
+
+typedef struct PWindowRenderer PWindowRenderer;
 
 typedef struct PInstance PInstance;
 
@@ -73,7 +84,9 @@ typedef struct PSwapchain PSwapchain;
 
 typedef struct PPipeline PPipeline;
 
-typedef struct PCommands PCommands;
+typedef struct PCommandPools PCommandPools;
+
+typedef struct PCommandBuffers PCommandBuffers;
 
 typedef struct PSync PSync;
 
@@ -115,13 +128,6 @@ typedef struct PSamplerDesc {
     FilteringMode mipmap_mode;    // NEAREST or LINEAR
     PAddressMode address_mode;    // 0 = REPEAT
 } PSamplerDesc;
-
-typedef enum {
-    P_PRESENT_MODE_IMMEDIATE    = 0,    // no vsync, uncapped, may tear
-    P_PRESENT_MODE_MAILBOX      = 1,    // triple buffering, no tearing
-    P_PRESENT_MODE_FIFO         = 2,    // vsync (guaranteed available)
-    P_PRESENT_MODE_FIFO_RELAXED = 3,    // vsync, tears if frame is late
-} PPresentMode;
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>

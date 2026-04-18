@@ -27,7 +27,7 @@ void destroy_support_details(SwapChainSupportDetails* details);
 static void destroy_image_views(PSwapchain* swapchain, PDevice* device);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);
 static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
-static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, GLFWwindow* window);
+static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
 {
@@ -123,25 +123,24 @@ static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available
     for(size_t i = 0; i < present_modes_count; i++)
     {
         if(available_present_modes[i] == requested)
+        {
             return requested;
+        }
     }
 
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, GLFWwindow* window)
+static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height)
 {
     if(capabilities.currentExtent.width != UINT32_MAX)
     {
         return capabilities.currentExtent;
     }
 
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
     VkExtent2D actual_extent = {
-        (uint32_t) width,
-        (uint32_t) height
+        framebuffer_width,
+        framebuffer_height
     };
 
     actual_extent.width  = clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
@@ -150,10 +149,10 @@ static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities
     return actual_extent;
 }
 
-PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window, PPresentMode preferred_present_mode)
+PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PSurface* surface, PDevice* device)
 {
-    PSwapchain* swapchain = NULL;
-    QueueFamilyIndices* indices = NULL;
+    PSwapchain* swapchain                    = NULL;
+    QueueFamilyIndices* indices              = NULL;
     SwapChainSupportDetails* support_details = NULL;
 
     swapchain = calloc(1, sizeof(*swapchain));
@@ -169,9 +168,8 @@ PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window
     }
 
     VkSurfaceFormatKHR surface_format = choose_surface_format(support_details->formats, support_details->formats_count);
-    VkPresentModeKHR present_mode     = choose_surface_present_modes(support_details->present_modes, support_details->present_modes_count, preferred_present_mode);
-    VkExtent2D extent                 = choose_swap_extent(support_details->capabilities, window->window);
-    swapchain->preferred_present_mode = preferred_present_mode;
+    VkPresentModeKHR present_mode     = choose_surface_present_modes(support_details->present_modes, support_details->present_modes_count, preferred_mode);
+    VkExtent2D extent                 = choose_swap_extent(support_details->capabilities, framebuffer_width, framebuffer_height);
 
     uint32_t image_count = support_details->capabilities.minImageCount + 1;
     // support_details->capabilities.maxImageCount = 0 means there is no maximum number of images
@@ -215,7 +213,7 @@ PSwapchain* create_swapchain(PDevice* device, PSurface* surface, PWindow* window
     create_info.presentMode    = present_mode;
     create_info.clipped        = VK_TRUE;
 
-    create_info.oldSwapchain = VK_NULL_HANDLE;
+    create_info.oldSwapchain = VK_NULL_HANDLE ;
 
     VkResult result;
     if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain))) != VK_SUCCESS)
@@ -329,41 +327,33 @@ static void destroy_image_views(PSwapchain* swapchain, PDevice* device)
     free(swapchain->images);
 }
 
-PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PDevice* device, PSurface* surface, PWindow* window)
+int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PDevice* device)
 {
-    PSwapchain* swapchain;
-
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(window->window, &width, &height);
-    while(width == 0 || height == 0)
-    {
-        glfwGetFramebufferSize(window->window, &width, &height);
-        glfwWaitEvents();
-    }
+    PSwapchain* new_swapchain = NULL;
 
     vkDeviceWaitIdle(device->logical_device);
 
-    PPresentMode preferred = previous_swapchain->preferred_present_mode;
-    destroy_swapchain(previous_swapchain, device);
+    destroy_swapchain(renderer->swapchain, device);
 
-    swapchain = create_swapchain(device, surface, window, preferred);
-    if(swapchain == NULL)
+    new_swapchain = create_swapchain(framebuffer_width, framebuffer_height, preferred_mode, renderer->surface, device);
+    if(new_swapchain == NULL)
     {
         goto ERROR;
     }
-    if(create_image_views(swapchain, device) != PIGMENT_SUCCESS)
+    if(create_image_views(new_swapchain, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
-    if(create_depth_resources(swapchain, device) != PIGMENT_SUCCESS)
+    if(create_depth_resources(new_swapchain, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    return swapchain;
+    renderer->swapchain = new_swapchain;
+    return PIGMENT_SUCCESS;
 
 ERROR:
-    fprintf(stderr, "Failed to recreate swapchain!\n");
-    destroy_swapchain(swapchain, device);
-    return NULL;
+    fprintf(stderr, "Failed to recreate swapchain.\n");
+    destroy_swapchain(new_swapchain, device);
+    return PIGMENT_ERROR;
 }

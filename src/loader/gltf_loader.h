@@ -60,6 +60,6 @@ typedef struct MeshAsset {
 MeshAsset* load_gltf_mesh(const char* filepath);
 void free_mesh_asset(MeshAsset* mesh);
 
-void upload_mesh_textures(Pigment* pigment, MeshAsset* asset);
+void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_index);
 
 #endif

@@ -42,7 +42,7 @@ PInstance* create_instance(PAppInfo* info)
         goto ERROR;
     }
 
-    if (info == NULL) {
+    if(info == NULL) {
         fprintf(stderr, "[Warning] Pigment: PAppInfo is NULL. Using default values.\n");
     }
 

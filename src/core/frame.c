@@ -16,38 +16,46 @@
 
 #include "frame.h"
 #include "structs.h"
+#include "surface.h"
 #include "synchronization.h"
+#include "window.h"
 
-extern PSwapchain* recreate_swapchain(PSwapchain* previous_swapchain, PDevice* device, PSurface* surface, PWindow* window);
 extern void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
 extern void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 extern void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 
-bool begin_frame(PUniformBuffers* buffers, PSwapchain** swapchain, PSync** sync, PCommands* commands, PSurface* surface, PWindow* window, PDevice* device, PCamera* camera, uint32_t max_frame, uint32_t* out_image_index)
+bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PWindow* window, PDevice* device, PCamera* camera, uint32_t* out_image_index)
 {
     if(window->framebuffer_resized)
     {
-        vkDeviceWaitIdle(device->logical_device);
-
-        window->framebuffer_resized = false;
-        destroy_sync(*sync, device, *swapchain, max_frame);
-        *swapchain = recreate_swapchain(*swapchain, device, surface, window);
-        if(*swapchain == NULL)
+        uint32_t framebuffer_width = 0, framebuffer_height = 0;
+        get_framebuffer_size(window, &framebuffer_width, &framebuffer_height);
+        if(framebuffer_width == 0 || framebuffer_height == 0)
         {
-            fprintf(stderr, "Failed to recreate swap chain!\n");
             return false;
         }
-        *sync = create_sync(device, max_frame, (*swapchain)->image_count);
 
-        (*swapchain)->current_frame = 0;
+        window->framebuffer_resized = false;
+        uint32_t old_image_count    = renderer->swapchain->image_count;
+        if(recreate_swapchain(renderer, framebuffer_width, framebuffer_height, window->info->preferred_present_mode, device) != PIGMENT_SUCCESS)
+        {
+            window->framebuffer_resized = true;
+            return false;
+        }
+        if(old_image_count != renderer->swapchain->image_count)
+        {
+            resize_render_finished_semaphores(renderer->sync, old_image_count, renderer->swapchain->image_count, device);
+        }
+
+        renderer->swapchain->current_frame = 0;
         return false;
     }
 
-    uint32_t current_frame = (*swapchain)->current_frame;
+    uint32_t current_frame = renderer->swapchain->current_frame;
 
-    vkWaitForFences(device->logical_device, 1, &(*sync)->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+    vkWaitForFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
 
-    VkResult result = vkAcquireNextImageKHR(device->logical_device, (*swapchain)->swapchain, UINT64_MAX, (*sync)->image_available_semaphores[current_frame], VK_NULL_HANDLE, out_image_index);
+    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, UINT64_MAX, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, out_image_index);
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
@@ -60,11 +68,11 @@ bool begin_frame(PUniformBuffers* buffers, PSwapchain** swapchain, PSync** sync,
         return false;
     }
 
-    update_uniform_buffer(buffers, *swapchain, camera);
+    update_uniform_buffer(buffers, renderer->swapchain, camera);
 
-    vkResetFences(device->logical_device, 1, &(*sync)->in_flight_fences[current_frame]);
+    vkResetFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame]);
 
-    VkCommandBuffer cmd = commands->command_buffers[current_frame];
+    VkCommandBuffer cmd = renderer->command_buffers->buffers[current_frame];
 
     if((result = vkResetCommandBuffer(cmd, 0)) != VK_SUCCESS)
     {
@@ -79,19 +87,19 @@ bool begin_frame(PUniformBuffers* buffers, PSwapchain** swapchain, PSync** sync,
         return false;
     }
 
-    cmd_begin_rendering(cmd, *swapchain, *out_image_index);
+    cmd_begin_rendering(cmd, renderer->swapchain, *out_image_index);
 
     VkViewport viewport = {
         .x        = 0.0f,
         .y        = 0.0f,
-        .width    = (float) (*swapchain)->extent.width,
-        .height   = (float) (*swapchain)->extent.height,
+        .width    = (float) renderer->swapchain->extent.width,
+        .height   = (float) renderer->swapchain->extent.height,
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
     VkRect2D scissor = {
         {0, 0},
-        (*swapchain)->extent
+        renderer->swapchain->extent
     };
 
     vkCmdSetViewport(cmd, 0, 1, &viewport);
@@ -100,12 +108,12 @@ bool begin_frame(PUniformBuffers* buffers, PSwapchain** swapchain, PSync** sync,
     return true;
 }
 
-void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevice* device, uint32_t image_index, uint32_t max_frame)
+void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index, uint32_t max_frame)
 {
-    uint32_t current_frame = (*swapchain)->current_frame;
-    VkCommandBuffer cmd    = commands->command_buffers[current_frame];
+    uint32_t current_frame = renderer->swapchain->current_frame;
+    VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
 
-    cmd_end_rendering(cmd, *swapchain, image_index);
+    cmd_end_rendering(cmd, renderer->swapchain, image_index);
 
     VkResult result;
     if((result = vkEndCommandBuffer(cmd)) != VK_SUCCESS)
@@ -114,9 +122,9 @@ void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevic
         return;
     }
 
-    VkSemaphore wait_semaphores[]      = {(*sync)->image_available_semaphores[current_frame]};
+    VkSemaphore wait_semaphores[]      = {renderer->sync->image_available_semaphores[current_frame]};
     VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    VkSemaphore signal_semaphores[]    = {(*sync)->render_finished_semaphores[image_index]};
+    VkSemaphore signal_semaphores[]    = {renderer->sync->render_finished_semaphores[image_index]};
 
     VkSubmitInfo submit_info = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -129,13 +137,13 @@ void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevic
         .pSignalSemaphores    = signal_semaphores
     };
 
-    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, (*sync)->in_flight_fences[current_frame])) != VK_SUCCESS)
+    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, renderer->sync->in_flight_fences[current_frame])) != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to submit draw command buffer! (result: %d)\n", result);
         return;
     }
 
-    VkSwapchainKHR swapchains[] = {(*swapchain)->swapchain};
+    VkSwapchainKHR swapchains[] = {renderer->swapchain->swapchain};
 
     VkPresentInfoKHR present_info = {
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -152,8 +160,8 @@ void end_frame(PSwapchain** swapchain, PSync** sync, PCommands* commands, PDevic
         fprintf(stderr, "Failed to present swap chain image!\n");
     }
 
-    uint32_t next_frame         = current_frame + 1;
-    (*swapchain)->current_frame = next_frame * (next_frame < max_frame);
+    uint32_t next_frame                = current_frame + 1;
+    renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
 void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
@@ -163,8 +171,9 @@ void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_coun
         return;
     }
 
-    uint32_t current_frame = pigment->swapchain->current_frame;
-    VkCommandBuffer cmd    = pigment->commands->command_buffers[current_frame];
+    PWindowRenderer* renderer = pigment->window_renderer;
+    uint32_t current_frame    = renderer->swapchain->current_frame;
+    VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pigment->pipeline->graphic_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pigment->pipeline->pipeline_layout, 0, 1, &pigment->descriptor->descriptor_sets[current_frame], 0, NULL);

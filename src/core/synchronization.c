@@ -80,17 +80,23 @@ ERROR:
         if(sync->image_available_semaphores != NULL)
         {
             for(size_t i = 0; i < max_frame; i++)
+            {
                 vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
+            }
         }
         if(sync->in_flight_fences != NULL)
         {
             for(size_t i = 0; i < max_frame; i++)
+            {
                 vkDestroyFence(device->logical_device, sync->in_flight_fences[i], NULL);
+            }
         }
         if(sync->render_finished_semaphores != NULL)
         {
             for(size_t i = 0; i < swapchain_image_count; i++)
+            {
                 vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
+            }
         }
         free(sync->in_flight_fences);
         free(sync->render_finished_semaphores);
@@ -99,6 +105,7 @@ ERROR:
     }
     return NULL;
 }
+
 void destroy_sync(PSync* sync, PDevice* device, PSwapchain* swapchain, const uint32_t max_frame)
 {
     if(sync == NULL || swapchain == NULL)
@@ -121,6 +128,52 @@ void destroy_sync(PSync* sync, PDevice* device, PSwapchain* swapchain, const uin
     free(sync->render_finished_semaphores);
     free(sync->image_available_semaphores);
     free(sync);
+}
+
+int resize_render_finished_semaphores(PSync* sync, uint32_t old_count, uint32_t new_count, PDevice* device)
+{
+    VkSemaphore* new_semaphores = calloc(new_count, sizeof(*new_semaphores));
+    if(new_semaphores == NULL)
+    {
+        goto ERROR;
+    }
+
+    for(uint32_t i = 0; i < new_count; i++)
+    {
+        new_semaphores[i] = create_semaphore(device->logical_device);
+        if(new_semaphores[i] == NULL)
+        {
+            goto ERROR;
+        }
+    }
+
+    for(uint32_t i = 0; i < old_count; i++)
+    {
+        vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
+    }
+
+    free(sync->render_finished_semaphores);
+    sync->render_finished_semaphores = new_semaphores;
+
+    return PIGMENT_SUCCESS;
+
+ERROR:
+    fprintf(stderr, "Failed to resize render_finished_semaphores, keeping previous ones\n");
+    if(new_semaphores == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    for(uint32_t i = 0; i < new_count; i++)
+    {
+        if(new_semaphores[i] != NULL)
+        {
+            vkDestroySemaphore(device->logical_device, new_semaphores[i], NULL);
+        }
+    }
+    free(new_semaphores);
+
+    return PIGMENT_ERROR;
 }
 
 static VkSemaphore create_semaphore(VkDevice device)

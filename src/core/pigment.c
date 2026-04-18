@@ -31,18 +31,23 @@
 
 Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfig* config)
 {
-    Pigment* pigment = malloc(sizeof(*pigment));
+    Pigment* pigment = calloc(1, sizeof(*pigment));
     if(pigment == NULL)
     {
         return NULL;
     }
 
     pigment->max_frames_in_flight = (config && config->max_frames_in_flight) ? config->max_frames_in_flight : PIGMENT_DEFAULT_MAX_FRAMES_IN_FLIGHT;
-    pigment->max_images         = (config && config->max_images) ? config->max_images : PIGMENT_DEFAULT_MAX_IMAGES;
+    pigment->max_images           = (config && config->max_images) ? config->max_images : PIGMENT_DEFAULT_MAX_IMAGES;
     pigment->max_samplers         = (config && config->max_samplers) ? config->max_samplers : PIGMENT_DEFAULT_MAX_SAMPLERS;
 
     pigment->window = create_window(window_info);
     if(pigment->window == NULL)
+    {
+        goto ERROR;
+    }
+    pigment->window_renderer = calloc(1, sizeof(*pigment->window_renderer));
+    if(pigment->window_renderer == NULL)
     {
         goto ERROR;
     }
@@ -52,24 +57,26 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
     setup_debug_messenger(pigment->instance);
-    pigment->surface = create_surface(pigment->instance, pigment->window);
-    if(pigment->surface == NULL)
+    pigment->window_renderer->surface = create_surface(pigment->instance, pigment->window);
+    if(pigment->window_renderer->surface == NULL)
     {
         goto ERROR;
     }
-    pigment->device = create_device(pigment->instance, pigment->surface);
+    pigment->device = create_device(pigment->instance, pigment->window_renderer->surface);
     if(pigment->device == NULL)
     {
         goto ERROR;
     }
-    pigment->swapchain = create_swapchain(pigment->device, pigment->surface, pigment->window, P_PRESENT_MODE_MAILBOX);
-    if(pigment->swapchain == NULL)
+    uint32_t framebuffer_width = 0, framebuffer_height = 0;
+    get_framebuffer_size(pigment->window, &framebuffer_width, &framebuffer_height);
+    pigment->window_renderer->swapchain = create_swapchain(framebuffer_width, framebuffer_height, window_info->preferred_present_mode, pigment->window_renderer->surface, pigment->device);
+    if(pigment->window_renderer->swapchain == NULL)
     {
         goto ERROR;
     }
-    create_image_views(pigment->swapchain, pigment->device);
-    pigment->commands = create_commands(pigment->device, pigment->surface);
-    if(pigment->commands == NULL)
+    create_image_views(pigment->window_renderer->swapchain, pigment->device);
+    pigment->command_pools = create_command_pools(pigment->device, pigment->window_renderer->surface);
+    if(pigment->command_pools == NULL)
     {
         goto ERROR;
     }
@@ -84,15 +91,15 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
 
-    add_default_image(pigment->images, pigment->commands, pigment->device);
+    add_default_image(pigment->images, pigment->command_pools, 0, pigment->device);
 
     pigment->descriptor = create_descriptor(pigment->max_samplers, pigment->max_images, pigment->device);
     if(pigment->descriptor == NULL)
     {
         goto ERROR;
     }
-    create_depth_resources(pigment->swapchain, pigment->device);
-    pigment->pipeline = create_graphic_pipeline(pigment->swapchain, pigment->descriptor, pigment->device);
+    create_depth_resources(pigment->window_renderer->swapchain, pigment->device);
+    pigment->pipeline = create_graphic_pipeline(pigment->window_renderer->swapchain, pigment->descriptor, pigment->device);
     if(pigment->pipeline == NULL)
     {
         goto ERROR;
@@ -103,9 +110,13 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
     update_descriptor(pigment->descriptor, pigment->buffers, pigment->images, pigment->samplers, pigment->max_samplers, pigment->max_images, pigment->device, pigment->max_frames_in_flight);
-    update_commands(pigment->commands, pigment->device, pigment->max_frames_in_flight);
-    pigment->sync = create_sync(pigment->device, pigment->max_frames_in_flight, pigment->swapchain->image_count);
-    if(pigment->sync == NULL)
+    pigment->window_renderer->command_buffers = create_command_buffers(pigment->command_pools, 0, pigment->device, pigment->max_frames_in_flight);
+    if(pigment->window_renderer->command_buffers == NULL)
+    {
+        goto ERROR;
+    }
+    pigment->window_renderer->sync = create_sync(pigment->device, pigment->max_frames_in_flight, pigment->window_renderer->swapchain->image_count);
+    if(pigment->window_renderer->sync == NULL)
     {
         goto ERROR;
     }
@@ -126,16 +137,24 @@ void destroy_pigment(Pigment* pigment)
     }
 
     device_wait_idle(pigment->device);
-    destroy_sync(pigment->sync, pigment->device, pigment->swapchain, pigment->max_frames_in_flight);
-    destroy_swapchain(pigment->swapchain, pigment->device);
+    if(pigment->window_renderer != NULL)
+    {
+        destroy_sync(pigment->window_renderer->sync, pigment->device, pigment->window_renderer->swapchain, pigment->max_frames_in_flight);
+        destroy_command_buffers(pigment->window_renderer->command_buffers, pigment->device, pigment->max_frames_in_flight);
+        destroy_swapchain(pigment->window_renderer->swapchain, pigment->device);
+    }
     destroy_uniform_buffers(pigment->buffers, pigment->device, pigment->max_frames_in_flight);
     destroy_descriptor(pigment->descriptor, pigment->device);
     destroy_pipeline(pigment->pipeline, pigment->device);
     destroy_images(pigment->images, pigment->device);
     destroy_samplers(pigment->samplers, pigment->device);
-    destroy_commands(pigment->commands, pigment->device, pigment->max_frames_in_flight);
+    destroy_command_pools(pigment->command_pools, pigment->device);
     destroy_device(pigment->device);
-    destroy_surface(pigment->surface, pigment->instance);
+    if(pigment->window_renderer != NULL)
+    {
+        destroy_surface(pigment->window_renderer->surface, pigment->instance);
+        free(pigment->window_renderer);
+    }
     destroy_instance(pigment->instance);
     destroy_window(pigment->window);
 
@@ -191,7 +210,7 @@ void pigment_handle_inputs(Pigment* pigment)
     bool v_pressed            = glfwGetKey(pigment->window->window, GLFW_KEY_V) == GLFW_PRESS;
     if(v_pressed && !v_was_pressed)
     {
-        PPresentMode current = pigment->swapchain->preferred_present_mode;
+        PPresentMode current = pigment->window->info->preferred_present_mode;
         PPresentMode next    = (current == P_PRESENT_MODE_MAILBOX) ? P_PRESENT_MODE_FIFO : P_PRESENT_MODE_MAILBOX;
         pigment_set_present_mode(pigment, next);
         printf("Present mode: %s\n", next == P_PRESENT_MODE_MAILBOX ? "MAILBOX" : "FIFO");
@@ -206,8 +225,8 @@ void pigment_set_present_mode(Pigment* pigment, PPresentMode mode)
         return;
     }
 
-    pigment->swapchain->preferred_present_mode = mode;
-    pigment->window->framebuffer_resized       = true;
+    pigment->window->info->preferred_present_mode = mode;
+    pigment->window->framebuffer_resized          = true;
 }
 
 bool pigment_begin_frame(Pigment* pigment, PCamera* camera)
@@ -217,7 +236,7 @@ bool pigment_begin_frame(Pigment* pigment, PCamera* camera)
         return false;
     }
 
-    return begin_frame(pigment->buffers, &pigment->swapchain, &pigment->sync, pigment->commands, pigment->surface, pigment->window, pigment->device, camera, pigment->max_frames_in_flight, &pigment->current_image_index);
+    return begin_frame(pigment->buffers, pigment->window_renderer, pigment->window, pigment->device, camera, &pigment->window_renderer->current_image_index);
 }
 
 void pigment_end_frame(Pigment* pigment)
@@ -227,6 +246,5 @@ void pigment_end_frame(Pigment* pigment)
         return;
     }
 
-    end_frame(&pigment->swapchain, &pigment->sync, pigment->commands, pigment->device, pigment->current_image_index, pigment->max_frames_in_flight);
+    end_frame(pigment->window_renderer, pigment->device, pigment->window_renderer->current_image_index, pigment->max_frames_in_flight);
 }
-
