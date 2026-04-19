@@ -26,15 +26,35 @@ extern uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type
 int create_vk_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
 
 static int image_list_append(PImageList* image_list, PImage image);
-static int create_image(PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, VkCommandPool command_pool, PDevice* device);
+static int create_image(PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool, PDevice* device);
 static int create_sampler(PSampler* sampler, PSamplerDesc* desc, PDevice* device);
 static void cmd_transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels);
 static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels);
-static int prepare_image_upload(PImage* image, VkBuffer* staging_buffer, VkDeviceMemory* staging_memory, const unsigned char* pixels, uint32_t width, uint32_t height, PDevice* device);
-static int batch_record_uploads(VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, VkDeviceMemory* staging_mems, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, uint32_t count, PDevice* device);
-static uint32_t batch_append_images(PImageList* list, PImage* images, uint32_t count, PDevice* device);
+static int prepare_image_upload(PImage* image, VkBuffer* staging_buffer, VkDeviceMemory* staging_memory, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PDevice* device);
+static int batch_record_uploads(VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, VkDeviceMemory* staging_mems, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count, PDevice* device);
+static uint32_t batch_append_images(PImageList* list, PImage* images, const PFormat* formats, uint32_t count, PDevice* device);
 static void batch_write_descriptors(Pigment* pigment, uint32_t start_slot, uint32_t count);
+
+static uint32_t pformat_pixel_size(PFormat format)
+{
+    switch(format)
+    {
+        case P_FORMAT_R8_UNORM:
+            return 1;
+        case P_FORMAT_R8G8_UNORM:
+            return 2;
+        case P_FORMAT_R8G8B8A8_UNORM:
+        case P_FORMAT_R8G8B8A8_SRGB:
+        case P_FORMAT_B8G8R8A8_UNORM:
+        case P_FORMAT_B8G8R8A8_SRGB:
+            return 4;
+        case P_FORMAT_R16G16B16A16_SFLOAT:
+            return 8;
+        default:
+            return 0;
+    }
+}
 
 static inline int imax(int a, int b)
 {
@@ -105,7 +125,7 @@ void destroy_images(PImageList* image_list, PDevice* device)
     }
 }
 
-uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, uint32_t pool_index)
+uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, uint32_t pool_index)
 {
     if(pigment == NULL || pixels == NULL || width == 0 || height == 0)
     {
@@ -115,7 +135,7 @@ uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uin
     PImageList* images = pigment->images;
     uint32_t slot      = images->image_number;
 
-    if(add_image_from_pixels(images, pixels, width, height, pigment->command_pools, pool_index, pigment->device) != PIGMENT_SUCCESS)
+    if(add_image_from_pixels(images, pixels, width, height, format, pigment->command_pools, pool_index, pigment->device) != PIGMENT_SUCCESS)
     {
         return 0;
     }
@@ -142,7 +162,7 @@ uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uin
     return slot;
 }
 
-uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, uint32_t count, uint32_t pool_index)
+uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count, uint32_t pool_index)
 {
     if(pigment == NULL || pixels == NULL || count == 0)
     {
@@ -161,12 +181,12 @@ uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixe
 
     VkCommandPool pool  = pigment->command_pools->pools[pool_index];
     VkCommandBuffer cmd = start_single_usage_commands(pool, pigment->device);
-    int result          = batch_record_uploads(cmd, new_images, stagings, staging_mems, pixels, widths, heights, count, pigment->device);
+    int result          = batch_record_uploads(cmd, new_images, stagings, staging_mems, pixels, widths, heights, formats, count, pigment->device);
     end_single_usage_commands(&cmd, pool, pigment->device);
 
     if(result == PIGMENT_SUCCESS)
     {
-        start_slot = batch_append_images(pigment->images, new_images, count, pigment->device);
+        start_slot = batch_append_images(pigment->images, new_images, formats, count, pigment->device);
         batch_write_descriptors(pigment, start_slot, count);
     }
 
@@ -185,16 +205,16 @@ FREE:
     return start_slot;
 }
 
-int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PCommandPools* command_pools, uint32_t pool_index, PDevice* device)
+int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPools* command_pools, uint32_t pool_index, PDevice* device)
 {
     PImage image = {0};
 
-    if(create_image(&image, pixels, width, height, command_pools->pools[pool_index], device) != PIGMENT_SUCCESS)
+    if(create_image(&image, pixels, width, height, format, command_pools->pools[pool_index], device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    image.image_view = create_image_view(image.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, image.mip_levels, device->logical_device);
+    image.image_view = create_image_view(image.image, (VkFormat) format, VK_IMAGE_ASPECT_COLOR_BIT, image.mip_levels, device->logical_device);
     if(image.image_view == NULL)
     {
         goto ERROR;
@@ -218,15 +238,15 @@ ERROR:
 int add_default_image(PImageList* image_list, PCommandPools* command_pools, uint32_t pool_index, PDevice* device)
 {
     unsigned char white[] = {255, 255, 255, 255};
-    return add_image_from_pixels(image_list, white, 1, 1, command_pools, pool_index, device);
+    return add_image_from_pixels(image_list, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM, command_pools, pool_index, device);
 }
 
-static int create_image(PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, VkCommandPool command_pool, PDevice* device)
+static int create_image(PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool, PDevice* device)
 {
     VkBuffer staging_buffer              = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
 
-    if(prepare_image_upload(image, &staging_buffer, &staging_buffer_memory, pixels, width, height, device) != PIGMENT_SUCCESS)
+    if(prepare_image_upload(image, &staging_buffer, &staging_buffer_memory, pixels, width, height, format, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -595,17 +615,24 @@ static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t ima
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-static int prepare_image_upload(PImage* image, VkBuffer* staging_buffer, VkDeviceMemory* staging_memory, const unsigned char* pixels, uint32_t width, uint32_t height, PDevice* device)
+static int prepare_image_upload(PImage* image, VkBuffer* staging_buffer, VkDeviceMemory* staging_memory, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PDevice* device)
 {
+    uint32_t pixel_size = pformat_pixel_size(format);
+    if(pixel_size == 0)
+    {
+        fprintf(stderr, "Unsupported PFormat (%d)!\n", format);
+        return PIGMENT_ERROR;
+    }
+
     VkFormatProperties format_properties;
-    vkGetPhysicalDeviceFormatProperties(device->physical_device, VK_FORMAT_R8G8B8A8_SRGB, &format_properties);
+    vkGetPhysicalDeviceFormatProperties(device->physical_device, (VkFormat) format, &format_properties);
     if(!(format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
     {
         fprintf(stderr, "Image format does not support linear blitting!\n");
         return PIGMENT_ERROR;
     }
 
-    VkDeviceSize image_size = (uint64_t) (width * height * 4);
+    VkDeviceSize image_size = (uint64_t) (width * height * pixel_size);
     image->mip_levels       = (uint32_t) (floor(log2(imax(width, height)))) + 1;
 
     if(create_buffer(staging_buffer, staging_memory, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
@@ -621,7 +648,7 @@ static int prepare_image_upload(PImage* image, VkBuffer* staging_buffer, VkDevic
     memcpy(data, pixels, (size_t) image_size);
     vkUnmapMemory(device->logical_device, *staging_memory);
 
-    if(create_vk_image(&image->image, &image->image_memory, width, height, image->mip_levels, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
+    if(create_vk_image(&image->image, &image->image_memory, width, height, image->mip_levels, (VkFormat) format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR;
     }
@@ -629,11 +656,11 @@ static int prepare_image_upload(PImage* image, VkBuffer* staging_buffer, VkDevic
     return PIGMENT_SUCCESS;
 }
 
-static int batch_record_uploads(VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, VkDeviceMemory* staging_mems, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, uint32_t count, PDevice* device)
+static int batch_record_uploads(VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, VkDeviceMemory* staging_mems, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count, PDevice* device)
 {
     for(uint32_t i = 0; i < count; i++)
     {
-        if(prepare_image_upload(&out_images[i], &stagings[i], &staging_mems[i], pixels[i], widths[i], heights[i], device) != PIGMENT_SUCCESS)
+        if(prepare_image_upload(&out_images[i], &stagings[i], &staging_mems[i], pixels[i], widths[i], heights[i], formats[i], device) != PIGMENT_SUCCESS)
         {
             return PIGMENT_ERROR;
         }
@@ -644,12 +671,12 @@ static int batch_record_uploads(VkCommandBuffer cmd, PImage* out_images, VkBuffe
     return PIGMENT_SUCCESS;
 }
 
-static uint32_t batch_append_images(PImageList* list, PImage* images, uint32_t count, PDevice* device)
+static uint32_t batch_append_images(PImageList* list, PImage* images, const PFormat* formats, uint32_t count, PDevice* device)
 {
     uint32_t start_slot = list->image_number;
     for(uint32_t i = 0; i < count; i++)
     {
-        images[i].image_view = create_image_view(images[i].image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, images[i].mip_levels, device->logical_device);
+        images[i].image_view = create_image_view(images[i].image, (VkFormat) formats[i], VK_IMAGE_ASPECT_COLOR_BIT, images[i].mip_levels, device->logical_device);
         image_list_append(list, images[i]);
     }
     return start_slot;

@@ -529,11 +529,12 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_inde
         return;
     }
 
+    const unsigned char** pixels = NULL;
     uint32_t* tex_map            = NULL;
     uint32_t* samp_map           = NULL;
-    const unsigned char** pixels = NULL;
     uint32_t* widths             = NULL;
     uint32_t* heights            = NULL;
+    PFormat* formats             = NULL;
     uint32_t* src_indices        = NULL;
 
     // Upload one batch of valid images contiguously and store indices in an array
@@ -543,9 +544,10 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_inde
         pixels      = malloc(asset->image_count * sizeof(*pixels));
         widths      = malloc(asset->image_count * sizeof(*widths));
         heights     = malloc(asset->image_count * sizeof(*heights));
+        formats     = malloc(asset->image_count * sizeof(*formats));
         src_indices = malloc(asset->image_count * sizeof(*src_indices));
 
-        if(tex_map == NULL || pixels == NULL || widths == NULL || heights == NULL || src_indices == NULL)
+        if(tex_map == NULL || pixels == NULL || widths == NULL || heights == NULL || formats == NULL || src_indices == NULL)
         {
             goto FREE;
         }
@@ -563,13 +565,14 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_inde
             pixels[valid]      = asset->images[i].pixels;
             widths[valid]      = asset->images[i].width;
             heights[valid]     = asset->images[i].height;
+            formats[valid]     = P_FORMAT_R8G8B8A8_SRGB;
             src_indices[valid] = i;
             valid++;
         }
 
         if(valid > 0)
         {
-            uint32_t start_slot = pigment_upload_image_batch(pigment, pixels, widths, heights, valid, pool_index);
+            uint32_t start_slot = pigment_upload_image_batch(pigment, pixels, widths, heights, formats, valid, pool_index);
             for(uint32_t i = 0; i < valid; i++)
             {
                 tex_map[src_indices[i]] = start_slot + i;
@@ -615,11 +618,12 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_inde
 
 FREE:
     free(pixels);
-    free(widths);
-    free(heights);
-    free(src_indices);
     free(tex_map);
     free(samp_map);
+    free(widths);
+    free(heights);
+    free(formats);
+    free(src_indices);
 }
 
 void free_mesh_asset(MeshAsset* asset)
