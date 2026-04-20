@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 #define DEFINES_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef NDEBUG
     #define VLAYERS_ENABLED 0
@@ -82,7 +83,9 @@ typedef struct SwapChainSupportDetails SwapChainSupportDetails;
 
 typedef struct PSwapchain PSwapchain;
 
-typedef struct PPipeline PPipeline;
+typedef struct PPipelines PPipelines;
+
+typedef struct PPipelineBuild PPipelineBuild;
 
 typedef struct PCommandPools PCommandPools;
 
@@ -110,17 +113,7 @@ typedef struct PCamera PCamera;
 
 typedef struct PMeshBuffers PMeshBuffers;
 
-typedef enum FilteringMode {
-    NEAREST = 0,
-    LINEAR  = 1
-} FilteringMode;
-
-typedef enum PAddressMode{
-    P_ADDRESS_MODE_REPEAT          = 0,
-    P_ADDRESS_MODE_MIRRORED_REPEAT = 1,
-    P_ADDRESS_MODE_CLAMP_TO_EDGE   = 2,
-    P_ADDRESS_MODE_CLAMP_TO_BORDER = 3,
-} PAddressMode;
+typedef struct PSamplerDesc PSamplerDesc;
 
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,
@@ -133,13 +126,6 @@ typedef enum PFormat {
     P_FORMAT_R16G16B16A16_SFLOAT = 97,
 } PFormat;
 
-typedef struct PSamplerDesc {
-    FilteringMode mag_filter;     // NEAREST or LINEAR
-    FilteringMode min_filter;     // NEAREST or LINEAR
-    FilteringMode mipmap_mode;    // NEAREST or LINEAR
-    PAddressMode address_mode;    // 0 = REPEAT
-} PSamplerDesc;
-
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 
@@ -150,7 +136,6 @@ typedef struct PDrawCall {
     uint32_t index_count;
     uint32_t image_index;
     uint32_t sampler_index;
-    uint32_t pipeline_id;
     void* extra_push_data;
     uint32_t extra_push_size;
 } PDrawCall;

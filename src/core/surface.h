@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,5 +26,7 @@ PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_he
 void destroy_swapchain(PSwapchain* swapchain, PDevice* device);
 int create_image_views(PSwapchain* swapchain, PDevice* device);
 int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PDevice* device);
+PFormat pigment_get_color_format(PWindowRenderer* renderer);
+PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 
 #endif

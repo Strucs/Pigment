@@ -2,19 +2,19 @@
 #include <loader/gltf_loader.h>
 #include <loader/pipeline_loader.h>
 
-#define EXAMPLE_NAME "suzanne_and_cube"
+#define MODELS_DIR "examples/suzanne_and_cube/models"
 
 int main(void)
 {
     PAppInfo app_info = {
-        .app_name    = "Suzanne and Cube",
+        .app_name    = "Multi Pipeline",
         .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)
     };
 
     PWindowInfo window_info = {
         .width                  = 1280,
         .height                 = 720,
-        .title                  = "Suzanne and Cube",
+        .title                  = "Suzanne and Cube (opaque + additive)",
         .preferred_present_mode = P_PRESENT_MODE_DEFAULT
     };
 
@@ -27,6 +27,7 @@ int main(void)
     MeshAsset* asset2       = NULL;
     PDrawCall* draw_calls   = NULL;
     PDrawCall* draw_calls2  = NULL;
+    PPipelineBuild* builds[2] = {NULL, NULL};
     int error_code          = 1;
 
     pigment = init_pigment(&app_info, &window_info, NULL);
@@ -47,28 +48,41 @@ int main(void)
     set_mouse_handler(pigment);
 
     PWindowRenderer* renderer = pigment_get_window_renderer(pigment);
-    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment_get_color_format(renderer), pigment_get_depth_format(renderer));
-    PPipelineBuild* build = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
-    free((void*) pipeline_desc.vertex_spv);
-    free((void*) pipeline_desc.fragment_spv);
-    if(build == NULL)
+    PFormat color_format      = pigment_get_color_format(renderer);
+    PFormat depth_format      = pigment_get_depth_format(renderer);
+
+    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(color_format, depth_format);
+    PPipelineDesc desc_additive = default_graphic_pipeline_desc(color_format, depth_format);
+    desc_additive.blend_mode    = P_BLEND_MODE_ADDITIVE;
+    desc_additive.depth_write   = false;
+
+    builds[0] = pigment_pipeline_build_from_desc(pigment, &desc_opaque);
+    builds[1] = pigment_pipeline_build_from_desc(pigment, &desc_additive);
+
+    free((void*) desc_opaque.vertex_spv);
+    free((void*) desc_opaque.fragment_spv);
+    free((void*) desc_additive.vertex_spv);
+    free((void*) desc_additive.fragment_spv);
+
+    if(builds[0] == NULL || builds[1] == NULL)
     {
-        fprintf(stderr, "Failed to build pipeline!\n");
+        fprintf(stderr, "Failed to build pipelines!\n");
         goto FREE;
     }
-    pipelines = pigment_create_graphic_pipelines(pigment, &build, 1);
+
+    pipelines = pigment_create_graphic_pipelines(pigment, builds, 2);
     if(pipelines == NULL)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
         goto FREE;
     }
 
-    // SUZANNE
+    // SUZANNE (opaque)
 
-    asset = load_gltf_mesh("examples/" EXAMPLE_NAME "/models/Suzanne.gltf");
+    asset = load_gltf_mesh(MODELS_DIR "/Suzanne.gltf");
     if(asset == NULL)
     {
-        fprintf(stderr, "Failed to load glTF!\n");
+        fprintf(stderr, "Failed to load Suzanne!\n");
         goto FREE;
     }
 
@@ -98,12 +112,12 @@ int main(void)
     free_mesh_asset(asset);
     asset = NULL;
 
-    // CUBE
+    // CUBE (additive blend)
 
-    asset2 = load_gltf_mesh("examples/" EXAMPLE_NAME "/models/BoxVertexColors.glb");
+    asset2 = load_gltf_mesh(MODELS_DIR "/BoxVertexColors.glb");
     if(asset2 == NULL)
     {
-        fprintf(stderr, "Failed to load glTF!\n");
+        fprintf(stderr, "Failed to load cube!\n");
         goto FREE;
     }
 
@@ -149,7 +163,9 @@ int main(void)
 
         pigment_bind_pipeline(pigment, pipelines, 0);
         pigment_draw(pigment, pipelines, 0, draw_calls, draw_count);
-        pigment_draw(pigment, pipelines, 0, draw_calls2, draw_count2);
+
+        pigment_bind_pipeline(pigment, pipelines, 1);
+        pigment_draw(pigment, pipelines, 1, draw_calls2, draw_count2);
 
         pigment_end_frame(pigment);
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -356,4 +356,24 @@ ERROR:
     fprintf(stderr, "Failed to recreate swapchain.\n");
     destroy_swapchain(new_swapchain, device);
     return PIGMENT_ERROR;
+}
+
+PFormat pigment_get_color_format(PWindowRenderer* renderer)
+{
+    if(renderer == NULL || renderer->swapchain == NULL)
+    {
+        return P_FORMAT_UNDEFINED;
+    }
+
+    return (PFormat) renderer->swapchain->image_format;
+}
+
+PFormat pigment_get_depth_format(PWindowRenderer* renderer)
+{
+    if(renderer == NULL || renderer->swapchain == NULL)
+    {
+        return P_FORMAT_UNDEFINED;
+    }
+
+    return (PFormat) renderer->swapchain->depth_format;
 }

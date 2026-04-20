@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ struct Pigment {
     PInstance* instance;
     PDevice* device;
     PDescriptor* descriptor;
-    PPipeline* pipeline;
     PCommandPools* command_pools;
     PImageList* images;
     PSamplerList* samplers;
@@ -130,9 +129,31 @@ struct PSwapchain {
     VkFormat depth_format;
 };
 
-struct PPipeline {
-    VkPipeline graphic_pipeline;
-    VkPipelineLayout pipeline_layout;
+struct PPipelines {
+    VkPipeline* graphic_pipelines;
+    VkPipelineLayout* pipeline_layouts;
+    uint32_t count;
+};
+
+struct PPipelineBuild {
+    VkShaderModule vertex_module;
+    VkShaderModule fragment_module;
+    uint32_t shader_stage_count;
+    VkPipelineShaderStageCreateInfo shader_stages[2];
+    VkPipelineVertexInputStateCreateInfo vertex_input;
+    VkPipelineInputAssemblyStateCreateInfo input_assembly;
+    VkPipelineViewportStateCreateInfo viewport;
+    VkPipelineRasterizationStateCreateInfo rasterizer;
+    VkPipelineMultisampleStateCreateInfo multisample;
+    VkPipelineDepthStencilStateCreateInfo depth_stencil;
+    VkPipelineColorBlendAttachmentState blend_attachment;
+    VkPipelineColorBlendStateCreateInfo color_blend;
+    VkDynamicState* dynamic_state_list;
+    uint32_t dynamic_state_count;
+    VkPipelineDynamicStateCreateInfo dynamic;
+    VkFormat color_format;
+    VkPipelineRenderingCreateInfoKHR rendering;
+    VkPipelineLayout layout;
 };
 
 struct PCommandPools {

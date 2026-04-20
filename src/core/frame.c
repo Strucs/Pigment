@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,19 +164,17 @@ void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index,
     renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
-void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
+void pigment_draw(Pigment* pigment, PPipelines* pipelines, uint32_t pipeline_id, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
 {
-    if(pigment == NULL || draw_cmds == NULL || draw_cmd_count == 0)
+    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count || draw_cmds == NULL || draw_cmd_count == 0)
     {
         return;
     }
 
-    PWindowRenderer* renderer = pigment->window_renderer;
-    uint32_t current_frame    = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
-
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pigment->pipeline->graphic_pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pigment->pipeline->pipeline_layout, 0, 1, &pigment->descriptor->descriptor_sets[current_frame], 0, NULL);
+    PWindowRenderer* renderer  = pigment->window_renderer;
+    uint32_t current_frame     = renderer->swapchain->current_frame;
+    VkCommandBuffer cmd        = renderer->command_buffers->buffers[current_frame];
+    VkPipelineLayout layout    = pipelines->pipeline_layouts[pipeline_id];
 
     for(uint32_t i = 0; i < draw_cmd_count; i++)
     {
@@ -192,7 +190,7 @@ void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_coun
         push.image_index   = draw_call->image_index;
         push.sampler_index = draw_call->sampler_index;
 
-        vkCmdPushConstants(cmd, pigment->pipeline->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PDrawPushConstants), &push);
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PDrawPushConstants), &push);
 
         vkCmdBindIndexBuffer(cmd, draw_call->mesh->index_buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd, draw_call->index_count, 1, draw_call->first_index, 0, 0);

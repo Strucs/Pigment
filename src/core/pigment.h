@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include "mesh.h"
 #include "texture.h"
 #include "pipeline.h"
+#include "surface.h"
 
 Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);
@@ -37,5 +38,7 @@ void pigment_set_present_mode(Pigment* pigment, PPresentMode mode);
 
 bool pigment_begin_frame(Pigment* pigment, PCamera* camera);
 void pigment_end_frame(Pigment* pigment);
+
+PWindowRenderer* pigment_get_window_renderer(Pigment* pigment);
 
 #endif

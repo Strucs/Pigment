@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,6 @@
 
 bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PWindow* window, PDevice* device, PCamera* camera, uint32_t* out_image_index);
 void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index, uint32_t max_frame);
-void pigment_draw(Pigment* pigment, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
+void pigment_draw(Pigment* pigment, PPipelines* pipelines, uint32_t pipeline_id, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
 
 #endif

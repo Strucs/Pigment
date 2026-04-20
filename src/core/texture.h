@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,25 @@
 #define TEXTURE_H
 
 #include "defines.h"
+
+typedef enum FilteringMode {
+    NEAREST = 0,
+    LINEAR  = 1,
+} FilteringMode;
+
+typedef enum PAddressMode {
+    P_ADDRESS_MODE_REPEAT          = 0,
+    P_ADDRESS_MODE_MIRRORED_REPEAT = 1,
+    P_ADDRESS_MODE_CLAMP_TO_EDGE   = 2,
+    P_ADDRESS_MODE_CLAMP_TO_BORDER = 3,
+} PAddressMode;
+
+struct PSamplerDesc {
+    FilteringMode mag_filter;     // NEAREST or LINEAR
+    FilteringMode min_filter;     // NEAREST or LINEAR
+    FilteringMode mipmap_mode;    // NEAREST or LINEAR
+    PAddressMode address_mode;    // 0 = REPEAT
+};
 
 PImageList* create_images(void);
 uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, uint32_t pool_index);

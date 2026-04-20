@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2025-2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,7 @@
 #include "window.h"
 #include "instance.h"
 #include "device.h"
-#include "surface.h"
 #include "frame.h"
-#include "pipeline.h"
 #include "commands.h"
 #include "synchronization.h"
 #include "buffers.h"
@@ -99,11 +97,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
     create_depth_resources(pigment->window_renderer->swapchain, pigment->device);
-    pigment->pipeline = create_graphic_pipeline(pigment->window_renderer->swapchain, pigment->descriptor, pigment->device);
-    if(pigment->pipeline == NULL)
-    {
-        goto ERROR;
-    }
     pigment->buffers = create_uniform_buffers(pigment->device, pigment->max_frames_in_flight);
     if(pigment->buffers == NULL)
     {
@@ -145,7 +138,6 @@ void destroy_pigment(Pigment* pigment)
     }
     destroy_uniform_buffers(pigment->buffers, pigment->device, pigment->max_frames_in_flight);
     destroy_descriptor(pigment->descriptor, pigment->device);
-    destroy_pipeline(pigment->pipeline, pigment->device);
     destroy_images(pigment->images, pigment->device);
     destroy_samplers(pigment->samplers, pigment->device);
     destroy_command_pools(pigment->command_pools, pigment->device);
@@ -247,4 +239,14 @@ void pigment_end_frame(Pigment* pigment)
     }
 
     end_frame(pigment->window_renderer, pigment->device, pigment->window_renderer->current_image_index, pigment->max_frames_in_flight);
+}
+
+PWindowRenderer* pigment_get_window_renderer(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return NULL;
+    }
+
+    return pigment->window_renderer;
 }

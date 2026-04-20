@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Angel-Leduc TA
+ * Copyright 2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-#include "shaders.h"
-#include "structs.h"
+#include "pipeline_loader.h"
 
-char* get_shader_code(const char* file_path, uint32_t* shader_size)
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <shaderc/shaderc.h>
+
+char* load_shader_code(const char* file_path, uint32_t* shader_size)
 {
     FILE* fd = fopen(file_path, "rb");
-
     if(fd == NULL)
     {
         return NULL;
@@ -42,44 +45,43 @@ char* get_shader_code(const char* file_path, uint32_t* shader_size)
     return shader_code;
 }
 
-uint32_t* compile_glsl_to_spv(const char* source_code, uint32_t source_size, shaderc_shader_kind kind, const char* file_name, uint32_t* spv_size)
+uint32_t* compile_glsl_to_spv(const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size)
 {
-
-    shaderc_compiler_t compiler = NULL;
-    shaderc_compile_options_t options = NULL;
+    shaderc_compiler_t compiler         = NULL;
+    shaderc_compile_options_t options   = NULL;
     shaderc_compilation_result_t result = NULL;
 
     compiler = shaderc_compiler_initialize();
-    if (compiler == NULL)
+    if(compiler == NULL)
     {
         fprintf(stderr, "Failed to initialize shader compiler.\n");
         goto ERROR;
     }
 
     options = shaderc_compile_options_initialize();
-    if (options == NULL)
+    if(options == NULL)
     {
         fprintf(stderr, "Failed to initialize shader compile options.\n");
         goto ERROR;
     }
 
-    const char* input_name = file_name ? file_name : "default";
-
-    const char* entry_point = "main";
+    shaderc_shader_kind kind = (type == P_SHADER_TYPE_FRAGMENT) ? shaderc_glsl_fragment_shader : shaderc_glsl_vertex_shader;
+    const char* input_name   = file_name ? file_name : "default";
+    const char* entry_point  = "main";
 
     result = shaderc_compile_into_spv(compiler, source_code, source_size, kind, input_name, entry_point, options);
 
-    if (shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success)
+    if(shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success)
     {
         fprintf(stderr, "GLSL compilation error: %s\n", shaderc_result_get_error_message(result));
         goto ERROR;
     }
 
-    *spv_size = shaderc_result_get_length(result);
-    const uint32_t* bytes = (const uint32_t*)shaderc_result_get_bytes(result);
+    *spv_size             = shaderc_result_get_length(result);
+    const uint32_t* bytes = (const uint32_t*) shaderc_result_get_bytes(result);
 
     uint32_t* spv = malloc(*spv_size);
-    if (spv != NULL)
+    if(spv != NULL)
     {
         memcpy(spv, bytes, *spv_size);
     }
@@ -98,21 +100,23 @@ ERROR:
     return NULL;
 }
 
-VkShaderModule create_shader_module(VkDevice device, const uint32_t* code, uint32_t shader_size)
+PPipelineDesc default_graphic_pipeline_desc(PFormat color_format, PFormat depth_format)
 {
-    VkShaderModule shader_module;
+    PPipelineDesc desc = {0};
 
-    VkShaderModuleCreateInfo create_info = {
-        .sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shader_size,
-        .pCode    = code
-    };
+    desc.vertex_spv   = compile_glsl_to_spv(DEFAULT_VERTEX_SHADER, (uint32_t) strlen(DEFAULT_VERTEX_SHADER), P_SHADER_TYPE_VERTEX, "default.vert", &desc.vertex_spv_size);
+    desc.fragment_spv = compile_glsl_to_spv(DEFAULT_FRAGMENT_SHADER, (uint32_t) strlen(DEFAULT_FRAGMENT_SHADER), P_SHADER_TYPE_FRAGMENT, "default.frag", &desc.fragment_spv_size);
 
-    if(vkCreateShaderModule(device, &create_info, NULL, &shader_module) != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create shader module!\n");
-        return NULL;
-    }
+    desc.color_format     = color_format;
+    desc.depth_format     = depth_format;
+    desc.depth_test       = true;
+    desc.depth_write      = true;
+    desc.depth_compare_op = P_COMPARE_OP_GREATER;
+    desc.stencil_test     = false;
+    desc.cull_mode        = P_CULL_MODE_BACK;
+    desc.polygon_mode     = P_POLYGON_MODE_FILL;
+    desc.topology         = P_TOPOLOGY_TRIANGLE_LIST;
+    desc.blend_mode       = P_BLEND_MODE_OPAQUE;
 
-    return shader_module;
+    return desc;
 }
