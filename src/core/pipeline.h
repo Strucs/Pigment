@@ -93,6 +93,6 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 PPipelines* pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count);
 void pigment_destroy_pipelines(Pigment* pigment, PPipelines* pipelines);
 
-void pigment_bind_pipeline(Pigment* pigment, PPipelines* pipelines, uint32_t pipeline_id);
+void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id);
 
 #endif

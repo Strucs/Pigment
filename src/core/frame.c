@@ -21,25 +21,36 @@
 #include "window.h"
 
 extern void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
-extern void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
+extern void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
 extern void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 
-bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PWindow* window, PDevice* device, PCamera* camera, uint32_t* out_image_index)
+bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* device, PCamera* camera, uint32_t* out_image_index)
 {
-    if(window->framebuffer_resized)
+    if(renderer->framebuffer_resized)
     {
-        uint32_t framebuffer_width = 0, framebuffer_height = 0;
-        get_framebuffer_size(window, &framebuffer_width, &framebuffer_height);
+        renderer->framebuffer_resized = false;
+
+        uint32_t framebuffer_width  = renderer->pending_width;
+        uint32_t framebuffer_height = renderer->pending_height;
+        PPresentMode present_mode   = renderer->requested_present_mode;
+
+        VkSurfaceCapabilitiesKHR caps;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device, renderer->surface->surface, &caps);
+        if(caps.currentExtent.width != 0xFFFFFFFF)
+        {
+            framebuffer_width  = caps.currentExtent.width;
+            framebuffer_height = caps.currentExtent.height;
+        }
         if(framebuffer_width == 0 || framebuffer_height == 0)
         {
+            renderer->framebuffer_resized = true;
             return false;
         }
 
-        window->framebuffer_resized = false;
-        uint32_t old_image_count    = renderer->swapchain->image_count;
-        if(recreate_swapchain(renderer, framebuffer_width, framebuffer_height, window->info->preferred_present_mode, device) != PIGMENT_SUCCESS)
+        uint32_t old_image_count = renderer->swapchain->image_count;
+        if(recreate_swapchain(renderer, framebuffer_width, framebuffer_height, present_mode, device) != PIGMENT_SUCCESS)
         {
-            window->framebuffer_resized = true;
+            renderer->framebuffer_resized = true;
             return false;
         }
         if(old_image_count != renderer->swapchain->image_count)
@@ -53,13 +64,12 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PWindow* w
 
     uint32_t current_frame = renderer->swapchain->current_frame;
 
-    vkWaitForFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
-
     VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, UINT64_MAX, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, out_image_index);
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
-        window->framebuffer_resized = true;
+        recreate_image_available_semaphore(renderer->sync, current_frame, device);
+        renderer->framebuffer_resized = true;
         return false;
     }
     else if(result != VK_SUCCESS)
@@ -87,7 +97,7 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PWindow* w
         return false;
     }
 
-    cmd_begin_rendering(cmd, renderer->swapchain, *out_image_index);
+    cmd_begin_rendering(cmd, renderer->swapchain, *out_image_index, renderer->transparent_framebuffer);
 
     VkViewport viewport = {
         .x        = 0.0f,
@@ -164,17 +174,17 @@ void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index,
     renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
-void pigment_draw(Pigment* pigment, PPipelines* pipelines, uint32_t pipeline_id, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
+void pigment_draw(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
 {
-    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count || draw_cmds == NULL || draw_cmd_count == 0)
+    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count || draw_cmds == NULL || draw_cmd_count == 0 || window_index >= pigment->window_count)
     {
         return;
     }
 
-    PWindowRenderer* renderer  = pigment->window_renderer;
-    uint32_t current_frame     = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd        = renderer->command_buffers->buffers[current_frame];
-    VkPipelineLayout layout    = pipelines->pipeline_layouts[pipeline_id];
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    uint32_t current_frame    = renderer->swapchain->current_frame;
+    VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
+    VkPipelineLayout layout   = pipelines->pipeline_layouts[pipeline_id];
 
     for(uint32_t i = 0; i < draw_cmd_count; i++)
     {

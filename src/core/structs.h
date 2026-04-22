@@ -19,8 +19,9 @@
 
 #include "defines.h"
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -33,8 +34,10 @@ typedef struct {
 } optional_uint32;
 
 struct Pigment {
-    PWindow* window;
-    PWindowRenderer* window_renderer;
+    PWindow** windows;
+    PWindowRenderer** renderers;
+    uint32_t window_count;
+    uint32_t window_capacity;
     PInstance* instance;
     PDevice* device;
     PDescriptor* descriptor;
@@ -49,15 +52,8 @@ struct Pigment {
 
 struct PWindow {
     PWindowInfo* info;
-    GLFWwindow* window;
-    bool framebuffer_resized;
-    PCamera* camera;
-    float last_frame_time;
-    float mouse_offset_x;
-    float mouse_offset_y;
-    float mouse_last_x;
-    float mouse_last_y;
-    bool first_time_mouse;
+    SDL_Window* window;
+    bool should_close;
 };
 
 struct PWindowRenderer {
@@ -66,6 +62,11 @@ struct PWindowRenderer {
     PSync* sync;
     PCommandBuffers* command_buffers;
     uint32_t current_image_index;
+    bool framebuffer_resized;
+    uint32_t pending_width;
+    uint32_t pending_height;
+    PPresentMode requested_present_mode;
+    bool transparent_framebuffer;
 };
 
 struct PInstance {
@@ -214,16 +215,6 @@ struct PSamplerList {
     PSamplerDesc* descs;
     uint32_t sampler_number;
     uint32_t sampler_size;
-};
-
-struct PCamera {
-    vec3 position;
-    vec3 front;
-    vec3 up;
-    float speed;
-    float roll;
-    float pitch;
-    float yaw;
 };
 
 struct PMeshBuffers {

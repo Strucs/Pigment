@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
+#include "camera.h"
 #include "defines.h"
-#include "structs.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <cglm/quat.h>
 
@@ -49,11 +53,6 @@ PCamera* pigment_create_camera(vec3 position)
 void pigment_destroy_camera(PCamera* camera)
 {
     free(camera);
-}
-
-void add_camera_to_window(PCamera* camera, Pigment* pigment)
-{
-    pigment->window->camera = camera;
 }
 
 void get_view_matrix(PCamera* camera, UniformBufferObject* ubo)

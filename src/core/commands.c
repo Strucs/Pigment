@@ -22,7 +22,7 @@ extern QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfac
 
 static VkCommandPool create_command_pool(PDevice* device, PSurface* surface);
 static VkCommandBuffer* allocate_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers);
-void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
+void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
 void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 
 #define PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY 4
@@ -125,7 +125,7 @@ void destroy_command_buffers(PCommandBuffers* command_buffers, PDevice* device, 
     free(command_buffers);
 }
 
-void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index)
+void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent)
 {
     VkImageMemoryBarrier2 barriers_to_render[2] = {
         {
@@ -164,7 +164,7 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
 
     vkCmdPipelineBarrier2(command_buffer, &dep_to_render);
 
-    VkClearColorValue clear_color_value = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    VkClearColorValue clear_color_value = {{0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f}};
     VkClearDepthStencilValue clear_depth_stencil_value = {0.0f, 0};
 
     VkRenderingAttachmentInfoKHR color_attachment = {

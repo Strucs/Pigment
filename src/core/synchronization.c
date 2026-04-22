@@ -130,6 +130,20 @@ void destroy_sync(PSync* sync, PDevice* device, PSwapchain* swapchain, const uin
     free(sync);
 }
 
+int recreate_image_available_semaphore(PSync* sync, uint32_t index, PDevice* device)
+{
+    VkSemaphore fresh = create_semaphore(device->logical_device);
+    if(fresh == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[index], NULL);
+    sync->image_available_semaphores[index] = fresh;
+
+    return PIGMENT_SUCCESS;
+}
+
 int resize_render_finished_semaphores(PSync* sync, uint32_t old_count, uint32_t new_count, PDevice* device)
 {
     VkSemaphore* new_semaphores = calloc(new_count, sizeof(*new_semaphores));

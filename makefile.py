@@ -69,13 +69,13 @@ def on_build(config: powermake.Config):
             config.add_flags("-flto=auto")
 
     if config.target_is_windows():
-        config.add_shared_libs("glfw3", "vulkan-1", "shaderc_shared")
+        config.add_shared_libs("SDL3", "vulkan-1", "shaderc_shared")
     elif config.target_is_macos():
         config.add_includedirs("/opt/homebrew/include")
         config.add_ld_flags("-L/opt/homebrew/lib")
-        config.add_shared_libs("glfw.3.4", "vulkan.1", "shaderc_shared")
+        config.add_shared_libs("SDL3", "vulkan.1", "shaderc_shared")
     else:
-        config.add_shared_libs("glfw", "vulkan", "shaderc_shared")
+        config.add_shared_libs("SDL3", "vulkan", "shaderc_shared")
 
     build_static_lib(config)
 

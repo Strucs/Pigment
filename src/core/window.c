@@ -15,16 +15,17 @@
  */
 
 #include "window.h"
+#include "pigment_sdl.h"
 #include "structs.h"
 
-static void framebuffer_resize_callback(GLFWwindow* window, int, int);
+static uint32_t find_index_by_window_id(Pigment* pigment, SDL_WindowID id);
 
 PWindow* create_window(PWindowInfo* window_info)
 {
     PWindow* window = calloc(1, sizeof(*window));
     if(window == NULL)
     {
-        perror("calloc");
+        perror("create_window");
         goto ERROR;
     }
 
@@ -34,38 +35,67 @@ PWindow* create_window(PWindowInfo* window_info)
         goto ERROR;
     }
 
-    window->framebuffer_resized = false;
-
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    window->window = glfwCreateWindow(window_info->width, window_info->height, window_info->title, NULL, NULL);
-    if(window->window == NULL)
+    if(!SDL_Init(SDL_INIT_VIDEO))
     {
+        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         goto ERROR;
     }
 
-    glfwSetWindowUserPointer(window->window, window);
+    window->should_close = false;
 
-    glfwSetFramebufferSizeCallback(window->window, framebuffer_resize_callback);
-
-    GLFWmonitor* primary    = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = glfwGetVideoMode(primary);
-    if(mode)
+    SDL_WindowFlags sdl_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN;
+    PWindowFlags pflags       = window_info->flags;
+    if(pflags & P_WINDOW_FLAG_RESIZABLE)
     {
-        int xpos = (mode->width - window_info->width) / 2;
-        int ypos = (mode->height - window_info->height) / 2;
-        glfwSetWindowPos(window->window, xpos, ypos);
+        sdl_flags |= SDL_WINDOW_RESIZABLE;
+    }
+    if(pflags & P_WINDOW_FLAG_BORDERLESS)
+    {
+        sdl_flags |= SDL_WINDOW_BORDERLESS;
+    }
+    if(pflags & P_WINDOW_FLAG_FULLSCREEN)
+    {
+        sdl_flags |= SDL_WINDOW_FULLSCREEN;
+    }
+    if(pflags & P_WINDOW_FLAG_MAXIMIZED)
+    {
+        sdl_flags |= SDL_WINDOW_MAXIMIZED;
+    }
+    if(pflags & P_WINDOW_FLAG_MINIMIZED)
+    {
+        sdl_flags |= SDL_WINDOW_MINIMIZED;
+    }
+    if(pflags & P_WINDOW_FLAG_ALWAYS_ON_TOP)
+    {
+        sdl_flags |= SDL_WINDOW_ALWAYS_ON_TOP;
+    }
+    if(pflags & P_WINDOW_FLAG_HIGH_DPI)
+    {
+        sdl_flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    }
+    if(pflags & P_WINDOW_FLAG_TRANSPARENT)
+    {
+        sdl_flags |= SDL_WINDOW_TRANSPARENT;
+    }
+    if(pflags & P_WINDOW_FLAG_NOT_FOCUSABLE)
+    {
+        sdl_flags |= SDL_WINDOW_NOT_FOCUSABLE;
     }
 
-    window->info             = window_info;
-    window->last_frame_time  = 0.0f;
-    window->first_time_mouse = true;
-    window->mouse_last_x     = 0.0f;
-    window->mouse_last_y     = 0.0f;
-    window->mouse_offset_x   = 0.0f;
-    window->mouse_offset_y   = 0.0f;
+    window->window = SDL_CreateWindow(
+        window_info->title,
+        window_info->width,
+        window_info->height,
+        sdl_flags
+    );
+
+    if(window->window == NULL)
+    {
+        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        goto ERROR;
+    }
+
+    window->info = window_info;
 
     return window;
 
@@ -81,148 +111,90 @@ void destroy_window(PWindow* window)
     {
         return;
     }
-    glfwDestroyWindow(window->window);
-    glfwTerminate();
+    SDL_DestroyWindow(window->window);
     free(window);
 }
 
 bool window_should_close(PWindow* window)
 {
-    return glfwWindowShouldClose(window->window);
+    return window->should_close;
 }
 
 void show_window(PWindow* window)
 {
-    glfwShowWindow(window->window);
-}
-
-void poll_events(void)
-{
-    glfwPollEvents();
+    SDL_ShowWindow(window->window);
 }
 
 void get_framebuffer_size(PWindow* window, uint32_t* out_width, uint32_t* out_height)
 {
     int width = 0, height = 0;
-    glfwGetFramebufferSize(window->window, &width, &height);
+    SDL_GetWindowSizeInPixels(window->window, &width, &height);
     *out_width  = (uint32_t) width;
     *out_height = (uint32_t) height;
 }
 
-static void framebuffer_resize_callback(GLFWwindow* window, int width __attribute__((unused)), int height __attribute__((unused)))
+static uint32_t find_index_by_window_id(Pigment* pigment, SDL_WindowID id)
 {
-    PWindow* pigment_window             = glfwGetWindowUserPointer(window);
-    pigment_window->framebuffer_resized = true;
-    pigment_window->info->width         = width;
-    pigment_window->info->height        = height;
+    for(uint32_t i = 0; i < pigment->window_count; i++)
+    {
+        if(SDL_GetWindowID(pigment->windows[i]->window) == id)
+        {
+            return i;
+        }
+    }
+    return UINT32_MAX;
 }
 
-void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+void pigment_handle_sdl_event(Pigment* pigment, const SDL_Event* event)
 {
-    PWindow* pigment_window = glfwGetWindowUserPointer(window);
-
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    if(pigment_window->first_time_mouse)
+    if(pigment == NULL || event == NULL)
     {
-        pigment_window->mouse_last_x     = (float) width / 2.0f;
-        pigment_window->mouse_last_y     = (float) height / 2.0f;
-        pigment_window->first_time_mouse = false;
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-        if(glfwRawMouseMotionSupported())
-        {
-            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-        }
         return;
     }
 
-    pigment_window->mouse_offset_x += (float) xpos - pigment_window->mouse_last_x;
-    pigment_window->mouse_offset_y += pigment_window->mouse_last_y - (float) ypos;
-
-    pigment_window->mouse_last_x = (float) xpos;
-    pigment_window->mouse_last_y = (float) ypos;
-}
-
-void handle_inputs(PWindow* window)
-{
-    float current_time      = (float) glfwGetTime();
-    float delta_time        = current_time - window->last_frame_time;
-    window->last_frame_time = current_time;
-    float speed             = window->camera->speed * delta_time;
-
-    if(glfwGetKey(window->window, GLFW_KEY_W) == GLFW_PRESS)
+    switch(event->type)
     {
-        glm_vec3_muladds(window->camera->front, speed, window->camera->position);
-    }
-
-    if(glfwGetKey(window->window, GLFW_KEY_S) == GLFW_PRESS)
-    {
-        glm_vec3_muladds(window->camera->front, -speed, window->camera->position);
-    }
-
-    if(glfwGetKey(window->window, GLFW_KEY_A) == GLFW_PRESS)
-    {
-        vec3 right;
-        glm_vec3_cross(window->camera->front, window->camera->up, right);
-        glm_vec3_normalize(right);
-        glm_vec3_muladds(right, -speed, window->camera->position);
-    }
-
-    if(glfwGetKey(window->window, GLFW_KEY_D) == GLFW_PRESS)
-    {
-        vec3 right;
-        glm_vec3_cross(window->camera->front, window->camera->up, right);
-        glm_vec3_normalize(right);
-        glm_vec3_muladds(right, speed, window->camera->position);
-    }
-
-    if(glfwGetKey(window->window, GLFW_KEY_SPACE) == GLFW_PRESS)
-    {
-        glm_vec3_muladds(window->camera->up, speed, window->camera->position);
-    }
-
-    if(glfwGetKey(window->window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-    {
-        glm_vec3_muladds(window->camera->up, -speed, window->camera->position);
-    }
-
-    float xoffset          = window->mouse_offset_x;
-    float yoffset          = window->mouse_offset_y;
-    window->mouse_offset_x = 0.0f;
-    window->mouse_offset_y = 0.0f;
-
-    float sensitivity = 0.05f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-
-    if(xoffset != 0.0f || yoffset != 0.0f)
-    {
-        window->camera->yaw += xoffset;
-        window->camera->pitch += yoffset;
-
-        if(window->camera->pitch > 89.0f)
-        {
-            window->camera->pitch = 89.0f;
-        }
-        if(window->camera->pitch < -89.0f)
-        {
-            window->camera->pitch = -89.0f;
-        }
-
-        vec3 front = {
-            (float) (cos(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch))),
-            (float) (sin(glm_rad(window->camera->pitch))),
-            (float) (sin(glm_rad(window->camera->yaw)) * cos(glm_rad(window->camera->pitch)))
-        };
-
-        glm_vec3_normalize(front);
-        memcpy(window->camera->front, front, sizeof(front));
+        case SDL_EVENT_QUIT:
+            {
+                for(uint32_t i = 0; i < pigment->window_count; i++)
+                {
+                    pigment->windows[i]->should_close = true;
+                }
+                break;
+            }
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            {
+                uint32_t i = find_index_by_window_id(pigment, event->window.windowID);
+                if(i != UINT32_MAX)
+                {
+                    pigment->windows[i]->should_close = true;
+                }
+                break;
+            }
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            {
+                uint32_t i = find_index_by_window_id(pigment, event->window.windowID);
+                if(i != UINT32_MAX)
+                {
+                    PWindowRenderer* renderer         = pigment->renderers[i];
+                    renderer->pending_width           = (uint32_t) event->window.data1;
+                    renderer->pending_height          = (uint32_t) event->window.data2;
+                    renderer->framebuffer_resized     = true;
+                    pigment->windows[i]->info->width  = event->window.data1;
+                    pigment->windows[i]->info->height = event->window.data2;
+                }
+                break;
+            }
+        default:
+            break;
     }
 }
 
-void set_mouse_handler(Pigment* pigment)
+SDL_Window* pigment_get_sdl_window(Pigment* pigment, uint32_t window_index)
 {
-    glfwSetCursorPosCallback(pigment->window->window, mouse_callback);
+    if(pigment == NULL || window_index >= pigment->window_count)
+    {
+        return NULL;
+    }
+    return pigment->windows[window_index]->window;
 }

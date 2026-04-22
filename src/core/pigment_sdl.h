@@ -1,5 +1,5 @@
 /**
- * Copyright 2025-2026 Angel-Leduc TA
+ * Copyright 2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef CAMERA_H
-#define CAMERA_H
+#ifndef PIGMENT_SDL_H
+#define PIGMENT_SDL_H
 
 #include "defines.h"
+#include <SDL3/SDL.h>
 
-struct PCamera {
-    vec3 position;
-    vec3 front;
-    vec3 up;
-    float speed;
-    float roll;
-    float pitch;
-    float yaw;
-};
-
-PCamera* pigment_create_camera(vec3 position);
-void pigment_destroy_camera(PCamera* camera);
+void pigment_handle_sdl_event(Pigment* pigment, const SDL_Event* event);
+SDL_Window* pigment_get_sdl_window(Pigment* pigment, uint32_t window_index);
 
 #endif

@@ -1,6 +1,9 @@
 #include <pigment.h>
+#include <pigment_sdl.h>
 #include <loader/gltf_loader.h>
 #include <loader/pipeline_loader.h>
+
+#include "../common/fps_camera.h"
 
 #define MODELS_DIR "examples/suzanne_and_cube/models"
 
@@ -15,20 +18,21 @@ int main(void)
         .width                  = 1280,
         .height                 = 720,
         .title                  = "Suzanne and Cube (opaque + additive)",
-        .preferred_present_mode = P_PRESENT_MODE_DEFAULT
+        .preferred_present_mode = P_PRESENT_MODE_DEFAULT,
+        .flags                  = P_WINDOW_FLAGS_DEFAULT ,
     };
 
-    Pigment* pigment        = NULL;
-    PCamera* camera         = NULL;
-    PPipelines* pipelines   = NULL;
-    PMeshBuffers* gpu_mesh  = NULL;
-    MeshAsset* asset        = NULL;
-    PMeshBuffers* gpu_mesh2 = NULL;
-    MeshAsset* asset2       = NULL;
-    PDrawCall* draw_calls   = NULL;
-    PDrawCall* draw_calls2  = NULL;
+    Pigment* pigment          = NULL;
+    PCamera* camera           = NULL;
+    PPipelines* pipelines     = NULL;
+    PMeshBuffers* gpu_mesh    = NULL;
+    MeshAsset* asset          = NULL;
+    PMeshBuffers* gpu_mesh2   = NULL;
+    MeshAsset* asset2         = NULL;
+    PDrawCall* draw_calls     = NULL;
+    PDrawCall* draw_calls2    = NULL;
     PPipelineBuild* builds[2] = {NULL, NULL};
-    int error_code          = 1;
+    int error_code            = 1;
 
     pigment = init_pigment(&app_info, &window_info, NULL);
     if(pigment == NULL)
@@ -38,16 +42,17 @@ int main(void)
     }
 
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
-    camera = pigment_create_camera(camera_position);
+    camera               = pigment_create_camera(camera_position);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
         goto FREE;
     }
-    add_camera_to_window(camera, pigment);
-    set_mouse_handler(pigment);
 
-    PWindowRenderer* renderer = pigment_get_window_renderer(pigment);
+    FPSCameraState fps_state = fps_camera_state_init();
+    SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), true);
+
+    PWindowRenderer* renderer = pigment_get_window_renderer(pigment, 0);
     PFormat color_format      = pigment_get_color_format(renderer);
     PFormat depth_format      = pigment_get_depth_format(renderer);
 
@@ -149,25 +154,33 @@ int main(void)
     free_mesh_asset(asset2);
     asset2 = NULL;
 
-    pigment_show_window(pigment);
+    pigment_show_window(pigment, 0);
 
     while(pigment_should_run(pigment))
     {
-        pigment_poll_events();
-        pigment_handle_inputs(pigment);
+        SDL_Event event;
+        while(SDL_PollEvent(&event))
+        {
+            pigment_handle_sdl_event(pigment, &event);
+            fps_camera_handle_sdl_event(&fps_state, &event);
+        }
 
-        if(!pigment_begin_frame(pigment, camera))
+        fps_camera_update(camera, &fps_state);
+
+        pigment_wait_frame_ready(pigment, 0);
+
+        if(!pigment_begin_frame(pigment, 0, camera))
         {
             continue;
         }
 
-        pigment_bind_pipeline(pigment, pipelines, 0);
-        pigment_draw(pigment, pipelines, 0, draw_calls, draw_count);
+        pigment_bind_pipeline(pigment, 0, pipelines, 0);
+        pigment_draw(pigment, 0, pipelines, 0, draw_calls, draw_count);
 
-        pigment_bind_pipeline(pigment, pipelines, 1);
-        pigment_draw(pigment, pipelines, 1, draw_calls2, draw_count2);
+        pigment_bind_pipeline(pigment, 0, pipelines, 1);
+        pigment_draw(pigment, 0, pipelines, 1, draw_calls2, draw_count2);
 
-        pigment_end_frame(pigment);
+        pigment_end_frame(pigment, 0);
     }
 
     error_code = 0;

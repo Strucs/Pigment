@@ -17,9 +17,6 @@
 #include "instance.h"
 #include "structs.h"
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 static void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT* create_info);
 static VkResult create_debug_utils_messenger(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* p_create_info, const VkAllocationCallbacks* p_allocator, VkDebugUtilsMessengerEXT* p_debug_messenger);
 static void destroy_debug_utils_messenger(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger, const VkAllocationCallbacks* p_allocator);
@@ -48,7 +45,6 @@ PInstance* create_instance(PAppInfo* info)
 
     const char* layers[] = {
         "VK_LAYER_KHRONOS_validation",
-        // "VK_LAYER_LUNARG_monitor"
     };
 
     instance->layers = calloc(1, sizeof(*(instance->layers)));
@@ -150,10 +146,14 @@ void destroy_instance(PInstance* instance)
 
 int get_extensions(PInstance* instance)
 {
-    const char** glfw_extensions;
-    uint32_t glfw_extensions_count;
+    Uint32 sdl_extensions_count       = 0;
+    const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_extensions_count);
 
-    glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extensions_count);
+    if(sdl_extensions == NULL)
+    {
+        fprintf(stderr, "SDL_Vulkan_GetInstanceExtensions: %s\n", SDL_GetError());
+        goto ERROR;
+    }
 
     instance->extensions = malloc(sizeof(*instance->extensions));
     if(instance->extensions == NULL)
@@ -173,15 +173,15 @@ int get_extensions(PInstance* instance)
 
     uint32_t extra_count = sizeof(extra_extensions) / sizeof(*extra_extensions);
 
-    instance->extensions->size  = glfw_extensions_count + extra_count;
+    instance->extensions->size  = sdl_extensions_count + extra_count;
     instance->extensions->names = malloc(instance->extensions->size * sizeof(*instance->extensions->names));
     if(instance->extensions->names == NULL)
     {
         goto ERROR;
     }
 
-    memcpy(instance->extensions->names, glfw_extensions, glfw_extensions_count * sizeof(*glfw_extensions));
-    memcpy(instance->extensions->names + glfw_extensions_count, extra_extensions, extra_count * sizeof(*extra_extensions));
+    memcpy(instance->extensions->names, sdl_extensions, sdl_extensions_count * sizeof(*sdl_extensions));
+    memcpy(instance->extensions->names + sdl_extensions_count, extra_extensions, extra_count * sizeof(*extra_extensions));
 
     return PIGMENT_SUCCESS;
 

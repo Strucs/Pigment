@@ -50,11 +50,27 @@ typedef enum {
 
 #define P_PRESENT_MODE_DEFAULT P_PRESENT_MODE_MAILBOX
 
+typedef enum {
+    P_WINDOW_FLAG_NONE          = 0,
+    P_WINDOW_FLAG_RESIZABLE     = 1 << 0,
+    P_WINDOW_FLAG_BORDERLESS    = 1 << 1,
+    P_WINDOW_FLAG_FULLSCREEN    = 1 << 2,
+    P_WINDOW_FLAG_MAXIMIZED     = 1 << 3,
+    P_WINDOW_FLAG_MINIMIZED     = 1 << 4,
+    P_WINDOW_FLAG_ALWAYS_ON_TOP = 1 << 5,
+    P_WINDOW_FLAG_HIGH_DPI      = 1 << 6,
+    P_WINDOW_FLAG_TRANSPARENT   = 1 << 7,
+    P_WINDOW_FLAG_NOT_FOCUSABLE = 1 << 8,
+} PWindowFlags;
+
+#define P_WINDOW_FLAGS_DEFAULT (P_WINDOW_FLAG_RESIZABLE | P_WINDOW_FLAG_HIGH_DPI)
+
 typedef struct PWindowInfo {
     int width;
     int height;
     char* title;
     PPresentMode preferred_present_mode;
+    PWindowFlags flags;
 } PWindowInfo;
 
 typedef struct Pigment Pigment;

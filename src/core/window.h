@@ -22,10 +22,7 @@
 PWindow* create_window(PWindowInfo* window_info);
 void destroy_window(PWindow* window);
 bool window_should_close(PWindow* window);
-void poll_events(void);
-void handle_inputs(PWindow* window);
 void show_window(PWindow* window);
-void set_mouse_handler(Pigment* pigment);
 void get_framebuffer_size(PWindow* window, uint32_t* out_width, uint32_t* out_height);
 
 #endif

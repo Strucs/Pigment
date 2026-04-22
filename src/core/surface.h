@@ -22,7 +22,7 @@
 
 PSurface* create_surface(PInstance* instance, PWindow* window);
 void destroy_surface(PSurface* surface, PInstance* instance);
-PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PSurface* surface, PDevice* device);
+PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface, PDevice* device);
 void destroy_swapchain(PSwapchain* swapchain, PDevice* device);
 int create_image_views(PSwapchain* swapchain, PDevice* device);
 int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PDevice* device);

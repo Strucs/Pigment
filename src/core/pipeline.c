@@ -270,14 +270,14 @@ void pigment_destroy_pipelines(Pigment* pigment, PPipelines* pipelines)
     free(pipelines);
 }
 
-void pigment_bind_pipeline(Pigment* pigment, PPipelines* pipelines, uint32_t pipeline_id)
+void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id)
 {
-    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count)
+    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count || window_index >= pigment->window_count)
     {
         return;
     }
 
-    PWindowRenderer* renderer = pigment->window_renderer;
+    PWindowRenderer* renderer = pigment->renderers[window_index];
     uint32_t current_frame    = renderer->swapchain->current_frame;
     VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
 

@@ -28,6 +28,7 @@ static void destroy_image_views(PSwapchain* swapchain, PDevice* device);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);
 static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
 static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
+static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, bool transparent);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
 {
@@ -44,7 +45,12 @@ PSurface* create_surface(PInstance* instance, PWindow* window)
         return NULL;
     }
 
-    glfwCreateWindowSurface(instance->vulkan_instance, window->window, VK_NULL_HANDLE, &surface->surface);
+    if(!SDL_Vulkan_CreateSurface(window->window, instance->vulkan_instance, NULL, &surface->surface))
+    {
+        fprintf(stderr, "SDL_Vulkan_CreateSurface: %s\n", SDL_GetError());
+        free(surface);
+        return NULL;
+    }
     return surface;
 }
 
@@ -149,7 +155,27 @@ static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities
     return actual_extent;
 }
 
-PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PSurface* surface, PDevice* device)
+static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, bool transparent)
+{
+    if(transparent)
+    {
+        if(supported & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+        }
+        if(supported & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+        }
+        if(supported & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+        }
+    }
+    return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+}
+
+PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface, PDevice* device)
 {
     PSwapchain* swapchain                    = NULL;
     QueueFamilyIndices* indices              = NULL;
@@ -209,11 +235,11 @@ PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_he
     }
 
     create_info.preTransform   = support_details->capabilities.currentTransform;
-    create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    create_info.compositeAlpha = choose_composite_alpha(support_details->capabilities.supportedCompositeAlpha, transparent);
     create_info.presentMode    = present_mode;
     create_info.clipped        = VK_TRUE;
 
-    create_info.oldSwapchain = VK_NULL_HANDLE ;
+    create_info.oldSwapchain = VK_NULL_HANDLE;
 
     VkResult result;
     if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain))) != VK_SUCCESS)
@@ -335,7 +361,7 @@ int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, ui
 
     destroy_swapchain(renderer->swapchain, device);
 
-    new_swapchain = create_swapchain(framebuffer_width, framebuffer_height, preferred_mode, renderer->surface, device);
+    new_swapchain = create_swapchain(framebuffer_width, framebuffer_height, preferred_mode, renderer->transparent_framebuffer, renderer->surface, device);
     if(new_swapchain == NULL)
     {
         goto ERROR;
