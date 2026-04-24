@@ -28,7 +28,59 @@ static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_creat
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
 static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* color_blend_attachment_state_create_info);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
-static VkPipelineLayout create_pipeline_layout(VkDescriptorSetLayout* descriptor_set_layout, VkDevice device);
+static PLayout* get_or_create_default_layout(Pigment* pigment);
+static void retain_layout(PLayout* layout);
+static void release_layout(PLayoutList* list, PLayout* layout, PDevice* device);
+static void pipeline_list_destroy(PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline, PDevice* device);
+
+#define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
+
+PPipelineList* create_pipeline_list(void)
+{
+    return calloc(1, sizeof(PPipelineList));
+}
+
+void destroy_pipeline_list(PPipelineList* list, PLayoutList* layouts, PDevice* device)
+{
+    if(list == NULL)
+    {
+        return;
+    }
+
+    while(list->count > 0)
+    {
+        pipeline_list_destroy(list, layouts, list->pipelines[0], device);
+    }
+    free(list->pipelines);
+    free(list);
+}
+
+PLayoutList* create_layout_list(void)
+{
+    return calloc(1, sizeof(PLayoutList));
+}
+
+void destroy_layout_list(PLayoutList* list, PDevice* device)
+{
+    if(list == NULL)
+    {
+        return;
+    }
+    for(uint32_t i = 0; i < list->count; i++)
+    {
+        PLayout* entry = list->entries[i];
+        if(entry != NULL)
+        {
+            if(entry->layout != VK_NULL_HANDLE)
+            {
+                vkDestroyPipelineLayout(device->logical_device, entry->layout, NULL);
+            }
+            free(entry);
+        }
+    }
+    free(list->entries);
+    free(list);
+}
 
 PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc)
 {
@@ -83,11 +135,13 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
     build->dynamic_state_list[1] = VK_DYNAMIC_STATE_SCISSOR;
     build->dynamic               = configure_dynamic_state_create_info(build->dynamic_state_list, build->dynamic_state_count);
 
-    build->layout = create_pipeline_layout(&pigment->descriptor->descriptor_set_layout, device);
+    build->layout = get_or_create_default_layout(pigment);
     if(build->layout == NULL)
     {
         goto ERROR;
     }
+
+    retain_layout(build->layout);
 
     build->color_format = (VkFormat) desc->color_format;
     build->rendering    = (VkPipelineRenderingCreateInfoKHR) {
@@ -121,20 +175,27 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
     {
         vkDestroyShaderModule(device, build->fragment_module, NULL);
     }
+
     if(build->layout != NULL)
     {
-        vkDestroyPipelineLayout(device, build->layout, NULL);
+        release_layout(pigment->layouts, build->layout, pigment->device);
     }
 
     free(build->dynamic_state_list);
     free(build);
 }
 
-PPipelines* pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count)
+int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out)
 {
-    if(pigment == NULL || builds == NULL || count == 0)
+    VkGraphicsPipelineCreateInfo* pipeline_create_infos = NULL;
+    VkPipeline* vk_pipelines                            = NULL;
+    PPipeline** temp_pipelines                          = NULL;
+    uint32_t temp_pipelines_allocated                   = 0;
+    int status                                          = PIGMENT_ERROR;
+
+    if(pigment == NULL || builds == NULL || out == NULL || count == 0)
     {
-        return NULL;
+        return PIGMENT_ERROR;
     }
 
     for(uint32_t i = 0; i < count; i++)
@@ -142,38 +203,53 @@ PPipelines* pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** 
         if(builds[i] == NULL)
         {
             fprintf(stderr, "pigment_create_graphic_pipelines: builds[%u] is NULL\n", i);
-            return NULL;
+            goto FREE;
         }
     }
 
-    VkDevice device                                     = pigment->device->logical_device;
-    PPipelines* pipelines                               = NULL;
-    VkGraphicsPipelineCreateInfo* pipeline_create_infos = NULL;
+    VkDevice device     = pigment->device->logical_device;
+    PPipelineList* list = pigment->pipelines;
+    uint32_t needed     = list->count + count;
 
-    pipelines = calloc(1, sizeof(*pipelines));
-    if(pipelines == NULL)
+    if(needed > list->capacity)
     {
-        goto ERROR;
+        uint32_t new_capacity = list->capacity == 0 ? PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY : list->capacity;
+        while(new_capacity < needed)
+        {
+            new_capacity *= 2;
+        }
+
+        PPipeline** new_ptr = realloc(list->pipelines, new_capacity * sizeof(*new_ptr));
+
+        if(new_ptr == NULL)
+        {
+            perror("pigment_create_graphic_pipelines");
+            goto FREE;
+        }
+
+        list->pipelines = new_ptr;
+        list->capacity  = new_capacity;
     }
 
-    pipelines->count             = count;
-    pipelines->graphic_pipelines = calloc(count, sizeof(*pipelines->graphic_pipelines));
-    pipelines->pipeline_layouts  = calloc(count, sizeof(*pipelines->pipeline_layouts));
-
-    if(pipelines->graphic_pipelines == NULL || pipelines->pipeline_layouts == NULL)
-    {
-        goto ERROR;
-    }
-
+    vk_pipelines          = calloc(count, sizeof(*vk_pipelines));
+    temp_pipelines        = calloc(count, sizeof(*temp_pipelines));
     pipeline_create_infos = calloc(count, sizeof(*pipeline_create_infos));
-    if(pipeline_create_infos == NULL)
+    if(vk_pipelines == NULL || temp_pipelines == NULL || pipeline_create_infos == NULL)
     {
-        goto ERROR;
+        goto FREE;
     }
 
     for(uint32_t i = 0; i < count; i++)
     {
-        VkGraphicsPipelineCreateInfo pipeline_create_info = {
+        temp_pipelines[i] = calloc(1, sizeof(**temp_pipelines));
+        if(temp_pipelines[i] == NULL)
+        {
+            perror("pigment_create_graphic_pipelines");
+            goto FREE;
+        }
+        temp_pipelines_allocated++;
+
+        pipeline_create_infos[i] = (VkGraphicsPipelineCreateInfo) {
             .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .pNext               = &builds[i]->rendering,
             .stageCount          = builds[i]->shader_stage_count,
@@ -186,50 +262,50 @@ PPipelines* pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** 
             .pDepthStencilState  = &builds[i]->depth_stencil,
             .pColorBlendState    = &builds[i]->color_blend,
             .pDynamicState       = &builds[i]->dynamic,
-            .layout              = builds[i]->layout,
+            .layout              = builds[i]->layout->layout,
             .renderPass          = VK_NULL_HANDLE,
             .basePipelineHandle  = VK_NULL_HANDLE
         };
-
-        pipeline_create_infos[i] = pipeline_create_info;
     }
 
-    VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, NULL, pipelines->graphic_pipelines);
+    VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, NULL, vk_pipelines);
     if(result != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to create graphics pipelines! (result: %d)\n", result);
-        goto ERROR;
+        for(uint32_t i = 0; i < count; i++)
+        {
+            if(vk_pipelines[i] != VK_NULL_HANDLE)
+            {
+                vkDestroyPipeline(device, vk_pipelines[i], NULL);
+            }
+        }
+        goto FREE;
     }
 
     for(uint32_t i = 0; i < count; i++)
     {
-        pipelines->pipeline_layouts[i] = builds[i]->layout;
-        builds[i]->layout              = VK_NULL_HANDLE;
+        temp_pipelines[i]->pipeline    = vk_pipelines[i];
+        temp_pipelines[i]->layout      = builds[i]->layout;
+        list->pipelines[list->count++] = temp_pipelines[i];
+        out[i]                         = temp_pipelines[i];
+
+        retain_layout(builds[i]->layout);
     }
 
-    goto FREE;
+    temp_pipelines_allocated = 0;
 
-ERROR:
-    perror("pigment_create_graphic_pipelines");
-    if(pipelines != NULL)
-    {
-        if(pipelines->graphic_pipelines != NULL)
-        {
-            for(uint32_t i = 0; i < count; i++)
-            {
-                if(pipelines->graphic_pipelines[i] != NULL)
-                {
-                    vkDestroyPipeline(device, pipelines->graphic_pipelines[i], NULL);
-                }
-            }
-        }
-        free(pipelines->graphic_pipelines);
-        free(pipelines->pipeline_layouts);
-        free(pipelines);
-        pipelines = NULL;
-    }
+    status = PIGMENT_SUCCESS;
 
 FREE:
+    if(status != PIGMENT_SUCCESS)
+    {
+        for(uint32_t i = 0; i < temp_pipelines_allocated; i++)
+        {
+            free(temp_pipelines[i]);
+        }
+    }
+    free(temp_pipelines);
+    free(vk_pipelines);
     free(pipeline_create_infos);
 
     for(uint32_t i = 0; i < count; i++)
@@ -241,38 +317,23 @@ FREE:
         }
     }
 
-    return pipelines;
+    return status;
 }
 
-void pigment_destroy_pipelines(Pigment* pigment, PPipelines* pipelines)
+void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
 {
-    if(pigment == NULL || pipelines == NULL)
+    if(pigment == NULL || pipeline == NULL)
     {
         return;
     }
 
-    VkDevice device = pigment->device->logical_device;
-
-    for(uint32_t i = 0; i < pipelines->count; i++)
-    {
-        if(pipelines->graphic_pipelines[i] != NULL)
-        {
-            vkDestroyPipeline(device, pipelines->graphic_pipelines[i], NULL);
-        }
-        if(pipelines->pipeline_layouts[i] != NULL)
-        {
-            vkDestroyPipelineLayout(device, pipelines->pipeline_layouts[i], NULL);
-        }
-    }
-
-    free(pipelines->graphic_pipelines);
-    free(pipelines->pipeline_layouts);
-    free(pipelines);
+    vkDeviceWaitIdle(pigment->device->logical_device);
+    pipeline_list_destroy(pigment->pipelines, pigment->layouts, pipeline, pigment->device);
 }
 
-void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id)
+void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* pipeline)
 {
-    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count || window_index >= pigment->window_count)
+    if(pigment == NULL || pipeline == NULL || window_index >= pigment->window_count)
     {
         return;
     }
@@ -281,8 +342,8 @@ void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipelines* 
     uint32_t current_frame    = renderer->swapchain->current_frame;
     VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->graphic_pipelines[pipeline_id]);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines->pipeline_layouts[pipeline_id], 0, 1, &pigment->descriptor->descriptor_sets[current_frame], 0, NULL);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, 0, 1, &pigment->descriptor->descriptor_sets[current_frame], 0, NULL);
 }
 
 static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code, uint32_t shader_size)
@@ -460,30 +521,130 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
     return dynamic_state_create_info;
 }
 
-static VkPipelineLayout create_pipeline_layout(VkDescriptorSetLayout* descriptor_set_layout, VkDevice device)
+static PLayout* get_or_create_default_layout(Pigment* pigment)
 {
-    VkPipelineLayout pipeline_layout;
+    PLayoutList* list = pigment->layouts;
 
-    VkPushConstantRange push_constant_range = {
+    if(list->count > 0)
+    {
+        return list->entries[0];
+    }
+
+    if(list->count >= list->capacity)
+    {
+        uint32_t new_capacity = list->capacity == 0 ? 4 : list->capacity * 2;
+        PLayout** new_ptr     = realloc(list->entries, new_capacity * sizeof(*new_ptr));
+
+        if(new_ptr == NULL)
+        {
+            perror("get_or_create_default_layout");
+            return NULL;
+        }
+
+        list->entries  = new_ptr;
+        list->capacity = new_capacity;
+    }
+
+    VkPushConstantRange range = {
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .offset     = 0,
-        .size       = sizeof(PDrawPushConstants)
+        .size       = sizeof(PDrawPushConstants),
     };
 
-    VkPipelineLayoutCreateInfo pipeline_layout_create_info = {
+    VkPipelineLayoutCreateInfo create_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount         = 1,
-        .pSetLayouts            = descriptor_set_layout,
+        .pSetLayouts            = &pigment->descriptor->descriptor_set_layout,
         .pushConstantRangeCount = 1,
-        .pPushConstantRanges    = &push_constant_range
+        .pPushConstantRanges    = &range,
     };
 
-    VkResult result;
-    if((result = vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout)) != VK_SUCCESS)
+    VkPipelineLayout vk_layout = VK_NULL_HANDLE;
+    VkResult result            = vkCreatePipelineLayout(pigment->device->logical_device, &create_info, NULL, &vk_layout);
+    if(result != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipeline layout! (result: %d)\n", result);
         return NULL;
     }
 
-    return pipeline_layout;
+    PLayout* layout = calloc(1, sizeof(*layout));
+    if(layout == NULL)
+    {
+        perror("get_or_create_default_layout");
+        vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, NULL);
+        return NULL;
+    }
+
+    layout->layout      = vk_layout;
+    layout->push_size   = sizeof(PDrawPushConstants);
+    layout->push_stages = VK_SHADER_STAGE_VERTEX_BIT;
+    layout->refcount    = 0;
+
+    list->entries[list->count++] = layout;
+
+    return layout;
+}
+
+static void retain_layout(PLayout* layout)
+{
+    if(layout == NULL)
+    {
+        return;
+    }
+    layout->refcount++;
+}
+
+static void release_layout(PLayoutList* list, PLayout* layout, PDevice* device)
+{
+    if(layout == NULL)
+    {
+        return;
+    }
+
+    if(layout->refcount > 0)
+    {
+        layout->refcount--;
+    }
+    if(layout->refcount > 0)
+    {
+        return;
+    }
+
+    for(uint32_t i = 0; i < list->count; i++)
+    {
+        if(list->entries[i] == layout)
+        {
+            list->entries[i] = list->entries[list->count - 1];
+            list->count--;
+            break;
+        }
+    }
+
+    if(layout->layout != VK_NULL_HANDLE)
+    {
+        vkDestroyPipelineLayout(device->logical_device, layout->layout, NULL);
+    }
+    free(layout);
+}
+
+static void pipeline_list_destroy(PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline, PDevice* device)
+{
+    for(uint32_t i = 0; i < list->count; i++)
+    {
+        if(list->pipelines[i] == pipeline)
+        {
+            PLayout* layout    = pipeline->layout;
+            list->pipelines[i] = list->pipelines[list->count - 1];
+            list->count--;
+
+            if(pipeline->pipeline != VK_NULL_HANDLE)
+            {
+                vkDestroyPipeline(device->logical_device, pipeline->pipeline, NULL);
+            }
+
+            free(pipeline);
+            release_layout(layouts, layout, device);
+            return;
+        }
+    }
 }

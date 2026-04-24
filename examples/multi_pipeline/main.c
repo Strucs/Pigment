@@ -19,12 +19,12 @@ int main(void)
         .height                 = 720,
         .title                  = "Suzanne and Cube (opaque + additive)",
         .preferred_present_mode = P_PRESENT_MODE_DEFAULT,
-        .flags                  = P_WINDOW_FLAGS_DEFAULT ,
+        .flags                  = P_WINDOW_FLAGS_DEFAULT,
     };
 
     Pigment* pigment          = NULL;
     PCamera* camera           = NULL;
-    PPipelines* pipelines     = NULL;
+    PPipeline* pipelines[2]   = {NULL, NULL};
     PMeshBuffers* gpu_mesh    = NULL;
     MeshAsset* asset          = NULL;
     PMeshBuffers* gpu_mesh2   = NULL;
@@ -75,8 +75,7 @@ int main(void)
         goto FREE;
     }
 
-    pipelines = pigment_create_graphic_pipelines(pigment, builds, 2);
-    if(pipelines == NULL)
+    if(pigment_create_graphic_pipelines(pigment, builds, 2, pipelines) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
         goto FREE;
@@ -91,15 +90,14 @@ int main(void)
         goto FREE;
     }
 
-    upload_mesh_textures(pigment, asset, 0);
+    upload_mesh_textures(pigment, asset);
 
     gpu_mesh = pigment_upload_mesh(
         pigment,
         asset->vertices,
         asset->vertex_count * sizeof(PVertex),
         asset->indices,
-        asset->index_count,
-        0
+        asset->index_count
     );
 
     uint32_t draw_count = asset->surface_count;
@@ -126,15 +124,14 @@ int main(void)
         goto FREE;
     }
 
-    upload_mesh_textures(pigment, asset2, 0);
+    upload_mesh_textures(pigment, asset2);
 
     gpu_mesh2 = pigment_upload_mesh(
         pigment,
         asset2->vertices,
         asset2->vertex_count * sizeof(PVertex),
         asset2->indices,
-        asset2->index_count,
-        0
+        asset2->index_count
     );
 
     uint32_t draw_count2 = asset2->surface_count;
@@ -174,11 +171,11 @@ int main(void)
             continue;
         }
 
-        pigment_bind_pipeline(pigment, 0, pipelines, 0);
-        pigment_draw(pigment, 0, pipelines, 0, draw_calls, draw_count);
+        pigment_bind_pipeline(pigment, 0, pipelines[0]);
+        pigment_draw(pigment, 0, pipelines[0], draw_calls, draw_count);
 
-        pigment_bind_pipeline(pigment, 0, pipelines, 1);
-        pigment_draw(pigment, 0, pipelines, 1, draw_calls2, draw_count2);
+        pigment_bind_pipeline(pigment, 0, pipelines[1]);
+        pigment_draw(pigment, 0, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_frame(pigment, 0);
     }
@@ -197,7 +194,6 @@ FREE:
         {
             pigment_destroy_mesh(pigment, gpu_mesh2);
         }
-        pigment_destroy_pipelines(pigment, pipelines);
     }
     free(draw_calls);
     free(draw_calls2);

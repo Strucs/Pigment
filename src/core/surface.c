@@ -15,14 +15,7 @@
  */
 
 #include "surface.h"
-#include "structs.h"
-
-extern void destroy_depth_resources(PSwapchain* swapchain, PDevice* device);
-extern QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface);
-
-VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device);
-SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceKHR surface);
-void destroy_support_details(SwapChainSupportDetails* details);
+#include "internal.h"
 
 static void destroy_image_views(PSwapchain* swapchain, PDevice* device);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);

@@ -15,15 +15,10 @@
  */
 
 #include "device.h"
-#include "structs.h"
+#include "internal.h"
 
 #include <vulkan/vulkan_core.h>
 #define QUEUE_FAMILY_NUM 2
-
-extern SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceKHR surface);
-extern void destroy_support_details(SwapChainSupportDetails* details);
-
-QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface);
 
 static QueueFamilySet* create_queue_family_set(QueueFamilyIndices* indices);
 static void destroy_queue_family_set(QueueFamilySet* set);
@@ -425,6 +420,9 @@ static int create_logical_device(PDevice* device, PInstance* instance, PSurface*
 
     vkGetDeviceQueue(device->logical_device, indices->graphics_family.value, 0, &device->graphics_queue);
     vkGetDeviceQueue(device->logical_device, indices->present_family.value, 0, &device->present_queue);
+
+    device->graphics_family_index = indices->graphics_family.value;
+    device->present_family_index  = indices->present_family.value;
 
     free(queue_create_infos);
     destroy_queue_family_set(set);

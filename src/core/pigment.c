@@ -16,7 +16,7 @@
 
 #include "pigment.h"
 
-#include "structs.h"
+#include "internal.h"
 #include "window.h"
 #include "instance.h"
 #include "device.h"
@@ -26,6 +26,7 @@
 #include "buffers.h"
 #include "descriptor.h"
 #include "texture.h"
+#include "pipeline.h"
 
 #define PIGMENT_DEFAULT_WINDOW_CAPACITY 4
 
@@ -82,7 +83,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     {
         goto ERROR;
     }
-    pigment->command_pools = create_command_pools(pigment->device, pigment->renderers[0]->surface);
+    pigment->command_pools = create_command_pools(pigment->device);
     if(pigment->command_pools == NULL)
     {
         goto ERROR;
@@ -98,7 +99,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
 
-    add_default_image(pigment->images, pigment->command_pools, 0, pigment->device);
+    add_default_image(pigment->images, pigment_default_pool(pigment), pigment->device);
 
     pigment->descriptor = create_descriptor(pigment->max_samplers, pigment->max_images, pigment->device);
     if(pigment->descriptor == NULL)
@@ -111,6 +112,18 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
     update_descriptor(pigment->descriptor, pigment->buffers, pigment->images, pigment->samplers, pigment->max_samplers, pigment->max_images, pigment->device, pigment->max_frames_in_flight);
+
+    pigment->layouts = create_layout_list();
+    if(pigment->layouts == NULL)
+    {
+        goto ERROR;
+    }
+
+    pigment->pipelines = create_pipeline_list();
+    if(pigment->pipelines == NULL)
+    {
+        goto ERROR;
+    }
 
     if(init_window_renderer_resources(pigment, 0) != PIGMENT_SUCCESS)
     {
@@ -142,6 +155,8 @@ void destroy_pigment(Pigment* pigment)
             destroy_swapchain(pigment->renderers[i]->swapchain, pigment->device);
         }
     }
+    destroy_pipeline_list(pigment->pipelines, pigment->layouts, pigment->device);
+    destroy_layout_list(pigment->layouts, pigment->device);
     destroy_uniform_buffers(pigment->buffers, pigment->device, pigment->max_frames_in_flight);
     destroy_descriptor(pigment->descriptor, pigment->device);
     destroy_images(pigment->images, pigment->device);
@@ -319,7 +334,7 @@ static int init_window_renderer_resources(Pigment* pigment, uint32_t window_inde
     create_image_views(renderer->swapchain, pigment->device);
     create_depth_resources(renderer->swapchain, pigment->device);
 
-    renderer->command_buffers = create_command_buffers(pigment->command_pools, 0, pigment->device, pigment->max_frames_in_flight);
+    renderer->command_buffers = create_command_buffers(pigment_default_pool(pigment), pigment->device, pigment->max_frames_in_flight);
     if(renderer->command_buffers == NULL)
     {
         return PIGMENT_ERROR;

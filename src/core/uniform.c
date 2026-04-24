@@ -15,9 +15,7 @@
  */
 
 #include "uniform.h"
-#include "structs.h"
-
-extern void get_view_matrix(PCamera* camera, UniformBufferObject* ubo);
+#include "internal.h"
 
 void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera)
 {

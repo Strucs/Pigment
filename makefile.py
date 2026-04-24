@@ -24,7 +24,7 @@ def build_static_lib(config: powermake.Config):
         module = parts[1]
         if module == "external":
             continue
-        if module == "core" and parts[-1] == "structs.h":
+        if module == "core" and parts[-1] in ("structs.h", "internal.h"):
             continue
         rest_parts = parts[2:-1]
         if module == "core":

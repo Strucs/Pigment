@@ -15,14 +15,17 @@
  */
 
 #include "mesh.h"
-#include "structs.h"
+#include "internal.h"
 
-extern int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, PDevice* device, VkCommandPool command_pool);
-extern int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, PDevice* device, VkCommandPool command_pool);
-
-PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count, uint32_t pool_index)
+PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
 {
     if(pigment == NULL || vertices == NULL || indices == NULL)
+    {
+        return NULL;
+    }
+
+    PCommandPool* command_pool = pigment_default_pool(pigment);
+    if(command_pool == NULL)
     {
         return NULL;
     }
@@ -35,7 +38,7 @@ PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t
     }
 
     PDevice* device    = pigment->device;
-    VkCommandPool pool = pigment->command_pools->pools[pool_index];
+    VkCommandPool pool = command_pool->pool;
 
     if(create_vertex_buffer(&mesh->vertex_buffer, &mesh->vertex_buffer_memory, &mesh->vertex_buffer_address, vertices, (VkDeviceSize) vertices_size, device, pool) != PIGMENT_SUCCESS)
     {

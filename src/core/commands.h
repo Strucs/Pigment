@@ -19,10 +19,13 @@
 
 #include "defines.h"
 
-PCommandPools* create_command_pools(PDevice* device, PSurface* surface);
-void destroy_command_pools(PCommandPools* pools, PDevice* device);
+PCommandPoolList* create_command_pools(PDevice* device);
+void destroy_command_pools(PCommandPoolList* pools, PDevice* device);
 
-PCommandBuffers* create_command_buffers(PCommandPools* pools, uint32_t pool_index, PDevice* device, uint32_t count);
+PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc);
+void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
+
+PCommandBuffers* create_command_buffers(PCommandPool* pool, PDevice* device, uint32_t count);
 void destroy_command_buffers(PCommandBuffers* command_buffers, PDevice* device, uint32_t count);
 
 #endif

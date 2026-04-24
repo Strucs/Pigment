@@ -41,10 +41,12 @@ struct Pigment {
     PInstance* instance;
     PDevice* device;
     PDescriptor* descriptor;
-    PCommandPools* command_pools;
+    PCommandPoolList* command_pools;
     PImageList* images;
     PSamplerList* samplers;
     PUniformBuffers* buffers;
+    PPipelineList* pipelines;
+    PLayoutList* layouts;
     uint32_t max_frames_in_flight;
     uint32_t max_images;
     uint32_t max_samplers;
@@ -91,6 +93,8 @@ struct PDevice {
     VkDevice logical_device;
     VkQueue graphics_queue;
     VkQueue present_queue;
+    uint32_t graphics_family_index;
+    uint32_t present_family_index;
     ExtensionList* extensions;
 };
 
@@ -130,10 +134,28 @@ struct PSwapchain {
     VkFormat depth_format;
 };
 
-struct PPipelines {
-    VkPipeline* graphic_pipelines;
-    VkPipelineLayout* pipeline_layouts;
+struct PPipeline {
+    VkPipeline pipeline;
+    PLayout* layout;
+};
+
+struct PPipelineList {
+    PPipeline** pipelines;
     uint32_t count;
+    uint32_t capacity;
+};
+
+struct PLayout {
+    VkPipelineLayout layout;
+    uint32_t push_size;
+    VkShaderStageFlags push_stages;
+    uint32_t refcount;
+};
+
+struct PLayoutList {
+    PLayout** entries;
+    uint32_t count;
+    uint32_t capacity;
 };
 
 struct PPipelineBuild {
@@ -154,13 +176,20 @@ struct PPipelineBuild {
     VkPipelineDynamicStateCreateInfo dynamic;
     VkFormat color_format;
     VkPipelineRenderingCreateInfoKHR rendering;
-    VkPipelineLayout layout;
+    PLayout* layout;
 };
 
-struct PCommandPools {
-    VkCommandPool* pools;
-    uint32_t pool_count;
-    uint32_t pool_capacity;
+struct PCommandPool {
+    VkCommandPool pool;
+    PQueueFamily queue_family;
+    uint32_t queue_family_index;
+    PCommandPoolFlags flags;
+};
+
+struct PCommandPoolList {
+    PCommandPool** pools;
+    uint32_t count;
+    uint32_t capacity;
 };
 
 struct PCommandBuffers {
@@ -202,8 +231,8 @@ struct PImage {
 
 struct PImageList {
     PImage* images;
-    uint32_t image_number;
-    uint32_t image_size;
+    uint32_t count;
+    uint32_t capacity;
 };
 
 struct PSampler {
@@ -213,8 +242,8 @@ struct PSampler {
 struct PSamplerList {
     PSampler* samplers;
     PSamplerDesc* descs;
-    uint32_t sampler_number;
-    uint32_t sampler_size;
+    uint32_t count;
+    uint32_t capacity;
 };
 
 struct PMeshBuffers {

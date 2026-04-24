@@ -15,15 +15,7 @@
  */
 
 #include "texture.h"
-#include "structs.h"
-
-extern int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
-extern VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice* device);
-extern void end_single_usage_commands(VkCommandBuffer* command_buffer, VkCommandPool command_pool, PDevice* device);
-extern VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device);
-extern uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter, VkMemoryPropertyFlags properties);
-
-int create_vk_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
+#include "internal.h"
 
 static int image_list_append(PImageList* image_list, PImage image);
 static int create_image(PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool, PDevice* device);
@@ -63,10 +55,10 @@ static inline int imax(int a, int b)
 
 static int image_list_append(PImageList* image_list, PImage image)
 {
-    if(image_list->image_number >= image_list->image_size)
+    if(image_list->count >= image_list->capacity)
     {
-        uint32_t new_size = image_list->image_size * 2;
-        PImage* new_ptr   = realloc(image_list->images, new_size * sizeof(PImage));
+        uint32_t new_capacity = image_list->capacity * 2;
+        PImage* new_ptr       = realloc(image_list->images, new_capacity * sizeof(*new_ptr));
 
         if(new_ptr == NULL)
         {
@@ -74,12 +66,12 @@ static int image_list_append(PImageList* image_list, PImage image)
             return PIGMENT_ERROR;
         }
 
-        image_list->images     = new_ptr;
-        image_list->image_size = new_size;
+        image_list->images         = new_ptr;
+        image_list->capacity = new_capacity;
     }
 
-    image_list->images[image_list->image_number] = image;
-    image_list->image_number++;
+    image_list->images[image_list->count] = image;
+    image_list->count++;
 
     return PIGMENT_SUCCESS;
 }
@@ -98,7 +90,7 @@ PImageList* create_images(void)
         goto ERROR;
     }
 
-    image_list->image_size = 1;
+    image_list->capacity = 1;
 
     return image_list;
 
@@ -112,7 +104,7 @@ void destroy_images(PImageList* image_list, PDevice* device)
 {
     if(image_list != NULL)
     {
-        for(size_t i = 0; i < image_list->image_number; i++)
+        for(size_t i = 0; i < image_list->count; i++)
         {
             vkDestroyImageView(device->logical_device, image_list->images[i].image_view, NULL);
             vkDestroyImage(device->logical_device, image_list->images[i].image, NULL);
@@ -125,17 +117,23 @@ void destroy_images(PImageList* image_list, PDevice* device)
     }
 }
 
-uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, uint32_t pool_index)
+uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
     if(pigment == NULL || pixels == NULL || width == 0 || height == 0)
     {
         return 0;
     }
 
-    PImageList* images = pigment->images;
-    uint32_t slot      = images->image_number;
+    PCommandPool* pool = pigment_default_pool(pigment);
+    if(pool == NULL)
+    {
+        return 0;
+    }
 
-    if(add_image_from_pixels(images, pixels, width, height, format, pigment->command_pools, pool_index, pigment->device) != PIGMENT_SUCCESS)
+    PImageList* images = pigment->images;
+    uint32_t slot      = images->count;
+
+    if(add_image_from_pixels(images, pixels, width, height, format, pool, pigment->device) != PIGMENT_SUCCESS)
     {
         return 0;
     }
@@ -162,9 +160,15 @@ uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uin
     return slot;
 }
 
-uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count, uint32_t pool_index)
+uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
 {
     if(pigment == NULL || pixels == NULL || count == 0)
+    {
+        return 0;
+    }
+
+    PCommandPool* pool = pigment_default_pool(pigment);
+    if(pool == NULL)
     {
         return 0;
     }
@@ -179,10 +183,10 @@ uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixe
         goto FREE;
     }
 
-    VkCommandPool pool  = pigment->command_pools->pools[pool_index];
-    VkCommandBuffer cmd = start_single_usage_commands(pool, pigment->device);
-    int result          = batch_record_uploads(cmd, new_images, stagings, staging_mems, pixels, widths, heights, formats, count, pigment->device);
-    end_single_usage_commands(&cmd, pool, pigment->device);
+    VkCommandPool vk_pool = pool->pool;
+    VkCommandBuffer cmd   = start_single_usage_commands(vk_pool, pigment->device);
+    int result            = batch_record_uploads(cmd, new_images, stagings, staging_mems, pixels, widths, heights, formats, count, pigment->device);
+    end_single_usage_commands(&cmd, vk_pool, pigment->device);
 
     if(result == PIGMENT_SUCCESS)
     {
@@ -205,11 +209,16 @@ FREE:
     return start_slot;
 }
 
-int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPools* command_pools, uint32_t pool_index, PDevice* device)
+int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool, PDevice* device)
 {
     PImage image = {0};
 
-    if(create_image(&image, pixels, width, height, format, command_pools->pools[pool_index], device) != PIGMENT_SUCCESS)
+    if(pool == NULL)
+    {
+        goto ERROR;
+    }
+
+    if(create_image(&image, pixels, width, height, format, pool->pool, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -235,10 +244,10 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-int add_default_image(PImageList* image_list, PCommandPools* command_pools, uint32_t pool_index, PDevice* device)
+int add_default_image(PImageList* image_list, PCommandPool* pool, PDevice* device)
 {
     unsigned char white[] = {255, 255, 255, 255};
-    return add_image_from_pixels(image_list, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM, command_pools, pool_index, device);
+    return add_image_from_pixels(image_list, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM, pool, device);
 }
 
 static int create_image(PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool, PDevice* device)
@@ -313,7 +322,7 @@ uint32_t pigment_add_sampler(Pigment* pigment, PSamplerDesc* desc)
 
     PSamplerList* samplers = pigment->samplers;
 
-    for(uint32_t i = 0; i < samplers->sampler_number; i++)
+    for(uint32_t i = 0; i < samplers->count; i++)
     {
         // Check if a sampler with the same description already exists and return its slot if found
         if(samplers->descs[i].mag_filter == desc->mag_filter && samplers->descs[i].min_filter == desc->min_filter && samplers->descs[i].mipmap_mode == desc->mipmap_mode && samplers->descs[i].address_mode == desc->address_mode)
@@ -322,11 +331,11 @@ uint32_t pigment_add_sampler(Pigment* pigment, PSamplerDesc* desc)
         }
     }
 
-    uint32_t slot = samplers->sampler_number;
+    uint32_t slot = samplers->count;
 
-    if(slot >= samplers->sampler_size)
+    if(slot >= samplers->capacity)
     {
-        fprintf(stderr, "Max samplers reached (%u)\n", samplers->sampler_size);
+        fprintf(stderr, "Max samplers reached (%u)\n", samplers->capacity);
         return 0;
     }
 
@@ -335,7 +344,7 @@ uint32_t pigment_add_sampler(Pigment* pigment, PSamplerDesc* desc)
         return 0;
     }
     samplers->descs[slot] = *desc;
-    samplers->sampler_number++;
+    samplers->count++;
 
     VkDescriptorImageInfo sampler_info = {
         .sampler = samplers->samplers[slot].sampler,
@@ -366,10 +375,10 @@ PSamplerList* create_samplers(uint32_t max_samplers, PDevice* device)
         goto ERROR;
     }
 
-    sampler_list->samplers       = malloc(max_samplers * sizeof(*sampler_list->samplers));
-    sampler_list->descs          = malloc(max_samplers * sizeof(*sampler_list->descs));
-    sampler_list->sampler_size   = max_samplers;
-    sampler_list->sampler_number = 0;
+    sampler_list->samplers         = malloc(max_samplers * sizeof(*sampler_list->samplers));
+    sampler_list->descs            = malloc(max_samplers * sizeof(*sampler_list->descs));
+    sampler_list->capacity = max_samplers;
+    sampler_list->count    = 0;
 
     if(sampler_list->samplers == NULL || sampler_list->descs == NULL)
     {
@@ -379,12 +388,12 @@ PSamplerList* create_samplers(uint32_t max_samplers, PDevice* device)
     PSamplerDesc nearest_desc = {.mag_filter = NEAREST, .min_filter = NEAREST, .mipmap_mode = NEAREST, .address_mode = P_ADDRESS_MODE_REPEAT};
     create_sampler(&sampler_list->samplers[0], &nearest_desc, device);
     sampler_list->descs[0] = nearest_desc;
-    sampler_list->sampler_number++;
+    sampler_list->count++;
 
     PSamplerDesc linear_desc = {.mag_filter = LINEAR, .min_filter = LINEAR, .mipmap_mode = LINEAR, .address_mode = P_ADDRESS_MODE_REPEAT};
     create_sampler(&sampler_list->samplers[1], &linear_desc, device);
     sampler_list->descs[1] = linear_desc;
-    sampler_list->sampler_number++;
+    sampler_list->count++;
 
     return sampler_list;
 
@@ -403,7 +412,7 @@ void destroy_samplers(PSamplerList* sampler_list, PDevice* device)
 {
     if(sampler_list != NULL)
     {
-        for(size_t i = 0; i < sampler_list->sampler_number; i++)
+        for(size_t i = 0; i < sampler_list->count; i++)
         {
             vkDestroySampler(device->logical_device, sampler_list->samplers[i].sampler, NULL);
         }
@@ -673,7 +682,7 @@ static int batch_record_uploads(VkCommandBuffer cmd, PImage* out_images, VkBuffe
 
 static uint32_t batch_append_images(PImageList* list, PImage* images, const PFormat* formats, uint32_t count, PDevice* device)
 {
-    uint32_t start_slot = list->image_number;
+    uint32_t start_slot = list->count;
     for(uint32_t i = 0; i < count; i++)
     {
         images[i].image_view = create_image_view(images[i].image, (VkFormat) formats[i], VK_IMAGE_ASPECT_COLOR_BIT, images[i].mip_levels, device->logical_device);

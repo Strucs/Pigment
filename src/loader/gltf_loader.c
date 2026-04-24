@@ -522,7 +522,7 @@ FREE:
     return asset;
 }
 
-void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_index)
+void upload_mesh_textures(Pigment* pigment, MeshAsset* asset)
 {
     if(pigment == NULL || asset == NULL)
     {
@@ -572,7 +572,7 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset, uint32_t pool_inde
 
         if(valid > 0)
         {
-            uint32_t start_slot = pigment_upload_image_batch(pigment, pixels, widths, heights, formats, valid, pool_index);
+            uint32_t start_slot = pigment_upload_image_batch(pigment, pixels, widths, heights, formats, valid);
             for(uint32_t i = 0; i < valid; i++)
             {
                 tex_map[src_indices[i]] = start_slot + i;

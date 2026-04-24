@@ -21,6 +21,6 @@
 
 bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* device, PCamera* camera, uint32_t* out_image_index);
 void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index, uint32_t max_frame);
-void pigment_draw(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
+void pigment_draw(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
 
 #endif

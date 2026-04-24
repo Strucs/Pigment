@@ -200,13 +200,13 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
         goto ERROR;
     }
 
-    image_infos = malloc(images->image_number * sizeof(*image_infos));
+    image_infos = malloc(images->count * sizeof(*image_infos));
     if(image_infos == NULL)
     {
         goto ERROR;
     }
 
-    sampler_infos = malloc(samplers->sampler_number * sizeof(*sampler_infos));
+    sampler_infos = malloc(samplers->count * sizeof(*sampler_infos));
     if(sampler_infos == NULL)
     {
         goto ERROR;
@@ -240,7 +240,7 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
         descriptor_set_writes[0].descriptorCount = 1;
         descriptor_set_writes[0].pBufferInfo     = &buffer_info;
 
-        for(size_t s = 0; s < samplers->sampler_number; s++)
+        for(size_t s = 0; s < samplers->count; s++)
         {
             sampler_infos[s].sampler     = samplers->samplers[s].sampler;
             sampler_infos[s].imageView   = NULL;
@@ -252,10 +252,10 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
         descriptor_set_writes[1].dstBinding = 1;
         descriptor_set_writes[1].dstArrayElement = 0;
         descriptor_set_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-        descriptor_set_writes[1].descriptorCount = samplers->sampler_number;
+        descriptor_set_writes[1].descriptorCount = samplers->count;
         descriptor_set_writes[1].pImageInfo = sampler_infos;
 
-        for(size_t j = 0; j < images->image_number; j++)
+        for(size_t j = 0; j < images->count; j++)
         {
             image_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             image_infos[j].imageView   = images->images[j].image_view;
@@ -266,7 +266,7 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
         descriptor_set_writes[2].dstBinding      = 2;
         descriptor_set_writes[2].dstArrayElement = 0;
         descriptor_set_writes[2].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        descriptor_set_writes[2].descriptorCount = images->image_number;
+        descriptor_set_writes[2].descriptorCount = images->count;
         descriptor_set_writes[2].pImageInfo      = image_infos;
 
         vkUpdateDescriptorSets(device->logical_device, descriptor_set_write_number, descriptor_set_writes, 0, NULL);

@@ -39,11 +39,17 @@ struct PSamplerDesc {
 };
 
 PImageList* create_images(void);
-uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, uint32_t pool_index);
-uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count, uint32_t pool_index);
+PImageList* create_images(void);
+uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 uint32_t pigment_add_sampler(Pigment* pigment, PSamplerDesc* desc);
-int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPools* command_pools, uint32_t pool_index, PDevice* device);
-int add_default_image(PImageList* image_list, PCommandPools* command_pools, uint32_t pool_index, PDevice* device);
+int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool, PDevice* device);
+int add_default_image(PImageList* image_list, PCommandPool* pool, PDevice* device);
+void destroy_images(PImageList* image_list, PDevice* device);
+PSamplerList* create_samplers(uint32_t max_samplers, PDevice* device);
+void destroy_samplers(PSamplerList* sampler_list, PDevice* device);
+int add_image_from_pixels(PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool, PDevice* device);
+int add_default_image(PImageList* image_list, PCommandPool* pool, PDevice* device);
 void destroy_images(PImageList* image_list, PDevice* device);
 PSamplerList* create_samplers(uint32_t max_samplers, PDevice* device);
 void destroy_samplers(PSamplerList* sampler_list, PDevice* device);

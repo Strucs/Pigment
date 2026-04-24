@@ -15,14 +15,10 @@
  */
 
 #include "frame.h"
-#include "structs.h"
+#include "internal.h"
 #include "surface.h"
 #include "synchronization.h"
 #include "window.h"
-
-extern void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
-extern void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
-extern void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 
 bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* device, PCamera* camera, uint32_t* out_image_index)
 {
@@ -174,9 +170,9 @@ void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index,
     renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
-void pigment_draw(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
+void pigment_draw(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
 {
-    if(pigment == NULL || pipelines == NULL || pipeline_id >= pipelines->count || draw_cmds == NULL || draw_cmd_count == 0 || window_index >= pigment->window_count)
+    if(pigment == NULL || pipeline == NULL || draw_cmds == NULL || draw_cmd_count == 0 || window_index >= pigment->window_count)
     {
         return;
     }
@@ -184,7 +180,7 @@ void pigment_draw(Pigment* pigment, uint32_t window_index, PPipelines* pipelines
     PWindowRenderer* renderer = pigment->renderers[window_index];
     uint32_t current_frame    = renderer->swapchain->current_frame;
     VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
-    VkPipelineLayout layout   = pipelines->pipeline_layouts[pipeline_id];
+    PLayout* layout           = pipeline->layout;
 
     for(uint32_t i = 0; i < draw_cmd_count; i++)
     {
@@ -200,7 +196,7 @@ void pigment_draw(Pigment* pigment, uint32_t window_index, PPipelines* pipelines
         push.image_index   = draw_call->image_index;
         push.sampler_index = draw_call->sampler_index;
 
-        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PDrawPushConstants), &push);
+        vkCmdPushConstants(cmd, layout->layout, layout->push_stages, 0, layout->push_size, &push);
 
         vkCmdBindIndexBuffer(cmd, draw_call->mesh->index_buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd, draw_call->index_count, 1, draw_call->first_index, 0, 0);

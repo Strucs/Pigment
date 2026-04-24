@@ -50,6 +50,24 @@ typedef enum {
 
 #define P_PRESENT_MODE_DEFAULT P_PRESENT_MODE_MAILBOX
 
+typedef enum PQueueFamily {
+    P_QUEUE_FAMILY_GRAPHICS = 0,
+    // P_QUEUE_FAMILY_COMPUTE  = 1,
+    // P_QUEUE_FAMILY_TRANSFER = 2,
+    P_QUEUE_FAMILY_MAX_ENUM = 0x7FFFFFFF
+} PQueueFamily;
+
+typedef enum PCommandPoolFlags {
+    P_COMMAND_POOL_FLAG_NONE         = 0,
+    P_COMMAND_POOL_FLAG_TRANSIENT    = 1 << 0,
+    P_COMMAND_POOL_FLAG_RESET_BUFFER = 1 << 1,
+} PCommandPoolFlags;
+
+typedef struct PCommandPoolDesc {
+    PQueueFamily queue_family;
+    PCommandPoolFlags flags;
+} PCommandPoolDesc;
+
 typedef enum {
     P_WINDOW_FLAG_NONE          = 0,
     P_WINDOW_FLAG_RESIZABLE     = 1 << 0,
@@ -99,11 +117,19 @@ typedef struct SwapChainSupportDetails SwapChainSupportDetails;
 
 typedef struct PSwapchain PSwapchain;
 
-typedef struct PPipelines PPipelines;
+typedef struct PPipeline PPipeline;
+
+typedef struct PPipelineList PPipelineList;
+
+typedef struct PLayout PLayout;
+
+typedef struct PLayoutList PLayoutList;
 
 typedef struct PPipelineBuild PPipelineBuild;
 
-typedef struct PCommandPools PCommandPools;
+typedef struct PCommandPool PCommandPool;
+
+typedef struct PCommandPoolList PCommandPoolList;
 
 typedef struct PCommandBuffers PCommandBuffers;
 
@@ -152,8 +178,6 @@ typedef struct PDrawCall {
     uint32_t index_count;
     uint32_t image_index;
     uint32_t sampler_index;
-    void* extra_push_data;
-    uint32_t extra_push_size;
 } PDrawCall;
 
 typedef struct PVertex {

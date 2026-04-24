@@ -15,10 +15,7 @@
  */
 
 #include "depth.h"
-#include "structs.h"
-
-extern int create_vk_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
-extern VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device);
+#include "internal.h"
 
 static VkFormat find_depth_format(VkPhysicalDevice physical_device);
 static VkFormat find_supported_format(VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features, VkPhysicalDevice physical_device);

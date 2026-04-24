@@ -15,22 +15,22 @@
  */
 
 #include "commands.h"
-#include "structs.h"
+#include "internal.h"
 
-extern QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface);
-
-
-static VkCommandPool create_command_pool(PDevice* device, PSurface* surface);
+static PCommandPool* create_command_pool_internal(PDevice* device, const PCommandPoolDesc* desc);
+static VkCommandPool create_vk_command_pool(PDevice* device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
+static uint32_t resolve_queue_family_index(PDevice* device, PQueueFamily family);
+static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
+static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
+static void command_pools_destroy(PCommandPoolList* pools, PCommandPool* pool, PDevice* device);
 static VkCommandBuffer* allocate_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers);
-void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
-void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 
 #define PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY 4
 
-PCommandPools* create_command_pools(PDevice* device, PSurface* surface)
+PCommandPoolList* create_command_pools(PDevice* device)
 {
-    PCommandPools* pools = NULL;
-    VkCommandPool main_pool = NULL;
+    PCommandPoolList* pools    = NULL;
+    PCommandPool* default_pool = NULL;
 
     pools = malloc(sizeof(*pools));
     if(pools == NULL)
@@ -38,54 +38,117 @@ PCommandPools* create_command_pools(PDevice* device, PSurface* surface)
         goto ERROR;
     }
 
-    pools->pool_capacity = PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY;
-    pools->pool_count    = 0;
-    pools->pools         = malloc(pools->pool_capacity * sizeof(*pools->pools));
+    pools->capacity = PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY;
+    pools->count    = 0;
+    pools->pools         = malloc(pools->capacity * sizeof(*pools->pools));
     if(pools->pools == NULL)
     {
         goto ERROR;
     }
 
-    main_pool = create_command_pool(device, surface);
-    if(main_pool == VK_NULL_HANDLE)
+    PCommandPoolDesc default_desc = {
+        .queue_family = P_QUEUE_FAMILY_GRAPHICS,
+        .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
+    };
+
+    default_pool = create_command_pool_internal(device, &default_desc);
+    if(default_pool == NULL)
     {
         goto ERROR;
     }
 
-    pools->pools[0]   = main_pool;
-    pools->pool_count++;
+    if(command_pools_append(pools, default_pool) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
 
     return pools;
 
 ERROR:
     fprintf(stderr, "Failed to create command pools!\n");
-    if(pools == NULL)
+    if(default_pool != NULL)
     {
-        return NULL;
+        vkDestroyCommandPool(device->logical_device, default_pool->pool, NULL);
+        free(default_pool);
     }
-    free(pools->pools);
-    free(pools);
+    if(pools != NULL)
+    {
+        free(pools->pools);
+        free(pools);
+    }
     return NULL;
 }
 
-void destroy_command_pools(PCommandPools* pools, PDevice* device)
+void destroy_command_pools(PCommandPoolList* pools, PDevice* device)
 {
     if(pools == NULL)
     {
         return;
     }
 
-    for(uint32_t i = 0; i < pools->pool_count; i++)
+    while(pools->count > 0)
     {
-        vkDestroyCommandPool(device->logical_device, pools->pools[i], NULL);
+        command_pools_destroy(pools, pools->pools[0], device);
     }
+
     free(pools->pools);
     free(pools);
 }
 
-PCommandBuffers* create_command_buffers(PCommandPools* pools, uint32_t pool_index, PDevice* device, uint32_t count)
+PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc)
 {
-    if(pools == NULL || pool_index >= pools->pool_count)
+    if(pigment == NULL || desc == NULL)
+    {
+        return NULL;
+    }
+
+    PCommandPool* pool = create_command_pool_internal(pigment->device, desc);
+    if(pool == NULL)
+    {
+        return NULL;
+    }
+
+    if(command_pools_append(pigment->command_pools, pool) != PIGMENT_SUCCESS)
+    {
+        vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
+        free(pool);
+        return NULL;
+    }
+
+    return pool;
+}
+
+void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
+{
+    if(pigment == NULL || pool == NULL)
+    {
+        return;
+    }
+
+    if(pool == pigment_default_pool(pigment))
+    {
+        fprintf(stderr, "pigment_destroy_command_pool: cannot destroy the default pool.\n");
+        return;
+    }
+
+    vkDeviceWaitIdle(pigment->device->logical_device);
+
+    command_pools_destroy(pigment->command_pools, pool, pigment->device);
+}
+
+PCommandPool* pigment_default_pool(Pigment* pigment)
+{
+    if(pigment == NULL || pigment->command_pools == NULL || pigment->command_pools->count == 0)
+    {
+        return NULL;
+    }
+
+    return pigment->command_pools->pools[0];
+}
+
+PCommandBuffers* create_command_buffers(PCommandPool* pool, PDevice* device, uint32_t count)
+{
+    if(pool == NULL)
     {
         return NULL;
     }
@@ -97,15 +160,14 @@ PCommandBuffers* create_command_buffers(PCommandPools* pools, uint32_t pool_inde
         goto ERROR;
     }
 
-    VkCommandPool pool       = pools->pools[pool_index];
-    VkCommandBuffer* buffers = allocate_command_buffers(pool, device, count);
+    VkCommandBuffer* buffers = allocate_command_buffers(pool->pool, device, count);
     if(buffers == NULL)
     {
         goto ERROR;
     }
 
     command_buffers->buffers     = buffers;
-    command_buffers->source_pool = pool;
+    command_buffers->source_pool = pool->pool;
 
     return command_buffers;
 
@@ -224,34 +286,127 @@ void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, ui
     vkCmdPipelineBarrier2(command_buffer, &dep_to_present);
 }
 
-static VkCommandPool create_command_pool(PDevice* device, PSurface* surface)
+static PCommandPool* create_command_pool_internal(PDevice* device, const PCommandPoolDesc* desc)
+{
+    PCommandPool* command_pool  = NULL;
+    VkCommandPool pool          = NULL;
+    uint32_t queue_family_index = P_QUEUE_FAMILY_MAX_ENUM;
+
+    queue_family_index = resolve_queue_family_index(device, desc->queue_family);
+    if(queue_family_index == P_QUEUE_FAMILY_MAX_ENUM)
+    {
+        goto ERROR;
+    }
+
+    pool = create_vk_command_pool(device, queue_family_index, pigment_flags_to_vk(desc->flags));
+    if(pool == NULL)
+    {
+        goto ERROR;
+    }
+
+    command_pool = malloc(sizeof(*command_pool));
+    if(command_pool == NULL)
+    {
+        perror("create_command_pool_internal");
+        goto ERROR;
+    }
+
+    command_pool->pool               = pool;
+    command_pool->queue_family       = desc->queue_family;
+    command_pool->queue_family_index = queue_family_index;
+    command_pool->flags              = desc->flags;
+
+    return command_pool;
+
+ERROR:
+    if(pool != NULL)
+    {
+        vkDestroyCommandPool(device->logical_device, pool, NULL);
+    }
+    return NULL;
+}
+
+static VkCommandPool create_vk_command_pool(PDevice* device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags)
 {
     VkCommandPool command_pool = NULL;
-    QueueFamilyIndices* indices = NULL;
 
-    indices = find_queue_families(device->physical_device, surface->surface);
-    if(indices == NULL)
-    {
-        goto FREE;
-    }
-
-
-    VkCommandPoolCreateInfo command_pool_create_info = {
+    VkCommandPoolCreateInfo create_info = {
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = indices->graphics_family.value
+        .flags            = flags,
+        .queueFamilyIndex = queue_family_index,
     };
 
-    VkResult result;
-    if((result = vkCreateCommandPool(device->logical_device, &command_pool_create_info, NULL, &command_pool)) != VK_SUCCESS)
+    VkResult result = vkCreateCommandPool(device->logical_device, &create_info, NULL, &command_pool);
+    if(result != VK_SUCCESS)
     {
         fprintf(stderr, "Failed to create command pool! (result: %d)\n", result);
-        command_pool = NULL;
+        return NULL;
     }
 
-FREE:
-    free(indices);
     return command_pool;
+}
+
+static uint32_t resolve_queue_family_index(PDevice* device, PQueueFamily family)
+{
+    if(family != P_QUEUE_FAMILY_GRAPHICS)
+    {
+        fprintf(stderr, "resolve_queue_family_index: only P_QUEUE_FAMILY_GRAPHICS is supported (got %d).\n", family);
+        return P_QUEUE_FAMILY_MAX_ENUM;
+    }
+
+    return device->graphics_family_index;
+}
+
+static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)
+{
+    VkCommandPoolCreateFlags result = 0;
+    if(flags & P_COMMAND_POOL_FLAG_TRANSIENT)
+    {
+        result |= VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+    }
+    if(flags & P_COMMAND_POOL_FLAG_RESET_BUFFER)
+    {
+        result |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    }
+    return result;
+}
+
+static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
+{
+    if(pools->count >= pools->capacity)
+    {
+        uint32_t new_capacity  = pools->capacity * 2;
+        PCommandPool** new_ptr = realloc(pools->pools, new_capacity * sizeof(*new_ptr));
+
+        if(new_ptr == NULL)
+        {
+            perror("command_pools_append");
+            return PIGMENT_ERROR;
+        }
+
+        pools->pools         = new_ptr;
+        pools->capacity = new_capacity;
+    }
+
+    pools->pools[pools->count] = pool;
+    pools->count++;
+
+    return PIGMENT_SUCCESS;
+}
+
+static void command_pools_destroy(PCommandPoolList* pools, PCommandPool* pool, PDevice* device)
+{
+    for(uint32_t i = 0; i < pools->count; i++)
+    {
+        if(pools->pools[i] == pool)
+        {
+            pools->pools[i] = pools->pools[pools->count - 1];
+            pools->count--;
+            vkDestroyCommandPool(device->logical_device, pool->pool, NULL);
+            free(pool);
+            return;
+        }
+    }
 }
 
 static VkCommandBuffer* allocate_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers)

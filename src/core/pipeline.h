@@ -87,12 +87,19 @@ typedef struct PPipelineDesc {
     PBlendMode blend_mode;
 } PPipelineDesc;
 
+PPipelineList* create_pipeline_list(void);
+void destroy_pipeline_list(PPipelineList* list, PLayoutList* layouts, PDevice* device);
+
+PLayoutList* create_layout_list(void);
+void destroy_layout_list(PLayoutList* list, PDevice* device);
+
 PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc);
 void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 
-PPipelines* pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count);
-void pigment_destroy_pipelines(Pigment* pigment, PPipelines* pipelines);
+int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out);
 
-void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipelines* pipelines, uint32_t pipeline_id);
+void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
+
+void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* pipeline);
 
 #endif
