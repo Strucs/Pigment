@@ -41,6 +41,12 @@ typedef struct PAppInfo {
     uint32_t app_version;
 } PAppInfo;
 
+typedef enum PFeature {
+    P_FEATURE_DEPTH_BOUNDS_TEST       = 0,
+    P_FEATURE_WIREFRAME_RASTERIZATION = 1,
+    P_FEATURE_COUNT // size of the device feature array
+} PFeature;
+
 typedef enum {
     P_PRESENT_MODE_IMMEDIATE    = 0,    // no vsync, uncapped, may tear
     P_PRESENT_MODE_MAILBOX      = 1,    // triple buffering, no tearing

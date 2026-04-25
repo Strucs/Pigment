@@ -106,6 +106,6 @@ typedef enum PShaderType {
 char* load_shader_code(const char* file_path, uint32_t* shader_size);
 uint32_t* compile_glsl_to_spv(const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size);
 
-PPipelineDesc default_graphic_pipeline_desc(PFormat color_format, PFormat depth_format);
+PPipelineDesc default_graphic_pipeline_desc(const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format);
 
 #endif

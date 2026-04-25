@@ -269,6 +269,41 @@ void pigment_end_frame(Pigment* pigment, uint32_t window_index)
     end_frame(pigment->renderers[window_index], pigment->device, pigment->renderers[window_index]->current_image_index, pigment->max_frames_in_flight);
 }
 
+void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index)
+{
+    if(pigment == NULL || window_index >= pigment->window_count)
+    {
+        return;
+    }
+
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    begin_swapchain_pass(renderer, renderer->current_image_index);
+}
+
+void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index)
+{
+    if(pigment == NULL || window_index >= pigment->window_count)
+    {
+        return;
+    }
+
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    end_swapchain_pass(renderer, renderer->current_image_index);
+}
+
+bool pigment_supports(Pigment* pigment, PFeature feature)
+{
+    if(pigment == NULL || pigment->device == NULL)
+    {
+        return false;
+    }
+    if((unsigned) feature >= (unsigned) P_FEATURE_COUNT)
+    {
+        return false;
+    }
+    return pigment->device->features[feature];
+}
+
 PWindow* pigment_get_window(Pigment* pigment, uint32_t window_index)
 {
     if(pigment == NULL || window_index >= pigment->window_count)

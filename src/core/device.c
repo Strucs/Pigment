@@ -366,6 +366,12 @@ static int create_logical_device(PDevice* device, PInstance* instance, PSurface*
         queue_create_infos[i].pQueuePriorities = &queue_priority;
     }
 
+    VkPhysicalDeviceFeatures2 available = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    vkGetPhysicalDeviceFeatures2(device->physical_device, &available);
+
+    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (bool) available.features.depthBounds;
+    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (bool) available.features.fillModeNonSolid;
+
     VkPhysicalDeviceVulkan12Features vk12_features = {
         .sType                                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .descriptorIndexing                        = VK_TRUE,
@@ -387,7 +393,9 @@ static int create_logical_device(PDevice* device, PInstance* instance, PSurface*
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
             .samplerAnisotropy                      = VK_TRUE,
-            .shaderSampledImageArrayDynamicIndexing = VK_TRUE
+            .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+            .fillModeNonSolid                       = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
+            .depthBounds                            = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
         },
         .pNext    = &vk13_features
     };

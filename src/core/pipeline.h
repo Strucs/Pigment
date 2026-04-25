@@ -63,6 +63,11 @@ typedef enum PCullMode {
     P_CULL_MODE_FRONT_AND_BACK = 3,
 } PCullMode;
 
+typedef enum PFrontFace {
+    P_FRONT_FACE_COUNTER_CLOCKWISE = 0,
+    P_FRONT_FACE_CLOCKWISE         = 1,
+} PFrontFace;
+
 typedef enum PBlendMode {
     P_BLEND_MODE_OPAQUE              = 0,
     P_BLEND_MODE_ALPHA               = 1,
@@ -70,21 +75,39 @@ typedef enum PBlendMode {
     P_BLEND_MODE_ADDITIVE            = 3,
 } PBlendMode;
 
+typedef enum PSampleCount {
+    P_SAMPLE_COUNT_1  = 1,
+    P_SAMPLE_COUNT_2  = 2,
+    P_SAMPLE_COUNT_4  = 4,
+    P_SAMPLE_COUNT_8  = 8,
+    P_SAMPLE_COUNT_16 = 16,
+    P_SAMPLE_COUNT_32 = 32,
+    P_SAMPLE_COUNT_64 = 64,
+} PSampleCount;
+
 typedef struct PPipelineDesc {
     const uint32_t* vertex_spv;
     uint32_t vertex_spv_size;
     const uint32_t* fragment_spv;
     uint32_t fragment_spv_size;
-    PFormat color_format;
-    PFormat depth_format;
-    bool depth_test;
-    bool depth_write;
-    PCompareOp depth_compare_op;
-    bool stencil_test;
-    PCullMode cull_mode;
+
+    const PFormat* color_formats;
+    // Render targets (static, baked).
+    // color_format_count = 0 for depth-only (shadow maps).
+    // color_format_count = 1 for forward rendering.
+    // color_format_count > 1 for MRT / G-buffer.
+    uint32_t color_format_count;
+    PFormat depth_format;    // P_FORMAT_UNDEFINED = no depth attachment
+
     PPolygonMode polygon_mode;
     PTopology topology;
-    PBlendMode blend_mode;
+
+    // Per-attachment blend modes. NULL = all attachments OPAQUE.
+    // If non-NULL, count must equal color_format_count.
+    const PBlendMode* blend_modes;
+    uint32_t blend_mode_count;
+
+    PSampleCount sample_count;
 } PPipelineDesc;
 
 PPipelineList* create_pipeline_list(void);

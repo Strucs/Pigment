@@ -52,7 +52,8 @@ int main(void)
     SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), true);
 
     PWindowRenderer* renderer   = pigment_get_window_renderer(pigment, 0);
-    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment_get_color_format(renderer), pigment_get_depth_format(renderer));
+    PFormat color_format        = pigment_get_color_format(renderer);
+    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(&color_format, 1, pigment_get_depth_format(renderer));
     PPipelineBuild* build       = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
     free((void*) pipeline_desc.vertex_spv);
     free((void*) pipeline_desc.fragment_spv);
@@ -157,9 +158,13 @@ int main(void)
             continue;
         }
 
+        pigment_begin_swapchain_pass(pigment, 0);
+
         pigment_bind_pipeline(pigment, 0, pipeline);
         pigment_draw(pigment, 0, pipeline, draw_calls, draw_count);
         pigment_draw(pigment, 0, pipeline, draw_calls2, draw_count2);
+
+        pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
     }

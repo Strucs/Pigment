@@ -56,10 +56,12 @@ int main(void)
     PFormat color_format      = pigment_get_color_format(renderer);
     PFormat depth_format      = pigment_get_depth_format(renderer);
 
-    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(color_format, depth_format);
-    PPipelineDesc desc_additive = default_graphic_pipeline_desc(color_format, depth_format);
-    desc_additive.blend_mode    = P_BLEND_MODE_ADDITIVE;
-    desc_additive.depth_write   = false;
+    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(&color_format, 1, depth_format);
+    PPipelineDesc desc_additive = default_graphic_pipeline_desc(&color_format, 1, depth_format);
+
+    PBlendMode additive_blend      = P_BLEND_MODE_ADDITIVE;
+    desc_additive.blend_modes      = &additive_blend;
+    desc_additive.blend_mode_count = 1;
 
     builds[0] = pigment_pipeline_build_from_desc(pigment, &desc_opaque);
     builds[1] = pigment_pipeline_build_from_desc(pigment, &desc_additive);
@@ -171,11 +173,16 @@ int main(void)
             continue;
         }
 
+        pigment_begin_swapchain_pass(pigment, 0);
+
         pigment_bind_pipeline(pigment, 0, pipelines[0]);
         pigment_draw(pigment, 0, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, 0, pipelines[1]);
+        pigment_cmd_set_depth(pigment, 0, true, false, P_COMPARE_OP_GREATER);
         pigment_draw(pigment, 0, pipelines[1], draw_calls2, draw_count2);
+
+        pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
     }

@@ -39,8 +39,13 @@ void pigment_wait_frame_ready(Pigment* pigment, uint32_t window_index);
 bool pigment_begin_frame(Pigment* pigment, uint32_t window_index, PCamera* camera);
 void pigment_end_frame(Pigment* pigment, uint32_t window_index);
 
+void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index);
+void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index);
+
 PWindow* pigment_get_window(Pigment* pigment, uint32_t window_index);
 PWindowRenderer* pigment_get_window_renderer(Pigment* pigment, uint32_t window_index);
 uint32_t pigment_window_count(Pigment* pigment);
+
+bool pigment_supports(Pigment* pigment, PFeature feature);
 
 #endif

@@ -100,23 +100,21 @@ ERROR:
     return NULL;
 }
 
-PPipelineDesc default_graphic_pipeline_desc(PFormat color_format, PFormat depth_format)
+PPipelineDesc default_graphic_pipeline_desc(const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
 {
     PPipelineDesc desc = {0};
 
     desc.vertex_spv   = compile_glsl_to_spv(DEFAULT_VERTEX_SHADER, (uint32_t) strlen(DEFAULT_VERTEX_SHADER), P_SHADER_TYPE_VERTEX, "default.vert", &desc.vertex_spv_size);
     desc.fragment_spv = compile_glsl_to_spv(DEFAULT_FRAGMENT_SHADER, (uint32_t) strlen(DEFAULT_FRAGMENT_SHADER), P_SHADER_TYPE_FRAGMENT, "default.frag", &desc.fragment_spv_size);
 
-    desc.color_format     = color_format;
-    desc.depth_format     = depth_format;
-    desc.depth_test       = true;
-    desc.depth_write      = true;
-    desc.depth_compare_op = P_COMPARE_OP_GREATER;
-    desc.stencil_test     = false;
-    desc.cull_mode        = P_CULL_MODE_BACK;
-    desc.polygon_mode     = P_POLYGON_MODE_FILL;
-    desc.topology         = P_TOPOLOGY_TRIANGLE_LIST;
-    desc.blend_mode       = P_BLEND_MODE_OPAQUE;
+    desc.color_formats      = color_formats;
+    desc.color_format_count = color_format_count;
+    desc.depth_format       = depth_format;
+    desc.polygon_mode       = P_POLYGON_MODE_FILL;
+    desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
+    desc.blend_modes        = NULL;
+    desc.blend_mode_count   = 0;
+    desc.sample_count       = P_SAMPLE_COUNT_1;
 
     return desc;
 }

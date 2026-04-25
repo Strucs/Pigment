@@ -22,11 +22,11 @@ static VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShad
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void);
 static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology);
 static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void);
-static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode, PCullMode cull_mode);
-static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(void);
-static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(bool depth_test, bool depth_write, PCompareOp depth_compare_op, bool stencil_test);
+static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode);
+static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count);
+static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(void);
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
-static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* color_blend_attachment_state_create_info);
+static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
 static PLayout* get_or_create_default_layout(Pigment* pigment);
 static void retain_layout(PLayout* layout);
@@ -114,26 +114,81 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         build->shader_stages[build->shader_stage_count++] = configure_shader_stage_create_info(build->fragment_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
     }
 
-    build->vertex_input     = configure_vertex_input_state_create_info();
-    build->input_assembly   = configure_input_assembly_state_create_info(desc->topology);
-    build->viewport         = configure_viewport_state_create_info();
-    build->rasterizer       = configure_rasterizer_state_create_info(desc->polygon_mode, desc->cull_mode);
-    build->multisample      = configure_multisampling_state_create_info();
-    build->depth_stencil    = configure_depth_stencil_state_create_info(desc->depth_test, desc->depth_write, desc->depth_compare_op, desc->stencil_test);
-    build->blend_attachment = configure_color_blend_attachment_state_create_info(desc->blend_mode);
-    build->color_blend      = configure_color_blend_state_create_info(&build->blend_attachment);
+    if(desc->blend_modes != NULL && desc->blend_mode_count != desc->color_format_count)
+    {
+        fprintf(stderr, "pigment_pipeline_build_from_desc: blend_mode_count (%u) must equal color_format_count (%u) when blend_modes is not NULL.\n", desc->blend_mode_count, desc->color_format_count);
+        goto ERROR;
+    }
 
-    build->dynamic_state_count = 2;
+    build->color_format_count = desc->color_format_count;
+    if(desc->color_format_count > 0)
+    {
+        build->color_formats = malloc(desc->color_format_count * sizeof(*build->color_formats));
+        if(build->color_formats == NULL)
+        {
+            perror("pigment_pipeline_build_from_desc");
+            goto ERROR;
+        }
+        for(uint32_t i = 0; i < desc->color_format_count; i++)
+        {
+            build->color_formats[i] = (VkFormat) desc->color_formats[i];
+        }
+
+        build->blend_attachment_count = desc->color_format_count;
+        build->blend_attachments      = malloc(desc->color_format_count * sizeof(*build->blend_attachments));
+        if(build->blend_attachments == NULL)
+        {
+            perror("pigment_pipeline_build_from_desc");
+            goto ERROR;
+        }
+        for(uint32_t i = 0; i < desc->color_format_count; i++)
+        {
+            PBlendMode mode             = (desc->blend_modes != NULL) ? desc->blend_modes[i] : P_BLEND_MODE_OPAQUE;
+            build->blend_attachments[i] = configure_color_blend_attachment_state_create_info(mode);
+        }
+    }
+
+    build->vertex_input   = configure_vertex_input_state_create_info();
+    build->input_assembly = configure_input_assembly_state_create_info(desc->topology);
+    build->viewport       = configure_viewport_state_create_info();
+    build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode);
+    build->multisample    = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1);
+    build->depth_stencil  = configure_depth_stencil_state_create_info();
+    build->color_blend    = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count);
+
+    static const VkDynamicState base_dynamic_state_list[] = {
+        VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
+        VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
+        VK_DYNAMIC_STATE_CULL_MODE,
+        VK_DYNAMIC_STATE_FRONT_FACE,
+        VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+        VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+        VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
+        VK_DYNAMIC_STATE_STENCIL_OP,
+        VK_DYNAMIC_STATE_DEPTH_BIAS,
+        VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
+        VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE
+    };
+    const uint32_t base_count = (uint32_t) (sizeof(base_dynamic_state_list) / sizeof(base_dynamic_state_list[0]));
+
+    // Optional dynamic states depending on optional device features.
+    const uint32_t optional_count = pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? 2 : 0;
+
+    build->dynamic_state_count = base_count + optional_count;
     build->dynamic_state_list  = malloc(build->dynamic_state_count * sizeof(*build->dynamic_state_list));
     if(build->dynamic_state_list == NULL)
     {
         perror("pigment_pipeline_build_from_desc");
         goto ERROR;
     }
-
-    build->dynamic_state_list[0] = VK_DYNAMIC_STATE_VIEWPORT;
-    build->dynamic_state_list[1] = VK_DYNAMIC_STATE_SCISSOR;
-    build->dynamic               = configure_dynamic_state_create_info(build->dynamic_state_list, build->dynamic_state_count);
+    memcpy(build->dynamic_state_list, base_dynamic_state_list, sizeof(base_dynamic_state_list));
+    if(pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST])
+    {
+        build->dynamic_state_list[base_count + 0] = VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE;
+        build->dynamic_state_list[base_count + 1] = VK_DYNAMIC_STATE_DEPTH_BOUNDS;
+    }
+    build->dynamic = configure_dynamic_state_create_info(build->dynamic_state_list, build->dynamic_state_count);
 
     build->layout = get_or_create_default_layout(pigment);
     if(build->layout == NULL)
@@ -143,12 +198,11 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
 
     retain_layout(build->layout);
 
-    build->color_format = (VkFormat) desc->color_format;
-    build->rendering    = (VkPipelineRenderingCreateInfoKHR) {
+    build->rendering = (VkPipelineRenderingCreateInfoKHR) {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-        .colorAttachmentCount    = 1,
-        .pColorAttachmentFormats = &build->color_format,
-        .depthAttachmentFormat   = (VkFormat) desc->depth_format
+        .colorAttachmentCount    = build->color_format_count,
+        .pColorAttachmentFormats = build->color_formats,
+        .depthAttachmentFormat   = (VkFormat) desc->depth_format,
     };
 
     return build;
@@ -181,6 +235,8 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
         release_layout(pigment->layouts, build->layout, pigment->device);
     }
 
+    free(build->color_formats);
+    free(build->blend_attachments);
     free(build->dynamic_state_list);
     free(build);
 }
@@ -344,6 +400,22 @@ void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* p
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, 0, 1, &pigment->descriptor->descriptor_sets[current_frame], 0, NULL);
+
+    // Default dynamic state values. User can override with pigment_cmd_set_*.
+    vkCmdSetCullMode(cmd, VK_CULL_MODE_BACK_BIT);
+    vkCmdSetFrontFace(cmd, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    vkCmdSetDepthTestEnable(cmd, VK_TRUE);
+    vkCmdSetDepthWriteEnable(cmd, VK_TRUE);
+    vkCmdSetDepthCompareOp(cmd, VK_COMPARE_OP_GREATER);
+    vkCmdSetStencilTestEnable(cmd, VK_FALSE);
+    vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+    vkCmdSetDepthBiasEnable(cmd, VK_FALSE);
+    vkCmdSetRasterizerDiscardEnable(cmd, VK_FALSE);
+    if(pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST])
+    {
+        vkCmdSetDepthBoundsTestEnable(cmd, VK_FALSE);
+        vkCmdSetDepthBounds(cmd, 0.0f, 1.0f);
+    }
 }
 
 static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code, uint32_t shader_size)
@@ -391,7 +463,7 @@ static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_cre
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state_create_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology               = (VkPrimitiveTopology) topology,
-        .primitiveRestartEnable = VK_FALSE
+        .primitiveRestartEnable = VK_FALSE,
     };
 
     return input_assembly_state_create_info;
@@ -399,51 +471,76 @@ static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_cre
 
 static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void)
 {
+    // viewportCount / scissorCount are dynamic via VK_DYNAMIC_STATE_*_WITH_COUNT.
     VkPipelineViewportStateCreateInfo viewport_state_create_info = {
-        .sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .scissorCount  = 1
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
     };
 
     return viewport_state_create_info;
 }
 
-static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode, PCullMode cull_mode)
+static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode)
 {
     VkPipelineRasterizationStateCreateInfo rasterizer_state_create_info = {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .depthClampEnable        = VK_FALSE,
-        .rasterizerDiscardEnable = VK_FALSE,
+        .rasterizerDiscardEnable = VK_FALSE,    // placeholder
         .polygonMode             = (VkPolygonMode) polygon_mode,
         .lineWidth               = 1.0f,
-        .cullMode                = (VkCullModeFlags) cull_mode,
-        .frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-        .depthBiasEnable         = VK_FALSE
+        .cullMode                = VK_CULL_MODE_BACK_BIT,              // placeholder
+        .frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE,    // placeholder
+        .depthBiasEnable         = VK_FALSE,                           // placeholder
     };
 
     return rasterizer_state_create_info;
 }
 
-static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(void)
+static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count)
 {
+    VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+    switch(sample_count)
+    {
+        case P_SAMPLE_COUNT_1:
+            samples = VK_SAMPLE_COUNT_1_BIT;
+            break;
+        case P_SAMPLE_COUNT_2:
+            samples = VK_SAMPLE_COUNT_2_BIT;
+            break;
+        case P_SAMPLE_COUNT_4:
+            samples = VK_SAMPLE_COUNT_4_BIT;
+            break;
+        case P_SAMPLE_COUNT_8:
+            samples = VK_SAMPLE_COUNT_8_BIT;
+            break;
+        case P_SAMPLE_COUNT_16:
+            samples = VK_SAMPLE_COUNT_16_BIT;
+            break;
+        case P_SAMPLE_COUNT_32:
+            samples = VK_SAMPLE_COUNT_32_BIT;
+            break;
+        case P_SAMPLE_COUNT_64:
+            samples = VK_SAMPLE_COUNT_64_BIT;
+            break;
+    }
+
     VkPipelineMultisampleStateCreateInfo multisampling_state_create_info = {
         .sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .sampleShadingEnable  = VK_FALSE,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+        .rasterizationSamples = samples,
     };
 
     return multisampling_state_create_info;
 }
 
-static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(bool depth_test, bool depth_write, PCompareOp depth_compare_op, bool stencil_test)
+static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(void)
 {
     VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info = {
         .sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .depthTestEnable       = depth_test ? VK_TRUE : VK_FALSE,
-        .depthWriteEnable      = depth_write ? VK_TRUE : VK_FALSE,
-        .depthCompareOp        = (VkCompareOp) depth_compare_op,
-        .depthBoundsTestEnable = VK_FALSE,
-        .stencilTestEnable     = stencil_test ? VK_TRUE : VK_FALSE
+        .depthTestEnable       = VK_TRUE,                  // placeholder
+        .depthWriteEnable      = VK_TRUE,                  // placeholder
+        .depthCompareOp        = VK_COMPARE_OP_GREATER,    // placeholder
+        .depthBoundsTestEnable = VK_FALSE,                 // placeholder
+        .stencilTestEnable     = VK_FALSE,                 // placeholder
     };
 
     return depth_stencil_state_create_info;
@@ -493,18 +590,18 @@ static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_stat
     return color_blend_attachment_state_create_info;
 }
 
-static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* color_blend_attachment_state_create_info)
+static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count)
 {
     VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = {
         .sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .logicOpEnable     = VK_FALSE,
         .logicOp           = VK_LOGIC_OP_COPY,
-        .attachmentCount   = 1,
-        .pAttachments      = color_blend_attachment_state_create_info,
+        .attachmentCount   = attachment_count,
+        .pAttachments      = attachments,
         .blendConstants[0] = 0.0f,
         .blendConstants[1] = 0.0f,
         .blendConstants[2] = 0.0f,
-        .blendConstants[3] = 0.0f
+        .blendConstants[3] = 0.0f,
     };
 
     return color_blend_state_create_info;

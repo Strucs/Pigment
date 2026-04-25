@@ -96,6 +96,7 @@ struct PDevice {
     uint32_t graphics_family_index;
     uint32_t present_family_index;
     ExtensionList* extensions;
+    bool features[P_FEATURE_COUNT];
 };
 
 struct QueueFamilyIndices {
@@ -169,12 +170,14 @@ struct PPipelineBuild {
     VkPipelineRasterizationStateCreateInfo rasterizer;
     VkPipelineMultisampleStateCreateInfo multisample;
     VkPipelineDepthStencilStateCreateInfo depth_stencil;
-    VkPipelineColorBlendAttachmentState blend_attachment;
+    VkPipelineColorBlendAttachmentState* blend_attachments;
+    uint32_t blend_attachment_count;
     VkPipelineColorBlendStateCreateInfo color_blend;
     VkDynamicState* dynamic_state_list;
     uint32_t dynamic_state_count;
     VkPipelineDynamicStateCreateInfo dynamic;
-    VkFormat color_format;
+    VkFormat* color_formats;
+    uint32_t color_format_count;
     VkPipelineRenderingCreateInfoKHR rendering;
     PLayout* layout;
 };

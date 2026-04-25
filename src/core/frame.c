@@ -20,6 +20,8 @@
 #include "synchronization.h"
 #include "window.h"
 
+static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index);
+
 bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* device, PCamera* camera, uint32_t* out_image_index)
 {
     if(renderer->framebuffer_resized)
@@ -93,7 +95,15 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* d
         return false;
     }
 
-    cmd_begin_rendering(cmd, renderer->swapchain, *out_image_index, renderer->transparent_framebuffer);
+    return true;
+}
+
+void begin_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index)
+{
+    uint32_t current_frame = renderer->swapchain->current_frame;
+    VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
+
+    cmd_begin_rendering(cmd, renderer->swapchain, image_index, renderer->transparent_framebuffer);
 
     VkViewport viewport = {
         .x        = 0.0f,
@@ -108,18 +118,22 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* d
         renderer->swapchain->extent
     };
 
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    vkCmdSetViewportWithCount(cmd, 1, &viewport);
+    vkCmdSetScissorWithCount(cmd, 1, &scissor);
+}
 
-    return true;
+void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index)
+{
+    uint32_t current_frame = renderer->swapchain->current_frame;
+    VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
+
+    cmd_end_rendering(cmd, renderer->swapchain, image_index);
 }
 
 void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index, uint32_t max_frame)
 {
     uint32_t current_frame = renderer->swapchain->current_frame;
     VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
-
-    cmd_end_rendering(cmd, renderer->swapchain, image_index);
 
     VkResult result;
     if((result = vkEndCommandBuffer(cmd)) != VK_SUCCESS)
@@ -200,5 +214,112 @@ void pigment_draw(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, 
 
         vkCmdBindIndexBuffer(cmd, draw_call->mesh->index_buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd, draw_call->index_count, 1, draw_call->first_index, 0, 0);
+    }
+}
+
+static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index)
+{
+    if(pigment == NULL || window_index >= pigment->window_count)
+    {
+        return VK_NULL_HANDLE;
+    }
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    return renderer->command_buffers->buffers[renderer->swapchain->current_frame];
+}
+
+void pigment_cmd_set_depth(Pigment* pigment, uint32_t window_index, bool test, bool write, PCompareOp op)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    vkCmdSetDepthTestEnable(cmd, test ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthWriteEnable(cmd, write ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthCompareOp(cmd, (VkCompareOp) op);
+}
+
+void pigment_cmd_set_cull(Pigment* pigment, uint32_t window_index, PCullMode mode, PFrontFace face)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    vkCmdSetCullMode(cmd, (VkCullModeFlags) mode);
+    vkCmdSetFrontFace(cmd, (VkFrontFace) face);
+}
+
+void pigment_cmd_set_stencil_test(Pigment* pigment, uint32_t window_index, bool enable)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    vkCmdSetStencilTestEnable(cmd, enable ? VK_TRUE : VK_FALSE);
+}
+
+void pigment_cmd_set_viewport(Pigment* pigment, uint32_t window_index, float x, float y, float width, float height, float min_depth, float max_depth)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    VkViewport vp = {
+        .x        = x,
+        .y        = y,
+        .width    = width,
+        .height   = height,
+        .minDepth = min_depth,
+        .maxDepth = max_depth,
+    };
+    vkCmdSetViewportWithCount(cmd, 1, &vp);
+}
+
+void pigment_cmd_set_scissor(Pigment* pigment, uint32_t window_index, int32_t x, int32_t y, uint32_t width, uint32_t height)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    VkRect2D rect = {
+        .offset = {x, y},
+        .extent = {width, height},
+    };
+    vkCmdSetScissorWithCount(cmd, 1, &rect);
+}
+
+void pigment_cmd_set_depth_bias(Pigment* pigment, uint32_t window_index, bool enable, float constant, float clamp, float slope)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    vkCmdSetDepthBiasEnable(cmd, enable ? VK_TRUE : VK_FALSE);
+    if(enable)
+    {
+        vkCmdSetDepthBias(cmd, constant, clamp, slope);
+    }
+}
+
+void pigment_cmd_set_depth_bounds(Pigment* pigment, uint32_t window_index, bool enable, float min, float max)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    if(!pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST])
+    {
+        return;
+    }
+    vkCmdSetDepthBoundsTestEnable(cmd, enable ? VK_TRUE : VK_FALSE);
+    if(enable)
+    {
+        vkCmdSetDepthBounds(cmd, min, max);
     }
 }
