@@ -16,6 +16,7 @@
 
 #include "surface.h"
 #include "internal.h"
+#include "log_internal.h"
 
 static void destroy_image_views(PSwapchain* swapchain, PDevice* device);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);
@@ -29,31 +30,30 @@ static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
     return temp > max ? max : temp;
 }
 
-PSurface* create_surface(PInstance* instance, PWindow* window)
+PSurface* create_surface(Pigment* pigment, PWindow* window)
 {
     PSurface* surface = malloc(sizeof(*surface));
     if(surface == NULL)
     {
-        perror("create_surface");
         return NULL;
     }
 
-    if(!SDL_Vulkan_CreateSurface(window->window, instance->vulkan_instance, NULL, &surface->surface))
+    if(!SDL_Vulkan_CreateSurface(window->window, pigment->instance->vulkan_instance, NULL, &surface->surface))
     {
-        fprintf(stderr, "SDL_Vulkan_CreateSurface: %s\n", SDL_GetError());
+        PLOG_ERROR(pigment, "SDL_Vulkan_CreateSurface: %s", SDL_GetError());
         free(surface);
         return NULL;
     }
     return surface;
 }
 
-void destroy_surface(PSurface* surface, PInstance* instance)
+void destroy_surface(Pigment* pigment, PSurface* surface)
 {
     if(surface == NULL)
     {
         return;
     }
-    vkDestroySurfaceKHR(instance->vulkan_instance, surface->surface, NULL);
+    vkDestroySurfaceKHR(pigment->instance->vulkan_instance, surface->surface, NULL);
     free(surface);
 }
 
@@ -87,7 +87,6 @@ SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceK
     return details;
 
 ERROR:
-    perror("get_support_details");
     destroy_support_details(details);
     return NULL;
 }
@@ -164,12 +163,37 @@ static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsK
         {
             return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
         }
+        if(supported & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        }
     }
+    else
+    {
+        if(supported & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        }
+        if(supported & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+        }
+        if(supported & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+        }
+        if(supported & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
+        {
+            return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+        }
+    }
+
     return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 }
 
-PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface, PDevice* device)
+PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface)
 {
+    PDevice* device                          = pigment->device;
     PSwapchain* swapchain                    = NULL;
     QueueFamilyIndices* indices              = NULL;
     SwapChainSupportDetails* support_details = NULL;
@@ -227,7 +251,14 @@ PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_he
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    create_info.preTransform   = support_details->capabilities.currentTransform;
+    if(support_details->capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+    {
+        create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    }
+    else
+    {
+        create_info.preTransform = support_details->capabilities.currentTransform;
+    }
     create_info.compositeAlpha = choose_composite_alpha(support_details->capabilities.supportedCompositeAlpha, transparent);
     create_info.presentMode    = present_mode;
     create_info.clipped        = VK_TRUE;
@@ -237,7 +268,7 @@ PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_he
     VkResult result;
     if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain))) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create swap chain! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create swap chain! (result: %d)", result);
         goto ERROR;
     }
 
@@ -251,7 +282,7 @@ PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_he
 
     if((result = vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to get swapchain images! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to get swapchain images! (result: %d)", result);
         goto ERROR;
     }
 
@@ -268,7 +299,6 @@ PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_he
 ERROR:
     destroy_support_details(support_details);
     free(indices);
-    perror("create_swapchain");
     if(swapchain != NULL)
     {
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
@@ -277,19 +307,21 @@ ERROR:
     return NULL;
 }
 
-void destroy_swapchain(PSwapchain* swapchain, PDevice* device)
+void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
 {
     if(swapchain != NULL)
     {
-        destroy_depth_resources(swapchain, device);
+        PDevice* device = pigment->device;
+        destroy_depth_resources(pigment, swapchain);
         destroy_image_views(swapchain, device);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
         free(swapchain);
     }
 }
 
-VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device)
+VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels)
 {
+    VkDevice device = pigment->device->logical_device;
     VkImageView image_view;
 
     VkImageViewCreateInfo view_create_info = {
@@ -307,25 +339,24 @@ VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags
     VkResult result;
     if((result = vkCreateImageView(device, &view_create_info, NULL, &image_view)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create image view! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create image view! (result: %d)", result);
         return NULL;
     }
 
     return image_view;
 }
 
-int create_image_views(PSwapchain* swapchain, PDevice* device)
+int create_image_views(Pigment* pigment, PSwapchain* swapchain)
 {
     swapchain->image_views = calloc(swapchain->image_count, sizeof(*(swapchain->image_views)));
     if(swapchain->image_views == NULL)
     {
-        perror("create_image_views");
         return PIGMENT_ERROR;
     }
 
     for(size_t i = 0; i < swapchain->image_count; i++)
     {
-        swapchain->image_views[i] = create_image_view(swapchain->images[i], swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1, device->logical_device);
+        swapchain->image_views[i] = create_image_view(pigment, swapchain->images[i], swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 
     return PIGMENT_SUCCESS;
@@ -346,24 +377,25 @@ static void destroy_image_views(PSwapchain* swapchain, PDevice* device)
     free(swapchain->images);
 }
 
-int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PDevice* device)
+int recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode)
 {
+    PDevice* device           = pigment->device;
     PSwapchain* new_swapchain = NULL;
 
     vkDeviceWaitIdle(device->logical_device);
 
-    destroy_swapchain(renderer->swapchain, device);
+    destroy_swapchain(pigment, renderer->swapchain);
 
-    new_swapchain = create_swapchain(framebuffer_width, framebuffer_height, preferred_mode, renderer->transparent_framebuffer, renderer->surface, device);
+    new_swapchain = create_swapchain(pigment, framebuffer_width, framebuffer_height, preferred_mode, renderer->transparent_framebuffer, renderer->surface);
     if(new_swapchain == NULL)
     {
         goto ERROR;
     }
-    if(create_image_views(new_swapchain, device) != PIGMENT_SUCCESS)
+    if(create_image_views(pigment, new_swapchain) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
-    if(create_depth_resources(new_swapchain, device) != PIGMENT_SUCCESS)
+    if(create_depth_resources(pigment, new_swapchain) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -372,8 +404,8 @@ int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, ui
     return PIGMENT_SUCCESS;
 
 ERROR:
-    fprintf(stderr, "Failed to recreate swapchain.\n");
-    destroy_swapchain(new_swapchain, device);
+    PLOG_ERROR(pigment, "Failed to recreate swapchain.");
+    destroy_swapchain(pigment, new_swapchain);
     return PIGMENT_ERROR;
 }
 

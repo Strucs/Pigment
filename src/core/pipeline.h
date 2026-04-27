@@ -111,10 +111,10 @@ typedef struct PPipelineDesc {
 } PPipelineDesc;
 
 PPipelineList* create_pipeline_list(void);
-void destroy_pipeline_list(PPipelineList* list, PLayoutList* layouts, PDevice* device);
+void destroy_pipeline_list(Pigment* pigment, PPipelineList* list, PLayoutList* layouts);
 
 PLayoutList* create_layout_list(void);
-void destroy_layout_list(PLayoutList* list, PDevice* device);
+void destroy_layout_list(Pigment* pigment, PLayoutList* list);
 
 PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc);
 void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);

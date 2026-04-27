@@ -16,19 +16,21 @@
 
 #include "commands.h"
 #include "internal.h"
+#include "log_internal.h"
 
-static PCommandPool* create_command_pool_internal(PDevice* device, const PCommandPoolDesc* desc);
-static VkCommandPool create_vk_command_pool(PDevice* device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
-static uint32_t resolve_queue_family_index(PDevice* device, PQueueFamily family);
+static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc);
+static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
+static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFamily family);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
 static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
-static void command_pools_destroy(PCommandPoolList* pools, PCommandPool* pool, PDevice* device);
-static VkCommandBuffer* allocate_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers);
+static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool);
+static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool command_pool, const uint32_t command_buffers_numbers);
 
 #define PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY 4
 
-PCommandPoolList* create_command_pools(PDevice* device)
+PCommandPoolList* create_command_pools(Pigment* pigment)
 {
+    PDevice* device            = pigment->device;
     PCommandPoolList* pools    = NULL;
     PCommandPool* default_pool = NULL;
 
@@ -40,7 +42,7 @@ PCommandPoolList* create_command_pools(PDevice* device)
 
     pools->capacity = PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY;
     pools->count    = 0;
-    pools->pools         = malloc(pools->capacity * sizeof(*pools->pools));
+    pools->pools    = malloc(pools->capacity * sizeof(*pools->pools));
     if(pools->pools == NULL)
     {
         goto ERROR;
@@ -51,7 +53,7 @@ PCommandPoolList* create_command_pools(PDevice* device)
         .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
     };
 
-    default_pool = create_command_pool_internal(device, &default_desc);
+    default_pool = create_command_pool_internal(pigment, &default_desc);
     if(default_pool == NULL)
     {
         goto ERROR;
@@ -65,7 +67,7 @@ PCommandPoolList* create_command_pools(PDevice* device)
     return pools;
 
 ERROR:
-    fprintf(stderr, "Failed to create command pools!\n");
+    PLOG_ERROR(pigment, "Failed to create command pools!");
     if(default_pool != NULL)
     {
         vkDestroyCommandPool(device->logical_device, default_pool->pool, NULL);
@@ -79,7 +81,7 @@ ERROR:
     return NULL;
 }
 
-void destroy_command_pools(PCommandPoolList* pools, PDevice* device)
+void destroy_command_pools(Pigment* pigment, PCommandPoolList* pools)
 {
     if(pools == NULL)
     {
@@ -88,7 +90,7 @@ void destroy_command_pools(PCommandPoolList* pools, PDevice* device)
 
     while(pools->count > 0)
     {
-        command_pools_destroy(pools, pools->pools[0], device);
+        command_pools_destroy(pigment, pools, pools->pools[0]);
     }
 
     free(pools->pools);
@@ -102,7 +104,7 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
         return NULL;
     }
 
-    PCommandPool* pool = create_command_pool_internal(pigment->device, desc);
+    PCommandPool* pool = create_command_pool_internal(pigment, desc);
     if(pool == NULL)
     {
         return NULL;
@@ -127,13 +129,13 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
 
     if(pool == pigment_default_pool(pigment))
     {
-        fprintf(stderr, "pigment_destroy_command_pool: cannot destroy the default pool.\n");
+        PLOG_ERROR(pigment, "pigment_destroy_command_pool: cannot destroy the default pool.");
         return;
     }
 
     vkDeviceWaitIdle(pigment->device->logical_device);
 
-    command_pools_destroy(pigment->command_pools, pool, pigment->device);
+    command_pools_destroy(pigment, pigment->command_pools, pool);
 }
 
 PCommandPool* pigment_default_pool(Pigment* pigment)
@@ -146,7 +148,7 @@ PCommandPool* pigment_default_pool(Pigment* pigment)
     return pigment->command_pools->pools[0];
 }
 
-PCommandBuffers* create_command_buffers(PCommandPool* pool, PDevice* device, uint32_t count)
+PCommandBuffers* create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count)
 {
     if(pool == NULL)
     {
@@ -156,11 +158,10 @@ PCommandBuffers* create_command_buffers(PCommandPool* pool, PDevice* device, uin
     PCommandBuffers* command_buffers = malloc(sizeof(*command_buffers));
     if(command_buffers == NULL)
     {
-        perror("create_command_buffers");
         goto ERROR;
     }
 
-    VkCommandBuffer* buffers = allocate_command_buffers(pool->pool, device, count);
+    VkCommandBuffer* buffers = allocate_command_buffers(pigment, pool->pool, count);
     if(buffers == NULL)
     {
         goto ERROR;
@@ -176,13 +177,13 @@ ERROR:
     return NULL;
 }
 
-void destroy_command_buffers(PCommandBuffers* command_buffers, PDevice* device, uint32_t count)
+void destroy_command_buffers(Pigment* pigment, PCommandBuffers* command_buffers, uint32_t count)
 {
     if(command_buffers == NULL)
     {
         return;
     }
-    vkFreeCommandBuffers(device->logical_device, command_buffers->source_pool, count, command_buffers->buffers);
+    vkFreeCommandBuffers(pigment->device->logical_device, command_buffers->source_pool, count, command_buffers->buffers);
     free(command_buffers->buffers);
     free(command_buffers);
 }
@@ -190,32 +191,28 @@ void destroy_command_buffers(PCommandBuffers* command_buffers, PDevice* device, 
 void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent)
 {
     VkImageMemoryBarrier2 barriers_to_render[2] = {
-        {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask       = VK_ACCESS_2_NONE,
-            .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = swapchain->images[image_index],
-            .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-        },
-        {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-            .srcAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dstStageMask        = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-            .dstAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = swapchain->depth_image,
-            .subresourceRange    = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}
-        }
+        {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+         .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
+         .srcAccessMask       = VK_ACCESS_2_NONE,
+         .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+         .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+         .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+         .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+         .image               = swapchain->images[image_index],
+         .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
+        {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+         .srcStageMask        = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+         .srcAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .dstStageMask        = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+         .dstAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+         .newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+         .image               = swapchain->depth_image,
+         .subresourceRange    = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}}
     };
 
     VkDependencyInfo dep_to_render = {
@@ -226,7 +223,9 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
 
     vkCmdPipelineBarrier2(command_buffer, &dep_to_render);
 
-    VkClearColorValue clear_color_value = {{0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f}};
+    VkClearColorValue clear_color_value = {
+        {0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f}
+    };
     VkClearDepthStencilValue clear_depth_stencil_value = {0.0f, 0};
 
     VkRenderingAttachmentInfoKHR color_attachment = {
@@ -235,7 +234,7 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue  = { .color = clear_color_value }
+        .clearValue  = {.color = clear_color_value}
     };
 
     VkRenderingAttachmentInfoKHR depth_attachment = {
@@ -244,7 +243,7 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue  = { .depthStencil = clear_depth_stencil_value }
+        .clearValue  = {.depthStencil = clear_depth_stencil_value}
     };
 
     VkRenderingInfoKHR rendering_info = {
@@ -286,19 +285,20 @@ void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, ui
     vkCmdPipelineBarrier2(command_buffer, &dep_to_present);
 }
 
-static PCommandPool* create_command_pool_internal(PDevice* device, const PCommandPoolDesc* desc)
+static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc)
 {
+    PDevice* device             = pigment->device;
     PCommandPool* command_pool  = NULL;
     VkCommandPool pool          = NULL;
     uint32_t queue_family_index = P_QUEUE_FAMILY_MAX_ENUM;
 
-    queue_family_index = resolve_queue_family_index(device, desc->queue_family);
+    queue_family_index = resolve_queue_family_index(pigment, desc->queue_family);
     if(queue_family_index == P_QUEUE_FAMILY_MAX_ENUM)
     {
         goto ERROR;
     }
 
-    pool = create_vk_command_pool(device, queue_family_index, pigment_flags_to_vk(desc->flags));
+    pool = create_vk_command_pool(pigment, queue_family_index, pigment_flags_to_vk(desc->flags));
     if(pool == NULL)
     {
         goto ERROR;
@@ -307,7 +307,6 @@ static PCommandPool* create_command_pool_internal(PDevice* device, const PComman
     command_pool = malloc(sizeof(*command_pool));
     if(command_pool == NULL)
     {
-        perror("create_command_pool_internal");
         goto ERROR;
     }
 
@@ -326,7 +325,7 @@ ERROR:
     return NULL;
 }
 
-static VkCommandPool create_vk_command_pool(PDevice* device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags)
+static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags)
 {
     VkCommandPool command_pool = NULL;
 
@@ -336,25 +335,25 @@ static VkCommandPool create_vk_command_pool(PDevice* device, uint32_t queue_fami
         .queueFamilyIndex = queue_family_index,
     };
 
-    VkResult result = vkCreateCommandPool(device->logical_device, &create_info, NULL, &command_pool);
+    VkResult result = vkCreateCommandPool(pigment->device->logical_device, &create_info, NULL, &command_pool);
     if(result != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create command pool! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create command pool! (result: %d)", result);
         return NULL;
     }
 
     return command_pool;
 }
 
-static uint32_t resolve_queue_family_index(PDevice* device, PQueueFamily family)
+static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFamily family)
 {
     if(family != P_QUEUE_FAMILY_GRAPHICS)
     {
-        fprintf(stderr, "resolve_queue_family_index: only P_QUEUE_FAMILY_GRAPHICS is supported (got %d).\n", family);
+        PLOG_ERROR(pigment, "resolve_queue_family_index: only P_QUEUE_FAMILY_GRAPHICS is supported (got %d).", family);
         return P_QUEUE_FAMILY_MAX_ENUM;
     }
 
-    return device->graphics_family_index;
+    return pigment->device->graphics_family_index;
 }
 
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)
@@ -380,11 +379,10 @@ static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
 
         if(new_ptr == NULL)
         {
-            perror("command_pools_append");
             return PIGMENT_ERROR;
         }
 
-        pools->pools         = new_ptr;
+        pools->pools    = new_ptr;
         pools->capacity = new_capacity;
     }
 
@@ -394,7 +392,7 @@ static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
     return PIGMENT_SUCCESS;
 }
 
-static void command_pools_destroy(PCommandPoolList* pools, PCommandPool* pool, PDevice* device)
+static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool)
 {
     for(uint32_t i = 0; i < pools->count; i++)
     {
@@ -402,14 +400,14 @@ static void command_pools_destroy(PCommandPoolList* pools, PCommandPool* pool, P
         {
             pools->pools[i] = pools->pools[pools->count - 1];
             pools->count--;
-            vkDestroyCommandPool(device->logical_device, pool->pool, NULL);
+            vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
             free(pool);
             return;
         }
     }
 }
 
-static VkCommandBuffer* allocate_command_buffers(VkCommandPool command_pool, PDevice* device, const uint32_t command_buffers_numbers)
+static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool command_pool, const uint32_t command_buffers_numbers)
 {
     VkCommandBuffer* command_buffers = malloc(command_buffers_numbers * sizeof(*command_buffers));
     if(command_buffers == NULL)
@@ -425,9 +423,9 @@ static VkCommandBuffer* allocate_command_buffers(VkCommandPool command_pool, PDe
     };
 
     VkResult result;
-    if((result = vkAllocateCommandBuffers(device->logical_device, &command_buffer_allocate_info, command_buffers)) != VK_SUCCESS)
+    if((result = vkAllocateCommandBuffers(pigment->device->logical_device, &command_buffer_allocate_info, command_buffers)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate command buffers! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to allocate command buffers! (result: %d)", result);
         goto ERROR;
     }
 

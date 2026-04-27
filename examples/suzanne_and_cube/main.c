@@ -33,7 +33,21 @@ int main(void)
     PDrawCall* draw_calls2  = NULL;
     int error_code          = 1;
 
-    pigment = init_pigment(&app_info, &window_info, NULL);
+    PigmentLoggerCreateInfo loggers[] = {
+        {
+            .severity_filter = PIGMENT_LOG_TRACE_BIT | PIGMENT_LOG_DEBUG_BIT | PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
+            .type_filter     = PIGMENT_LOG_TYPE_GENERAL_BIT | PIGMENT_LOG_TYPE_VALIDATION_BIT | PIGMENT_LOG_TYPE_PERFORMANCE_BIT,
+            .callback        = pigment_default_log_callback,
+            .user_data       = NULL,
+        },
+    };
+    PigmentConfig config = {
+        .loggers               = loggers,
+        .logger_count          = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation     = true,
+    };
+
+    pigment = init_pigment(&app_info, &window_info, &config);
     if(pigment == NULL)
     {
         fprintf(stderr, "Failed to initialize Pigment!\n");
@@ -53,7 +67,7 @@ int main(void)
 
     PWindowRenderer* renderer   = pigment_get_window_renderer(pigment, 0);
     PFormat color_format        = pigment_get_color_format(renderer);
-    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(&color_format, 1, pigment_get_depth_format(renderer));
+    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, &color_format, 1, pigment_get_depth_format(renderer));
     PPipelineBuild* build       = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
     free((void*) pipeline_desc.vertex_spv);
     free((void*) pipeline_desc.fragment_spv);
@@ -70,7 +84,7 @@ int main(void)
 
     // SUZANNE
 
-    asset = load_gltf_mesh("examples/" EXAMPLE_NAME "/models/Suzanne.gltf");
+    asset = load_gltf_mesh(pigment, "examples/" EXAMPLE_NAME "/models/Suzanne.gltf");
     if(asset == NULL)
     {
         fprintf(stderr, "Failed to load glTF!\n");
@@ -104,7 +118,7 @@ int main(void)
 
     // CUBE
 
-    asset2 = load_gltf_mesh("examples/" EXAMPLE_NAME "/models/BoxVertexColors.glb");
+    asset2 = load_gltf_mesh(pigment, "examples/" EXAMPLE_NAME "/models/BoxVertexColors.glb");
     if(asset2 == NULL)
     {
         fprintf(stderr, "Failed to load glTF!\n");

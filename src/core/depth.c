@@ -16,20 +16,22 @@
 
 #include "depth.h"
 #include "internal.h"
+#include "log_internal.h"
 
-static VkFormat find_depth_format(VkPhysicalDevice physical_device);
-static VkFormat find_supported_format(VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features, VkPhysicalDevice physical_device);
+static VkFormat find_depth_format(Pigment* pigment);
+static VkFormat find_supported_format(Pigment* pigment, VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features);
 
-int create_depth_resources(PSwapchain* swapchain, PDevice* device)
+int create_depth_resources(Pigment* pigment, PSwapchain* swapchain)
 {
-    VkFormat depth_format = find_depth_format(device->physical_device);
+    PDevice* device         = pigment->device;
+    VkFormat depth_format   = find_depth_format(pigment);
     swapchain->depth_format = depth_format;
 
-    if(create_vk_image(&swapchain->depth_image, &swapchain->depth_image_memory, swapchain->extent.width, swapchain->extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
+    if(create_vk_image(pigment, &swapchain->depth_image, &swapchain->depth_image_memory, swapchain->extent.width, swapchain->extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
-    swapchain->depth_image_view = create_image_view(swapchain->depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1, device->logical_device);
+    swapchain->depth_image_view = create_image_view(pigment, swapchain->depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
     if(swapchain->depth_image_view == NULL)
     {
         goto ERROR;
@@ -43,19 +45,21 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-void destroy_depth_resources(PSwapchain* swapchain, PDevice* device)
+void destroy_depth_resources(Pigment* pigment, PSwapchain* swapchain)
 {
     if(swapchain == NULL)
     {
         return;
     }
+    PDevice* device = pigment->device;
     vkDestroyImageView(device->logical_device, swapchain->depth_image_view, NULL);
     vkDestroyImage(device->logical_device, swapchain->depth_image, NULL);
     vkFreeMemory(device->logical_device, swapchain->depth_image_memory, NULL);
 }
 
-static VkFormat find_supported_format(VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features, VkPhysicalDevice physical_device)
+static VkFormat find_supported_format(Pigment* pigment, VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features)
 {
+    VkPhysicalDevice physical_device = pigment->device->physical_device;
     VkFormatProperties properties;
 
     for(size_t i = 0; i < candidates_number; i++)
@@ -72,20 +76,20 @@ static VkFormat find_supported_format(VkFormat* candidates, uint32_t candidates_
         }
     }
 
-    fprintf(stderr, "Failed to find supported format!\n");
+    PLOG_ERROR(pigment, "Failed to find supported format!");
     return VK_FORMAT_UNDEFINED;
 }
 
-static VkFormat find_depth_format(VkPhysicalDevice physical_device)
+static VkFormat find_depth_format(Pigment* pigment)
 {
     VkFormat candidates[]    = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
     uint32_t candidates_size = sizeof(candidates) / sizeof(candidates[0]);
 
     return find_supported_format(
+        pigment,
         candidates,
         candidates_size,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        physical_device
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
     );
 }

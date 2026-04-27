@@ -17,27 +17,27 @@
 #include "window.h"
 #include "pigment_sdl.h"
 #include "structs.h"
+#include "log_internal.h"
 
 static uint32_t find_index_by_window_id(Pigment* pigment, SDL_WindowID id);
 
-PWindow* create_window(PWindowInfo* window_info)
+PWindow* create_window(Pigment* pigment, PWindowInfo* window_info)
 {
     PWindow* window = calloc(1, sizeof(*window));
     if(window == NULL)
     {
-        perror("create_window");
         goto ERROR;
     }
 
     if(window_info->title == NULL)
     {
-        fprintf(stderr, "Window title cannot be NULL!\n");
+        PLOG_ERROR(pigment, "Window title cannot be NULL!");
         goto ERROR;
     }
 
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
-        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        PLOG_ERROR(pigment, "SDL_Init: %s", SDL_GetError());
         goto ERROR;
     }
 
@@ -91,7 +91,7 @@ PWindow* create_window(PWindowInfo* window_info)
 
     if(window->window == NULL)
     {
-        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        PLOG_ERROR(pigment, "SDL_CreateWindow: %s", SDL_GetError());
         goto ERROR;
     }
 
@@ -100,7 +100,7 @@ PWindow* create_window(PWindowInfo* window_info)
     return window;
 
 ERROR:
-    fprintf(stderr, "Failed to create window!\n");
+    PLOG_ERROR(pigment, "Failed to create window!");
     free(window);
     return NULL;
 }

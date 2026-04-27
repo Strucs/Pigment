@@ -19,6 +19,6 @@
 
 #include "defines.h"
 
-int create_depth_resources(PSwapchain* swapchain, PDevice* device);
+int create_depth_resources(Pigment* pigment, PSwapchain* swapchain);
 
 #endif

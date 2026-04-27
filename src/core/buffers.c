@@ -16,19 +16,20 @@
 
 #include "buffers.h"
 #include "structs.h"
+#include "log_internal.h"
 
-int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
-uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter, VkMemoryPropertyFlags properties);
-void copy_buffer(VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool, PDevice* device);
-int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, PDevice* device, VkCommandPool command_pool);
-int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, PDevice* device, VkCommandPool command_pool);
-VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice* device);
-void end_single_usage_commands(VkCommandBuffer* command_buffer, VkCommandPool command_pool, PDevice* device);
+int create_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+uint32_t find_memory_type(Pigment* pigment, uint32_t type_filter, VkMemoryPropertyFlags properties);
+void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool);
+int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool);
+int create_index_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool);
+VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
+void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 
-uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter, VkMemoryPropertyFlags properties)
+uint32_t find_memory_type(Pigment* pigment, uint32_t type_filter, VkMemoryPropertyFlags properties)
 {
     VkPhysicalDeviceMemoryProperties memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+    vkGetPhysicalDeviceMemoryProperties(pigment->device->physical_device, &memory_properties);
 
     for(uint32_t i = 0; i < memory_properties.memoryTypeCount; i++)
     {
@@ -38,16 +39,17 @@ uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter
         }
     }
 
-    fprintf(stderr, "Failed to find suitable memory type!\n");
+    PLOG_ERROR(pigment, "Failed to find suitable memory type!");
     return 0;
 }
 
-int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, PDevice* device, VkCommandPool command_pool)
+int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool)
 {
+    PDevice* device                      = pigment->device;
     VkBuffer staging_buffer              = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
 
-    if(create_buffer(&staging_buffer, &staging_buffer_memory, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
+    if(create_buffer(pigment, &staging_buffer, &staging_buffer_memory, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -57,27 +59,19 @@ int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddre
     VkResult result;
     if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, size, 0, &mapped)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to map vertex staging buffer memory! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to map vertex staging buffer memory! (result: %d)", result);
         goto ERROR;
     }
 
     memcpy(mapped, data, (size_t) size);
     vkUnmapMemory(device->logical_device, staging_buffer_memory);
 
-    if(create_buffer(
-        buffer,
-        memory,
-        size,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-        VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        device) != PIGMENT_SUCCESS)
+    if(create_buffer(pigment, buffer, memory, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    copy_buffer(staging_buffer, *buffer, size, command_pool, device);
+    copy_buffer(pigment, staging_buffer, *buffer, size, command_pool);
 
     vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
     vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
@@ -97,14 +91,15 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, PDevice* device, VkCommandPool command_pool)
+int create_index_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool)
 {
+    PDevice* device          = pigment->device;
     VkDeviceSize buffer_size = sizeof(*indices) * index_count;
 
     VkBuffer staging_buffer              = VK_NULL_HANDLE;
     VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
 
-    if(create_buffer(&staging_buffer, &staging_buffer_memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
+    if(create_buffer(pigment, &staging_buffer, &staging_buffer_memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -114,19 +109,19 @@ int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t
     VkResult result;
     if((result = vkMapMemory(device->logical_device, staging_buffer_memory, 0, buffer_size, 0, &mapped)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to map index staging buffer memory! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to map index staging buffer memory! (result: %d)", result);
         goto ERROR;
     }
 
     memcpy(mapped, indices, (size_t) buffer_size);
     vkUnmapMemory(device->logical_device, staging_buffer_memory);
 
-    if(create_buffer(buffer, memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, device) != PIGMENT_SUCCESS)
+    if(create_buffer(pigment, buffer, memory, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    copy_buffer(staging_buffer, *buffer, buffer_size, command_pool, device);
+    copy_buffer(pigment, staging_buffer, *buffer, buffer_size, command_pool);
 
     vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
     vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
@@ -139,14 +134,14 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-PUniformBuffers* create_uniform_buffers(PDevice* device, uint32_t uniform_buffers_count)
+PUniformBuffers* create_uniform_buffers(Pigment* pigment, uint32_t uniform_buffers_count)
 {
+    PDevice* device          = pigment->device;
     VkDeviceSize buffer_size = sizeof(UniformBufferObject);
 
     PUniformBuffers* buffers = calloc(1, sizeof(*buffers));
     if(buffers == NULL)
     {
-        perror("calloc buffers");
         return NULL;
     }
 
@@ -174,7 +169,7 @@ PUniformBuffers* create_uniform_buffers(PDevice* device, uint32_t uniform_buffer
 
     for(size_t i = 0; i < uniform_buffers_count; i++)
     {
-        if(create_buffer(&buffers->uniform_buffers[i], &buffers->uniform_buffers_memory[i], buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, device) != PIGMENT_SUCCESS)
+        if(create_buffer(pigment, &buffers->uniform_buffers[i], &buffers->uniform_buffers_memory[i], buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
         {
             goto ERROR;
         }
@@ -183,7 +178,7 @@ PUniformBuffers* create_uniform_buffers(PDevice* device, uint32_t uniform_buffer
 
         if(result != VK_SUCCESS)
         {
-            fprintf(stderr, "Failed to map uniform buffer memory! (result: %d)\n", result);
+            PLOG_ERROR(pigment, "Failed to map uniform buffer memory! (result: %d)", result);
             goto ERROR;
         }
     }
@@ -215,12 +210,12 @@ ERROR:
         free(buffers);
     }
 
-    perror("create_uniform_buffers");
     return NULL;
 }
 
-void destroy_uniform_buffers(PUniformBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_count)
+void destroy_uniform_buffers(Pigment* pigment, PUniformBuffers* buffers, const uint32_t uniform_buffers_count)
 {
+    PDevice* device = pigment->device;
     if(buffers != NULL)
     {
         if(buffers->uniform_buffers != NULL)
@@ -249,8 +244,10 @@ void destroy_uniform_buffers(PUniformBuffers* buffers, PDevice* device, const ui
     }
 }
 
-int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device)
+int create_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
 {
+    PDevice* device = pigment->device;
+
     VkBufferCreateInfo buffer_create_info = {
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size        = size,
@@ -261,7 +258,7 @@ int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize 
     VkResult result;
     if((result = vkCreateBuffer(device->logical_device, &buffer_create_info, NULL, buffer)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create buffer! (result: %d)", result);
         goto ERROR;
     }
 
@@ -276,19 +273,19 @@ int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize 
     VkMemoryAllocateInfo allocate_info = {
         .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize  = memory_requirements.size,
-        .memoryTypeIndex = find_memory_type(device->physical_device, memory_requirements.memoryTypeBits, properties),
+        .memoryTypeIndex = find_memory_type(pigment, memory_requirements.memoryTypeBits, properties),
         .pNext           = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) ? &flags_info : NULL
     };
 
     if((result = vkAllocateMemory(device->logical_device, &allocate_info, NULL, buffer_memory)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate buffer memory! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to allocate buffer memory! (result: %d)", result);
         goto ERROR;
     }
 
     if((result = vkBindBufferMemory(device->logical_device, *buffer, *buffer_memory, 0)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to bind buffer memory! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to bind buffer memory! (result: %d)", result);
         goto ERROR;
     }
 
@@ -300,18 +297,19 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-void copy_buffer(VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool, PDevice* device)
+void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool)
 {
-    VkCommandBuffer command_buffer = start_single_usage_commands(command_pool, device);
+    VkCommandBuffer command_buffer = start_single_usage_commands(pigment, command_pool);
 
     VkBufferCopy copy_region = {.size = size};
     vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
 
-    end_single_usage_commands(&command_buffer, command_pool, device);
+    end_single_usage_commands(pigment, &command_buffer, command_pool);
 }
 
-VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice* device)
+VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool)
 {
+    PDevice* device                        = pigment->device;
     VkCommandBufferAllocateInfo alloc_info = {
         .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -324,7 +322,7 @@ VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice*
     VkResult result;
     if((result = vkAllocateCommandBuffers(device->logical_device, &alloc_info, &command_buffer)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate single usage command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to allocate single usage command buffer! (result: %d)", result);
         return VK_NULL_HANDLE;
     }
 
@@ -335,7 +333,7 @@ VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice*
 
     if((result = vkBeginCommandBuffer(command_buffer, &begin_info)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to begin single usage command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to begin single usage command buffer! (result: %d)", result);
         vkFreeCommandBuffers(device->logical_device, command_pool, 1, &command_buffer);
         return VK_NULL_HANDLE;
     }
@@ -343,12 +341,13 @@ VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice*
     return command_buffer;
 }
 
-void end_single_usage_commands(VkCommandBuffer* command_buffer, VkCommandPool command_pool, PDevice* device)
+void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool)
 {
+    PDevice* device = pigment->device;
     VkResult result;
     if((result = vkEndCommandBuffer(*command_buffer)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to end single usage command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to end single usage command buffer! (result: %d)", result);
     }
 
     VkSubmitInfo submit_info = {
@@ -359,7 +358,7 @@ void end_single_usage_commands(VkCommandBuffer* command_buffer, VkCommandPool co
 
     if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to submit single usage command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to submit single usage command buffer! (result: %d)", result);
     }
 
     vkQueueWaitIdle(device->graphics_queue);

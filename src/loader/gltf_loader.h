@@ -57,7 +57,7 @@ typedef struct MeshAsset {
     uint32_t sampler_count;
 } MeshAsset;
 
-MeshAsset* load_gltf_mesh(const char* filepath);
+MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath);
 void free_mesh_asset(MeshAsset* mesh);
 
 void upload_mesh_textures(Pigment* pigment, MeshAsset* asset);

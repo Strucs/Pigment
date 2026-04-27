@@ -19,8 +19,8 @@
 
 #include "defines.h"
 
-PDevice* create_device(PInstance* instance, PSurface* surface);
-void destroy_device(PDevice* device);
-void device_wait_idle(PDevice* device);
+PDevice* create_device(Pigment* pigment, PSurface* surface);
+void destroy_device(Pigment* pigment);
+void device_wait_idle(Pigment* pigment);
 
 #endif

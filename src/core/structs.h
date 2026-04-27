@@ -19,7 +19,7 @@
 
 #include "defines.h"
 
-#include <vulkan/vulkan.h>
+#include <volk.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
@@ -27,17 +27,75 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdatomic.h>
+
+#ifndef _WIN32
+    #include <pthread.h>
+
+    typedef pthread_rwlock_t pigment_rwlock_t;
+
+    #define pigment_rwlock_init(l) pthread_rwlock_init((l), NULL)
+    #define pigment_rwlock_destroy(l) pthread_rwlock_destroy(l)
+    #define pigment_rwlock_rdlock(l) pthread_rwlock_rdlock(l)
+    #define pigment_rwlock_rdunlock(l) pthread_rwlock_unlock(l)
+    #define pigment_rwlock_wrlock(l) pthread_rwlock_wrlock(l)
+    #define pigment_rwlock_wrunlock(l) pthread_rwlock_unlock(l)
+
+#else
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOGDI
+        #define NOGDI
+    #endif
+
+    #include <windows.h>
+
+    #ifdef near
+        #undef near
+    #endif
+    #ifdef far
+        #undef far
+    #endif
+
+    typedef SRWLOCK pigment_rwlock_t;
+
+    #define pigment_rwlock_init(l) (InitializeSRWLock(l), 0)
+    #define pigment_rwlock_destroy(l) ((void)(l))
+    #define pigment_rwlock_rdlock(l) AcquireSRWLockShared(l)
+    #define pigment_rwlock_rdunlock(l) ReleaseSRWLockShared(l)
+    #define pigment_rwlock_wrlock(l) AcquireSRWLockExclusive(l)
+    #define pigment_rwlock_wrunlock(l) ReleaseSRWLockExclusive(l)
+
+#endif
 
 typedef struct {
     bool has_value;
     uint32_t value;
 } optional_uint32;
 
+typedef struct PLogState {
+    pigment_rwlock_t lock;
+    PigmentLogger* loggers;
+    uint32_t logger_count;
+    _Atomic uint32_t active_severities;
+    _Atomic uint32_t active_types;
+} PLogState;
+
+typedef struct PRuntimeConfig {
+    uint32_t max_frames_in_flight;
+    uint32_t max_images;
+    uint32_t max_samplers;
+    bool validation_enabled;
+    bool best_practices_enabled;
+} PRuntimeConfig;
+
 struct Pigment {
     PWindow** windows;
     PWindowRenderer** renderers;
     uint32_t window_count;
     uint32_t window_capacity;
+
     PInstance* instance;
     PDevice* device;
     PDescriptor* descriptor;
@@ -47,9 +105,9 @@ struct Pigment {
     PUniformBuffers* buffers;
     PPipelineList* pipelines;
     PLayoutList* layouts;
-    uint32_t max_frames_in_flight;
-    uint32_t max_images;
-    uint32_t max_samplers;
+
+    PRuntimeConfig config;
+    PLogState* log;
 };
 
 struct PWindow {

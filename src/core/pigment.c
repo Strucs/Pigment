@@ -17,6 +17,7 @@
 #include "pigment.h"
 
 #include "internal.h"
+#include "log_internal.h"
 #include "window.h"
 #include "instance.h"
 #include "device.h"
@@ -41,9 +42,25 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         return NULL;
     }
 
-    pigment->max_frames_in_flight = (config && config->max_frames_in_flight) ? config->max_frames_in_flight : PIGMENT_DEFAULT_MAX_FRAMES_IN_FLIGHT;
-    pigment->max_images           = (config && config->max_images) ? config->max_images : PIGMENT_DEFAULT_MAX_IMAGES;
-    pigment->max_samplers         = (config && config->max_samplers) ? config->max_samplers : PIGMENT_DEFAULT_MAX_SAMPLERS;
+    if(pigment_log_init(pigment) != PIGMENT_SUCCESS)
+    {
+        free(pigment);
+        return NULL;
+    }
+
+    if(config != NULL && config->loggers != NULL)
+    {
+        for(uint32_t i = 0; i < config->logger_count; i++)
+        {
+            pigment_logger_create(pigment, &config->loggers[i]);
+        }
+    }
+
+    pigment->config.max_frames_in_flight   = (config && config->max_frames_in_flight) ? config->max_frames_in_flight : PIGMENT_DEFAULT_MAX_FRAMES_IN_FLIGHT;
+    pigment->config.max_images             = (config && config->max_images) ? config->max_images : PIGMENT_DEFAULT_MAX_IMAGES;
+    pigment->config.max_samplers           = (config && config->max_samplers) ? config->max_samplers : PIGMENT_DEFAULT_MAX_SAMPLERS;
+    pigment->config.validation_enabled     = config && config->enable_validation;
+    pigment->config.best_practices_enabled = config && config->enable_best_practices;
 
     pigment->window_capacity = PIGMENT_DEFAULT_WINDOW_CAPACITY;
     pigment->window_count    = 0;
@@ -54,36 +71,40 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
 
-    pigment->windows[0] = create_window(window_info);
-    if(pigment->windows[0] == NULL)
+    PWindow* window = create_window(pigment, window_info);
+    if(window == NULL)
     {
         goto ERROR;
     }
-    pigment->renderers[0] = create_window_renderer(window_info);
-    if(pigment->renderers[0] == NULL)
+    pigment->windows[0] = window;
+
+    PWindowRenderer* renderer = create_window_renderer(window_info);
+    if(renderer == NULL)
     {
         goto ERROR;
     }
+    pigment->renderers[0] = renderer;
+
     pigment->window_count = 1;
 
-    pigment->instance = create_instance(app_info);
+    pigment->instance = create_instance(pigment, app_info);
     if(pigment->instance == NULL)
     {
         goto ERROR;
     }
-    setup_debug_messenger(pigment->instance);
+    setup_debug_messenger(pigment);
 
-    pigment->renderers[0]->surface = create_surface(pigment->instance, pigment->windows[0]);
+    pigment->renderers[0]->surface = create_surface(pigment, pigment->windows[0]);
     if(pigment->renderers[0]->surface == NULL)
     {
         goto ERROR;
     }
-    pigment->device = create_device(pigment->instance, pigment->renderers[0]->surface);
+    pigment->device = create_device(pigment, pigment->renderers[0]->surface);
     if(pigment->device == NULL)
     {
         goto ERROR;
     }
-    pigment->command_pools = create_command_pools(pigment->device);
+    pigment->command_pools = create_command_pools(pigment);
     if(pigment->command_pools == NULL)
     {
         goto ERROR;
@@ -93,25 +114,25 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     {
         goto ERROR;
     }
-    pigment->samplers = create_samplers(pigment->max_samplers, pigment->device);
+    pigment->samplers = create_samplers(pigment, pigment->config.max_samplers);
     if(pigment->samplers == NULL)
     {
         goto ERROR;
     }
 
-    add_default_image(pigment->images, pigment_default_pool(pigment), pigment->device);
+    add_default_image(pigment, pigment->images, pigment_default_pool(pigment));
 
-    pigment->descriptor = create_descriptor(pigment->max_samplers, pigment->max_images, pigment->device);
+    pigment->descriptor = create_descriptor(pigment, pigment->config.max_samplers, pigment->config.max_images);
     if(pigment->descriptor == NULL)
     {
         goto ERROR;
     }
-    pigment->buffers = create_uniform_buffers(pigment->device, pigment->max_frames_in_flight);
+    pigment->buffers = create_uniform_buffers(pigment, pigment->config.max_frames_in_flight);
     if(pigment->buffers == NULL)
     {
         goto ERROR;
     }
-    update_descriptor(pigment->descriptor, pigment->buffers, pigment->images, pigment->samplers, pigment->max_samplers, pigment->max_images, pigment->device, pigment->max_frames_in_flight);
+    update_descriptor(pigment, pigment->descriptor, pigment->buffers, pigment->images, pigment->samplers, pigment->config.max_samplers, pigment->config.max_images, pigment->config.max_frames_in_flight);
 
     pigment->layouts = create_layout_list();
     if(pigment->layouts == NULL)
@@ -145,33 +166,33 @@ void destroy_pigment(Pigment* pigment)
         return;
     }
 
-    device_wait_idle(pigment->device);
+    device_wait_idle(pigment);
     for(uint32_t i = 0; i < pigment->window_count; i++)
     {
         if(pigment->renderers && pigment->renderers[i] != NULL)
         {
-            destroy_sync(pigment->renderers[i]->sync, pigment->device, pigment->renderers[i]->swapchain, pigment->max_frames_in_flight);
-            destroy_command_buffers(pigment->renderers[i]->command_buffers, pigment->device, pigment->max_frames_in_flight);
-            destroy_swapchain(pigment->renderers[i]->swapchain, pigment->device);
+            destroy_sync(pigment, pigment->renderers[i]->sync, pigment->renderers[i]->swapchain, pigment->config.max_frames_in_flight);
+            destroy_command_buffers(pigment, pigment->renderers[i]->command_buffers, pigment->config.max_frames_in_flight);
+            destroy_swapchain(pigment, pigment->renderers[i]->swapchain);
         }
     }
-    destroy_pipeline_list(pigment->pipelines, pigment->layouts, pigment->device);
-    destroy_layout_list(pigment->layouts, pigment->device);
-    destroy_uniform_buffers(pigment->buffers, pigment->device, pigment->max_frames_in_flight);
-    destroy_descriptor(pigment->descriptor, pigment->device);
-    destroy_images(pigment->images, pigment->device);
-    destroy_samplers(pigment->samplers, pigment->device);
-    destroy_command_pools(pigment->command_pools, pigment->device);
-    destroy_device(pigment->device);
+    destroy_pipeline_list(pigment, pigment->pipelines, pigment->layouts);
+    destroy_layout_list(pigment, pigment->layouts);
+    destroy_uniform_buffers(pigment, pigment->buffers, pigment->config.max_frames_in_flight);
+    destroy_descriptor(pigment, pigment->descriptor);
+    destroy_images(pigment, pigment->images);
+    destroy_samplers(pigment, pigment->samplers);
+    destroy_command_pools(pigment, pigment->command_pools);
+    destroy_device(pigment);
     for(uint32_t i = 0; i < pigment->window_count; i++)
     {
         if(pigment->renderers && pigment->renderers[i] != NULL)
         {
-            destroy_surface(pigment->renderers[i]->surface, pigment->instance);
+            destroy_surface(pigment, pigment->renderers[i]->surface);
             free(pigment->renderers[i]);
         }
     }
-    destroy_instance(pigment->instance);
+    destroy_instance(pigment);
     for(uint32_t i = 0; i < pigment->window_count; i++)
     {
         if(pigment->windows && pigment->windows[i] != NULL)
@@ -184,7 +205,9 @@ void destroy_pigment(Pigment* pigment)
 
     SDL_Quit();
 
+    pigment_log_destroy(pigment);
     free(pigment);
+    pigment = NULL;
 }
 
 void pigment_wait_idle(Pigment* pigment)
@@ -194,7 +217,7 @@ void pigment_wait_idle(Pigment* pigment)
         return;
     }
 
-    device_wait_idle(pigment->device);
+    device_wait_idle(pigment);
 }
 
 void pigment_show_window(Pigment* pigment, uint32_t window_index)
@@ -256,7 +279,7 @@ bool pigment_begin_frame(Pigment* pigment, uint32_t window_index, PCamera* camer
         return false;
     }
 
-    return begin_frame(pigment->buffers, pigment->renderers[window_index], pigment->device, camera, &pigment->renderers[window_index]->current_image_index);
+    return begin_frame(pigment, pigment->buffers, pigment->renderers[window_index], camera, &pigment->renderers[window_index]->current_image_index);
 }
 
 void pigment_end_frame(Pigment* pigment, uint32_t window_index)
@@ -266,7 +289,7 @@ void pigment_end_frame(Pigment* pigment, uint32_t window_index)
         return;
     }
 
-    end_frame(pigment->renderers[window_index], pigment->device, pigment->renderers[window_index]->current_image_index, pigment->max_frames_in_flight);
+    end_frame(pigment, pigment->renderers[window_index], pigment->renderers[window_index]->current_image_index, pigment->config.max_frames_in_flight);
 }
 
 void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index)
@@ -360,22 +383,22 @@ static int init_window_renderer_resources(Pigment* pigment, uint32_t window_inde
     uint32_t framebuffer_width = 0, framebuffer_height = 0;
     get_framebuffer_size(window, &framebuffer_width, &framebuffer_height);
 
-    renderer->swapchain = create_swapchain(framebuffer_width, framebuffer_height, window_info->preferred_present_mode, renderer->transparent_framebuffer, renderer->surface, pigment->device);
+    renderer->swapchain = create_swapchain(pigment, framebuffer_width, framebuffer_height, window_info->preferred_present_mode, renderer->transparent_framebuffer, renderer->surface);
     if(renderer->swapchain == NULL)
     {
         return PIGMENT_ERROR;
     }
 
-    create_image_views(renderer->swapchain, pigment->device);
-    create_depth_resources(renderer->swapchain, pigment->device);
+    create_image_views(pigment, renderer->swapchain);
+    create_depth_resources(pigment, renderer->swapchain);
 
-    renderer->command_buffers = create_command_buffers(pigment_default_pool(pigment), pigment->device, pigment->max_frames_in_flight);
+    renderer->command_buffers = create_command_buffers(pigment, pigment_default_pool(pigment), pigment->config.max_frames_in_flight);
     if(renderer->command_buffers == NULL)
     {
         return PIGMENT_ERROR;
     }
 
-    renderer->sync = create_sync(pigment->device, pigment->max_frames_in_flight, renderer->swapchain->image_count);
+    renderer->sync = create_sync(pigment, pigment->config.max_frames_in_flight, renderer->swapchain->image_count);
     if(renderer->sync == NULL)
     {
         return PIGMENT_ERROR;

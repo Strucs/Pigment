@@ -17,12 +17,14 @@
 #include "descriptor.h"
 
 #include "structs.h"
+#include "log_internal.h"
 
-static int create_descriptor_pool(PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, PDevice* device, uint32_t descriptor_count);
-static int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_images, PDevice* device, uint32_t descriptor_count);
+static int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
+static int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count);
 
-PDescriptor* create_descriptor(uint32_t max_samplers, uint32_t max_images, PDevice* device)
+PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images)
 {
+    PDevice* device         = pigment->device;
     PDescriptor* descriptor = malloc(sizeof(*descriptor));
     if(descriptor == NULL)
     {
@@ -38,11 +40,11 @@ PDescriptor* create_descriptor(uint32_t max_samplers, uint32_t max_images, PDevi
     };
 
     VkDescriptorSetLayoutBinding sampler_set_layout_binding = {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-        .descriptorCount = max_samplers,
+        .binding            = 1,
+        .descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLER,
+        .descriptorCount    = max_samplers,
         .pImmutableSamplers = NULL,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
 
     VkDescriptorSetLayoutBinding image_set_layout_binding = {
@@ -59,7 +61,7 @@ PDescriptor* create_descriptor(uint32_t max_samplers, uint32_t max_images, PDevi
         image_set_layout_binding
     };
 
-    VkDescriptorBindingFlagsEXT descriptor_binding_flags[]       = {
+    VkDescriptorBindingFlagsEXT descriptor_binding_flags[] = {
         0,
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
@@ -81,25 +83,24 @@ PDescriptor* create_descriptor(uint32_t max_samplers, uint32_t max_images, PDevi
     VkResult result;
     if((result = vkCreateDescriptorSetLayout(device->logical_device, &layout_info, NULL, &descriptor->descriptor_set_layout)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create descriptor set layout! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create descriptor set layout! (result: %d)", result);
         goto ERROR;
     }
 
     return descriptor;
 
 ERROR:
-    perror("create_descriptor");
     free(descriptor);
     return NULL;
 }
 
-int update_descriptor(PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, PDevice* device, uint32_t descriptor_count)
+int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
 {
-    if(create_descriptor_pool(descriptor, max_samplers, max_images, device, descriptor_count))
+    if(create_descriptor_pool(pigment, descriptor, max_samplers, max_images, descriptor_count))
     {
         goto ERROR;
     }
-    if(create_descriptor_sets(descriptor, buffers, images, samplers, max_images, device, descriptor_count))
+    if(create_descriptor_sets(pigment, descriptor, buffers, images, samplers, max_images, descriptor_count))
     {
         goto ERROR;
     }
@@ -107,16 +108,16 @@ int update_descriptor(PDescriptor* descriptor, PUniformBuffers* buffers, PImageL
     return PIGMENT_SUCCESS;
 
 ERROR:
-    perror("update_descriptor");
     return PIGMENT_ERROR;
 }
 
-void destroy_descriptor(PDescriptor* descriptor, PDevice* device)
+void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor)
 {
     if(descriptor == NULL)
     {
         return;
     }
+    PDevice* device = pigment->device;
     vkDestroyDescriptorPool(device->logical_device, descriptor->descriptor_pool, NULL);
     vkDestroyDescriptorSetLayout(device->logical_device, descriptor->descriptor_set_layout, NULL);
 }
@@ -130,8 +131,9 @@ VkDescriptorPoolSize create_descriptor_pool_size(VkDescriptorType type, uint32_t
     return pool_size;
 }
 
-int create_descriptor_pool(PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, PDevice* device, uint32_t descriptor_count)
+int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
 {
+    PDevice* device                   = pigment->device;
     VkDescriptorPoolSize pool_sizes[] = {
         create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptor_count),
         create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_SAMPLER, descriptor_count * max_samplers),
@@ -148,18 +150,19 @@ int create_descriptor_pool(PDescriptor* descriptor, uint32_t max_samplers, uint3
     VkResult result;
     if((result = vkCreateDescriptorPool(device->logical_device, &pool_info, NULL, &(descriptor->descriptor_pool))) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create descriptor pool! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create descriptor pool! (result: %d)", result);
         return PIGMENT_ERROR;
     }
 
     return PIGMENT_SUCCESS;
 }
 
-int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_images, PDevice* device, uint32_t descriptor_count)
+int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count)
 {
-    VkDescriptorSetLayout* layouts = NULL;
-    uint32_t* variable_desciptor_counts = NULL;
-    VkDescriptorImageInfo* image_infos = NULL;
+    PDevice* device                      = pigment->device;
+    VkDescriptorSetLayout* layouts       = NULL;
+    uint32_t* variable_desciptor_counts  = NULL;
+    VkDescriptorImageInfo* image_infos   = NULL;
     VkDescriptorImageInfo* sampler_infos = NULL;
 
     layouts = malloc(descriptor_count * sizeof(*layouts));
@@ -176,7 +179,7 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
 
     for(size_t i = 0; i < descriptor_count; i++)
     {
-        layouts[i] = descriptor->descriptor_set_layout;
+        layouts[i]                   = descriptor->descriptor_set_layout;
         variable_desciptor_counts[i] = max_images;
     }
 
@@ -215,13 +218,12 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
     VkResult result;
     if((result = vkAllocateDescriptorSets(device->logical_device, &alloc_info, descriptor->descriptor_sets)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to allocate descriptor sets! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to allocate descriptor sets! (result: %d)", result);
         goto ERROR;
     }
 
     for(size_t i = 0; i < descriptor_count; i++)
     {
-
         VkWriteDescriptorSet descriptor_set_writes[3] = {0};
 
         VkDescriptorBufferInfo buffer_info = {
@@ -247,13 +249,13 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
             sampler_infos[s].imageLayout = 0;
         }
 
-        descriptor_set_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[1].dstSet = descriptor->descriptor_sets[i];
-        descriptor_set_writes[1].dstBinding = 1;
+        descriptor_set_writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set_writes[1].dstSet          = descriptor->descriptor_sets[i];
+        descriptor_set_writes[1].dstBinding      = 1;
         descriptor_set_writes[1].dstArrayElement = 0;
-        descriptor_set_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        descriptor_set_writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
         descriptor_set_writes[1].descriptorCount = samplers->count;
-        descriptor_set_writes[1].pImageInfo = sampler_infos;
+        descriptor_set_writes[1].pImageInfo      = sampler_infos;
 
         for(size_t j = 0; j < images->count; j++)
         {
@@ -279,7 +281,6 @@ int create_descriptor_sets(PDescriptor* descriptor, PUniformBuffers* buffers, PI
     return PIGMENT_SUCCESS;
 
 ERROR:
-    perror("create_descriptor_sets");
     free(sampler_infos);
     free(image_infos);
     free(descriptor->descriptor_sets);

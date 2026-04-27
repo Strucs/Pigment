@@ -16,13 +16,15 @@
 
 #include "synchronization.h"
 #include "structs.h"
+#include "log_internal.h"
 
-static VkSemaphore create_semaphore(VkDevice device);
-static VkFence create_fence(VkDevice device);
+static VkSemaphore create_semaphore(Pigment* pigment);
+static VkFence create_fence(Pigment* pigment);
 
-PSync* create_sync(PDevice* device, const uint32_t max_frame, const uint32_t swapchain_image_count)
+PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t swapchain_image_count)
 {
-    PSync* sync = NULL;
+    PDevice* device = pigment->device;
+    PSync* sync     = NULL;
 
     sync = calloc(1, sizeof(*sync));
     if(sync == NULL)
@@ -50,23 +52,23 @@ PSync* create_sync(PDevice* device, const uint32_t max_frame, const uint32_t swa
 
     for(size_t i = 0; i < max_frame; i++)
     {
-        sync->image_available_semaphores[i] = create_semaphore(device->logical_device);
-        sync->in_flight_fences[i]           = create_fence(device->logical_device);
+        sync->image_available_semaphores[i] = create_semaphore(pigment);
+        sync->in_flight_fences[i]           = create_fence(pigment);
 
         if(sync->image_available_semaphores[i] == NULL || sync->in_flight_fences[i] == NULL)
         {
-            fprintf(stderr, "Failed to create synchronization objects\n");
+            PLOG_ERROR(pigment, "Failed to create synchronization objects");
             goto ERROR;
         }
     }
 
     for(size_t i = 0; i < swapchain_image_count; i++)
     {
-        sync->render_finished_semaphores[i] = create_semaphore(device->logical_device);
+        sync->render_finished_semaphores[i] = create_semaphore(pigment);
 
         if(sync->render_finished_semaphores[i] == NULL)
         {
-            fprintf(stderr, "Failed to create synchronization objects\n");
+            PLOG_ERROR(pigment, "Failed to create synchronization objects");
             goto ERROR;
         }
     }
@@ -74,7 +76,6 @@ PSync* create_sync(PDevice* device, const uint32_t max_frame, const uint32_t swa
     return sync;
 
 ERROR:
-    perror("create_sync");
     if(sync != NULL)
     {
         if(sync->image_available_semaphores != NULL)
@@ -106,12 +107,13 @@ ERROR:
     return NULL;
 }
 
-void destroy_sync(PSync* sync, PDevice* device, PSwapchain* swapchain, const uint32_t max_frame)
+void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const uint32_t max_frame)
 {
     if(sync == NULL || swapchain == NULL)
     {
         return;
     }
+    PDevice* device = pigment->device;
 
     for(size_t i = 0; i < max_frame; i++)
     {
@@ -130,9 +132,10 @@ void destroy_sync(PSync* sync, PDevice* device, PSwapchain* swapchain, const uin
     free(sync);
 }
 
-int recreate_image_available_semaphore(PSync* sync, uint32_t index, PDevice* device)
+int recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t index)
 {
-    VkSemaphore fresh = create_semaphore(device->logical_device);
+    PDevice* device   = pigment->device;
+    VkSemaphore fresh = create_semaphore(pigment);
     if(fresh == NULL)
     {
         return PIGMENT_ERROR;
@@ -144,8 +147,9 @@ int recreate_image_available_semaphore(PSync* sync, uint32_t index, PDevice* dev
     return PIGMENT_SUCCESS;
 }
 
-int resize_render_finished_semaphores(PSync* sync, uint32_t old_count, uint32_t new_count, PDevice* device)
+int resize_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
 {
+    PDevice* device             = pigment->device;
     VkSemaphore* new_semaphores = calloc(new_count, sizeof(*new_semaphores));
     if(new_semaphores == NULL)
     {
@@ -154,7 +158,7 @@ int resize_render_finished_semaphores(PSync* sync, uint32_t old_count, uint32_t 
 
     for(uint32_t i = 0; i < new_count; i++)
     {
-        new_semaphores[i] = create_semaphore(device->logical_device);
+        new_semaphores[i] = create_semaphore(pigment);
         if(new_semaphores[i] == NULL)
         {
             goto ERROR;
@@ -172,7 +176,7 @@ int resize_render_finished_semaphores(PSync* sync, uint32_t old_count, uint32_t 
     return PIGMENT_SUCCESS;
 
 ERROR:
-    fprintf(stderr, "Failed to resize render_finished_semaphores, keeping previous ones\n");
+    PLOG_ERROR(pigment, "Failed to resize render_finished_semaphores, keeping previous ones");
     if(new_semaphores == NULL)
     {
         return PIGMENT_ERROR;
@@ -190,23 +194,23 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-static VkSemaphore create_semaphore(VkDevice device)
+static VkSemaphore create_semaphore(Pigment* pigment)
 {
     VkSemaphore semaphore;
 
     VkSemaphoreCreateInfo semaphore_create_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
 
     VkResult result;
-    if((result = vkCreateSemaphore(device, &semaphore_create_info, NULL, &semaphore)) != VK_SUCCESS)
+    if((result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, NULL, &semaphore)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create semaphore (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create semaphore (result: %d)", result);
         return NULL;
     }
 
     return semaphore;
 }
 
-static VkFence create_fence(VkDevice device)
+static VkFence create_fence(Pigment* pigment)
 {
     VkFence fence;
 
@@ -216,9 +220,9 @@ static VkFence create_fence(VkDevice device)
     };
 
     VkResult result;
-    if((result = vkCreateFence(device, &fence_create_info, NULL, &fence)) != VK_SUCCESS)
+    if((result = vkCreateFence(pigment->device->logical_device, &fence_create_info, NULL, &fence)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create fence (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create fence (result: %d)", result);
         return NULL;
     }
 

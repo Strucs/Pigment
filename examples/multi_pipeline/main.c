@@ -34,7 +34,21 @@ int main(void)
     PPipelineBuild* builds[2] = {NULL, NULL};
     int error_code            = 1;
 
-    pigment = init_pigment(&app_info, &window_info, NULL);
+    PigmentLoggerCreateInfo loggers[] = {
+        {
+            .severity_filter = PIGMENT_LOG_TRACE_BIT | PIGMENT_LOG_DEBUG_BIT | PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
+            .type_filter     = PIGMENT_LOG_TYPE_GENERAL_BIT | PIGMENT_LOG_TYPE_VALIDATION_BIT | PIGMENT_LOG_TYPE_PERFORMANCE_BIT,
+            .callback        = pigment_default_log_callback,
+            .user_data       = NULL,
+        },
+    };
+    PigmentConfig config = {
+        .loggers               = loggers,
+        .logger_count          = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation     = true,
+    };
+
+    pigment = init_pigment(&app_info, &window_info, &config);
     if(pigment == NULL)
     {
         fprintf(stderr, "Failed to initialize Pigment!\n");
@@ -56,8 +70,8 @@ int main(void)
     PFormat color_format      = pigment_get_color_format(renderer);
     PFormat depth_format      = pigment_get_depth_format(renderer);
 
-    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(&color_format, 1, depth_format);
-    PPipelineDesc desc_additive = default_graphic_pipeline_desc(&color_format, 1, depth_format);
+    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(pigment, &color_format, 1, depth_format);
+    PPipelineDesc desc_additive = default_graphic_pipeline_desc(pigment, &color_format, 1, depth_format);
 
     PBlendMode additive_blend      = P_BLEND_MODE_ADDITIVE;
     desc_additive.blend_modes      = &additive_blend;
@@ -85,7 +99,7 @@ int main(void)
 
     // SUZANNE (opaque)
 
-    asset = load_gltf_mesh(MODELS_DIR "/Suzanne.gltf");
+    asset = load_gltf_mesh(pigment, MODELS_DIR "/Suzanne.gltf");
     if(asset == NULL)
     {
         fprintf(stderr, "Failed to load Suzanne!\n");
@@ -119,7 +133,7 @@ int main(void)
 
     // CUBE (additive blend)
 
-    asset2 = load_gltf_mesh(MODELS_DIR "/BoxVertexColors.glb");
+    asset2 = load_gltf_mesh(pigment, MODELS_DIR "/BoxVertexColors.glb");
     if(asset2 == NULL)
     {
         fprintf(stderr, "Failed to load cube!\n");

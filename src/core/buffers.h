@@ -19,7 +19,7 @@
 
 #include "defines.h"
 
-PUniformBuffers* create_uniform_buffers(PDevice* device, uint32_t uniform_buffers_count);
-void destroy_uniform_buffers(PUniformBuffers* buffers, PDevice* device, const uint32_t uniform_buffers_count);
+PUniformBuffers* create_uniform_buffers(Pigment* pigment, uint32_t uniform_buffers_count);
+void destroy_uniform_buffers(Pigment* pigment, PUniformBuffers* buffers, const uint32_t uniform_buffers_count);
 
 #endif

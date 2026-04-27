@@ -33,19 +33,17 @@ PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t
     PMeshBuffers* mesh = calloc(1, sizeof(*mesh));
     if(mesh == NULL)
     {
-        perror("calloc");
         return NULL;
     }
 
-    PDevice* device    = pigment->device;
     VkCommandPool pool = command_pool->pool;
 
-    if(create_vertex_buffer(&mesh->vertex_buffer, &mesh->vertex_buffer_memory, &mesh->vertex_buffer_address, vertices, (VkDeviceSize) vertices_size, device, pool) != PIGMENT_SUCCESS)
+    if(create_vertex_buffer(pigment, &mesh->vertex_buffer, &mesh->vertex_buffer_memory, &mesh->vertex_buffer_address, vertices, (VkDeviceSize) vertices_size, pool) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    if(create_index_buffer(&mesh->index_buffer, &mesh->index_buffer_memory, indices, index_count, device, pool) != PIGMENT_SUCCESS)
+    if(create_index_buffer(pigment, &mesh->index_buffer, &mesh->index_buffer_memory, indices, index_count, pool) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }

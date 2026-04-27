@@ -15,13 +15,15 @@
  */
 
 #include "gltf_loader.h"
+#include "texture.h"
+#include "log_internal.h"
+
 #include <stdlib.h>
 #include <string.h>
 
 #include <cgltf.h>
 #include <stb_image.h>
 
-#include "texture.h"
 
 #define NO_MATERIAL UINT32_MAX
 #define MISSING_TEXTURE UINT32_MAX
@@ -378,7 +380,7 @@ static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
     return PIGMENT_SUCCESS;
 }
 
-MeshAsset* load_gltf_mesh(const char* filepath)
+MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
 {
     cgltf_options options = {0};
     cgltf_data* data      = NULL;
@@ -387,11 +389,13 @@ MeshAsset* load_gltf_mesh(const char* filepath)
 
     if(cgltf_parse_file(&options, filepath, &data) != cgltf_result_success)
     {
+        PLOG_ERROR(pigment, "Failed to parse glTF file: %s", filepath);
         return NULL;
     }
 
     if(cgltf_load_buffers(&options, data, filepath) != cgltf_result_success)
     {
+        PLOG_ERROR(pigment, "Failed to load glTF buffers: %s", filepath);
         goto FREE;
     }
 
@@ -473,7 +477,7 @@ MeshAsset* load_gltf_mesh(const char* filepath)
 
             if(pixels == NULL)
             {
-                fprintf(stderr, "Failed to load glTF image %zu (uri=%s)\n", i, img->uri ? img->uri : "(embedded)");
+                PLOG_WARN(pigment, "Failed to load glTF image %u (uri=%s)", (unsigned int) i, img->uri ? img->uri : "(embedded)");
                 continue;
             }
 

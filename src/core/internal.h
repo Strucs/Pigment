@@ -31,22 +31,22 @@ void destroy_support_details(SwapChainSupportDetails* details);
 // commands.c
 void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
 void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
-VkCommandBuffer start_single_usage_commands(VkCommandPool command_pool, PDevice* device);
-void end_single_usage_commands(VkCommandBuffer* command_buffer, VkCommandPool command_pool, PDevice* device);
+VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
+void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // buffers.c
-int create_buffer(VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
-int create_vertex_buffer(VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, PDevice* device, VkCommandPool command_pool);
-int create_index_buffer(VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, PDevice* device, VkCommandPool command_pool);
-uint32_t find_memory_type(VkPhysicalDevice physical_device, uint32_t type_filter, VkMemoryPropertyFlags properties);
+int create_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool);
+int create_index_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool);
+uint32_t find_memory_type(Pigment* pigment, uint32_t type_filter, VkMemoryPropertyFlags properties);
 
 // texture.c
-VkImageView create_image_view(VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, VkDevice device);
-int create_vk_image(VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, PDevice* device);
+VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels);
+int create_vk_image(Pigment* pigment, VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
 
 // depth.c
-void destroy_depth_resources(PSwapchain* swapchain, PDevice* device);
+void destroy_depth_resources(Pigment* pigment, PSwapchain* swapchain);
 
 // uniform.c
 void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera);

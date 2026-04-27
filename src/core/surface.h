@@ -20,12 +20,12 @@
 #include "defines.h"
 #include "depth.h"
 
-PSurface* create_surface(PInstance* instance, PWindow* window);
-void destroy_surface(PSurface* surface, PInstance* instance);
-PSwapchain* create_swapchain(uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface, PDevice* device);
-void destroy_swapchain(PSwapchain* swapchain, PDevice* device);
-int create_image_views(PSwapchain* swapchain, PDevice* device);
-int recreate_swapchain(PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PDevice* device);
+PSurface* create_surface(Pigment* pigment, PWindow* window);
+void destroy_surface(Pigment* pigment, PSurface* surface);
+PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface);
+void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
+int create_image_views(Pigment* pigment, PSwapchain* swapchain);
+int recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode);
 PFormat pigment_get_color_format(PWindowRenderer* renderer);
 PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 

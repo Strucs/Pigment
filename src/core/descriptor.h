@@ -19,9 +19,9 @@
 
 #include "defines.h"
 
-PDescriptor* create_descriptor(uint32_t max_samplers, uint32_t max_images, PDevice* device);
-int update_descriptor(PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, PDevice* device, uint32_t descriptor_count);
+PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images);
+int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
 
-void destroy_descriptor(PDescriptor* descriptor, PDevice* device);
+void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor);
 
 #endif

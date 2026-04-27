@@ -19,7 +19,7 @@
 
 #include "defines.h"
 
-PWindow* create_window(PWindowInfo* window_info);
+PWindow* create_window(Pigment* pigment, PWindowInfo* window_info);
 void destroy_window(PWindow* window);
 bool window_should_close(PWindow* window);
 void show_window(PWindow* window);

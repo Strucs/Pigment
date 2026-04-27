@@ -16,6 +16,7 @@
 
 #include "device.h"
 #include "internal.h"
+#include "log_internal.h"
 
 #include <vulkan/vulkan_core.h>
 #define QUEUE_FAMILY_NUM 2
@@ -27,8 +28,8 @@ static QueueFamilyIndices* init_indices(void);
 static bool queue_families_indices_completed(QueueFamilyIndices indices);
 static bool check_device_extensions(VkPhysicalDevice device, ExtensionList requiered_extensions);
 static bool is_suitable(VkPhysicalDevice device, VkSurfaceKHR surface, ExtensionList requiered_extensions);
-static int pick_physical_device(PDevice* device, PInstance* instance, PSurface* surface);
-static int create_logical_device(PDevice* device, PInstance* instance, PSurface* surface);
+static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface);
+static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface);
 
 static void append_set(uint32_t* set, uint32_t* idx, uint32_t element)
 {
@@ -101,12 +102,10 @@ static QueueFamilyIndices* init_indices(void)
     QueueFamilyIndices* indices = calloc(1, sizeof(*indices));
     if(indices == NULL)
     {
-        perror("init_indices");
         return NULL;
     }
     return indices;
 }
-
 
 static bool queue_families_indices_completed(QueueFamilyIndices indices)
 {
@@ -154,7 +153,6 @@ static bool check_device_extensions(VkPhysicalDevice device, ExtensionList requi
     return true;
 
 ERROR:
-    perror("check_device_extensions");
     free(available_extensions);
     return false;
 }
@@ -205,39 +203,32 @@ static bool is_suitable(VkPhysicalDevice device, VkSurfaceKHR surface, Extension
 
     vkGetPhysicalDeviceFeatures2(device, &available_features);
 
-    bool has_base_features       = available_features.features.samplerAnisotropy &&
-                                   available_features.features.shaderSampledImageArrayDynamicIndexing;
+    bool has_base_features = available_features.features.samplerAnisotropy && available_features.features.shaderSampledImageArrayDynamicIndexing;
 
-    bool has_descriptor_indexing = vk12_features.descriptorIndexing &&
-                                   vk12_features.shaderSampledImageArrayNonUniformIndexing &&
-                                   vk12_features.runtimeDescriptorArray &&
-                                   vk12_features.descriptorBindingVariableDescriptorCount &&
-                                   vk12_features.descriptorBindingPartiallyBound;
+    bool has_descriptor_indexing = vk12_features.descriptorIndexing && vk12_features.shaderSampledImageArrayNonUniformIndexing && vk12_features.runtimeDescriptorArray && vk12_features.descriptorBindingVariableDescriptorCount && vk12_features.descriptorBindingPartiallyBound;
 
-    bool has_bda                 = vk12_features.bufferDeviceAddress;
+    bool has_bda = vk12_features.bufferDeviceAddress;
 
-    bool has_dynamic_rendering   = vk13_features.dynamicRendering;
-    bool has_sync2               = vk13_features.synchronization2;
+    bool has_dynamic_rendering = vk13_features.dynamicRendering;
+    bool has_sync2             = vk13_features.synchronization2;
 
-    return is_completed && extensions_supported && suitable_swap_chain &&
-           has_base_features && has_descriptor_indexing && has_bda && has_dynamic_rendering && has_sync2;
+    return is_completed && extensions_supported && suitable_swap_chain && has_base_features && has_descriptor_indexing && has_bda && has_dynamic_rendering && has_sync2;
 
 ERROR:
-    perror("is_suitable");
     free(indices);
     return false;
 }
 
-static int pick_physical_device(PDevice* device, PInstance* instance, PSurface* surface)
+static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface)
 {
     VkPhysicalDevice* devices;
     uint32_t devices_count;
 
-    vkEnumeratePhysicalDevices(instance->vulkan_instance, &devices_count, NULL);
+    vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, NULL);
 
     if(devices_count == 0)
     {
-        fprintf(stderr, "Failed to find GPUs compatible with Vulkan\n");
+        PLOG_ERROR(pigment, "Failed to find GPUs compatible with Vulkan");
         goto ERROR;
     }
 
@@ -247,7 +238,7 @@ static int pick_physical_device(PDevice* device, PInstance* instance, PSurface* 
         goto ERROR;
     }
 
-    vkEnumeratePhysicalDevices(instance->vulkan_instance, &devices_count, devices);
+    vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, devices);
 
     for(size_t i = 0; i < devices_count; i++)
     {
@@ -262,14 +253,14 @@ static int pick_physical_device(PDevice* device, PInstance* instance, PSurface* 
 
     if(device->physical_device == VK_NULL_HANDLE)
     {
-        fprintf(stderr, "Failed to find a suitable GPU\n");
+        PLOG_ERROR(pigment, "Failed to find a suitable GPU");
         goto ERROR;
     }
 
     VkPhysicalDeviceProperties device_properties;
     vkGetPhysicalDeviceProperties(device->physical_device, &device_properties);
 
-    printf("\033[1;33mGPU picked : %s\033[0m\n", device_properties.deviceName);
+    PLOG_INFO(pigment, "GPU picked: %s", device_properties.deviceName);
 
     return PIGMENT_SUCCESS;
 
@@ -285,7 +276,7 @@ QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR su
     VkBool32 present_support;
 
     indices = init_indices();
-    if (indices == NULL)
+    if(indices == NULL)
     {
         goto ERROR;
     }
@@ -328,16 +319,16 @@ QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR su
     return indices;
 
 ERROR:
-    perror("find_queue_families");
     free(indices);
     return NULL;
 }
 
-static int create_logical_device(PDevice* device, PInstance* instance, PSurface* surface)
+static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface)
 {
-    QueueFamilyIndices* indices = NULL;
+    PInstance* instance                         = pigment->instance;
+    QueueFamilyIndices* indices                 = NULL;
     VkDeviceQueueCreateInfo* queue_create_infos = NULL;
-    QueueFamilySet* set = NULL;
+    QueueFamilySet* set                         = NULL;
 
     indices = find_queue_families(device->physical_device, surface->surface);
     if(indices == NULL)
@@ -392,12 +383,12 @@ static int create_logical_device(PDevice* device, PInstance* instance, PSurface*
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
-            .samplerAnisotropy                      = VK_TRUE,
-            .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
-            .fillModeNonSolid                       = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
-            .depthBounds                            = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
-        },
-        .pNext    = &vk13_features
+                     .samplerAnisotropy                      = VK_TRUE,
+                     .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+                     .fillModeNonSolid                       = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
+                     .depthBounds                            = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
+                     },
+        .pNext = &vk13_features
     };
 
     VkDeviceCreateInfo create_info = {
@@ -410,7 +401,7 @@ static int create_logical_device(PDevice* device, PInstance* instance, PSurface*
         .ppEnabledExtensionNames = device->extensions->names
     };
 
-    if(VLAYERS_ENABLED)
+    if(pigment->config.validation_enabled)
     {
         create_info.enabledLayerCount   = instance->layers->size;
         create_info.ppEnabledLayerNames = instance->layers->names;
@@ -422,9 +413,10 @@ static int create_logical_device(PDevice* device, PInstance* instance, PSurface*
 
     if(vkCreateDevice(device->physical_device, &create_info, NULL, &(device->logical_device)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create logical device\n");
+        PLOG_ERROR(pigment, "Failed to create logical device");
         goto ERROR;
     }
+    volkLoadDevice(device->logical_device);
 
     vkGetDeviceQueue(device->logical_device, indices->graphics_family.value, 0, &device->graphics_queue);
     vkGetDeviceQueue(device->logical_device, indices->present_family.value, 0, &device->present_queue);
@@ -445,7 +437,7 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-PDevice* create_device(PInstance* instance, PSurface* surface)
+PDevice* create_device(Pigment* pigment, PSurface* surface)
 {
     PDevice* device;
 
@@ -457,14 +449,9 @@ PDevice* create_device(PInstance* instance, PSurface* surface)
 
     const char* extensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_MAINTENANCE1_EXTENSION_NAME,
-        VK_KHR_MAINTENANCE3_EXTENSION_NAME,
-        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-        #ifdef __APPLE__
+#ifdef __APPLE__
         "VK_KHR_portability_subset"
-        #endif
+#endif
     };
 
     device->extensions = calloc(1, sizeof(*device->extensions));
@@ -482,12 +469,11 @@ PDevice* create_device(PInstance* instance, PSurface* surface)
 
     memcpy(device->extensions->names, extensions, device->extensions->size * sizeof(*extensions));
 
-    pick_physical_device(device, instance, surface);
-    create_logical_device(device, instance, surface);
+    pick_physical_device(pigment, device, surface);
+    create_logical_device(pigment, device, surface);
     return device;
 
 ERROR:
-    perror("create_device");
     if(device != NULL)
     {
         if(device->extensions != NULL)
@@ -500,8 +486,9 @@ ERROR:
     return NULL;
 }
 
-void destroy_device(PDevice* device)
+void destroy_device(Pigment* pigment)
 {
+    PDevice* device = pigment->device;
     if(device == NULL)
     {
         return;
@@ -511,7 +498,11 @@ void destroy_device(PDevice* device)
     free(device);
 }
 
-void device_wait_idle(PDevice* device)
+void device_wait_idle(Pigment* pigment)
 {
-    vkDeviceWaitIdle(device->logical_device);
+    if(pigment == NULL || pigment->device == NULL)
+    {
+        return;
+    }
+    vkDeviceWaitIdle(pigment->device->logical_device);
 }

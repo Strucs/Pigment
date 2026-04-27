@@ -5,12 +5,12 @@ import shutil
 def build_static_lib(config: powermake.Config):
     config.add_includedirs("src/core", "src/loader", "src/external")
 
-    files = powermake.get_files("./src/**/*.c")
+    all_files = powermake.get_files("./src/**/*.c")
+    external_files = {f for f in all_files if os.sep + "external" + os.sep in os.path.normpath(f)}
+    project_files = set(all_files) - external_files
 
     headers = powermake.get_files("./src/**/*.h")
-
     shaders = powermake.get_files("./shaders/*")
-
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
 
@@ -24,7 +24,7 @@ def build_static_lib(config: powermake.Config):
         module = parts[1]
         if module == "external":
             continue
-        if module == "core" and parts[-1] in ("structs.h", "internal.h"):
+        if module == "core" and parts[-1] in ("structs.h", "internal.h", "log_internal.h"):
             continue
         rest_parts = parts[2:-1]
         if module == "core":
@@ -37,9 +37,13 @@ def build_static_lib(config: powermake.Config):
     for file in shaders:
         shutil.copy2(file, shaders_dir)
 
-    objects = powermake.compile_files(config, files)
+    ext_config = config.copy()
+    ext_config.add_flags("-Wno-misleading-indentation")
+    ext_objects = powermake.compile_files(ext_config, external_files)
 
-    powermake.archive_files(config, objects)
+    objects = powermake.compile_files(config, project_files)
+
+    powermake.archive_files(config, list(objects) + list(ext_objects))
 
     config.remove_includedirs("src/core", "src/loader", "src/external")
 
@@ -61,6 +65,7 @@ def on_build(config: powermake.Config):
 
     config.target_name = "pigment"
 
+    config.add_c_flags("-std=c23")
     config.add_flags("-Wsecurity", "-pedantic")
     config.remove_flags("-Wconversion", "-Wsign-conversion")
     # config.remove_flags("-fanalyzer") # uncomment for way faster compilation
@@ -69,13 +74,13 @@ def on_build(config: powermake.Config):
             config.add_flags("-flto=auto")
 
     if config.target_is_windows():
-        config.add_shared_libs("SDL3", "vulkan-1", "shaderc_shared")
+        config.add_shared_libs("SDL3", "shaderc_shared")
     elif config.target_is_macos():
         config.add_includedirs("/opt/homebrew/include")
         config.add_ld_flags("-L/opt/homebrew/lib")
         config.add_shared_libs("SDL3", "vulkan.1", "shaderc_shared")
     else:
-        config.add_shared_libs("SDL3", "vulkan", "shaderc_shared")
+        config.add_shared_libs("SDL3", "shaderc_shared")
 
     build_static_lib(config)
 

@@ -18,6 +18,7 @@
 #define PIGMENT_H
 
 #include "defines.h"
+#include "log.h"
 #include "camera.h"
 #include "window.h"
 #include "frame.h"

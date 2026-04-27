@@ -19,11 +19,13 @@
 #include "surface.h"
 #include "synchronization.h"
 #include "window.h"
+#include "log_internal.h"
 
 static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index);
 
-bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* device, PCamera* camera, uint32_t* out_image_index)
+bool begin_frame(Pigment* pigment, PUniformBuffers* buffers, PWindowRenderer* renderer, PCamera* camera, uint32_t* out_image_index)
 {
+    PDevice* device = pigment->device;
     if(renderer->framebuffer_resized)
     {
         renderer->framebuffer_resized = false;
@@ -46,14 +48,14 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* d
         }
 
         uint32_t old_image_count = renderer->swapchain->image_count;
-        if(recreate_swapchain(renderer, framebuffer_width, framebuffer_height, present_mode, device) != PIGMENT_SUCCESS)
+        if(recreate_swapchain(pigment, renderer, framebuffer_width, framebuffer_height, present_mode) != PIGMENT_SUCCESS)
         {
             renderer->framebuffer_resized = true;
             return false;
         }
         if(old_image_count != renderer->swapchain->image_count)
         {
-            resize_render_finished_semaphores(renderer->sync, old_image_count, renderer->swapchain->image_count, device);
+            resize_render_finished_semaphores(pigment, renderer->sync, old_image_count, renderer->swapchain->image_count);
         }
 
         renderer->swapchain->current_frame = 0;
@@ -66,13 +68,13 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* d
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
-        recreate_image_available_semaphore(renderer->sync, current_frame, device);
+        recreate_image_available_semaphore(pigment, renderer->sync, current_frame);
         renderer->framebuffer_resized = true;
         return false;
     }
     else if(result != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to acquire swapchain image!\n");
+        PLOG_ERROR(pigment, "Failed to acquire swapchain image!");
         return false;
     }
 
@@ -84,14 +86,14 @@ bool begin_frame(PUniformBuffers* buffers, PWindowRenderer* renderer, PDevice* d
 
     if((result = vkResetCommandBuffer(cmd, 0)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to reset command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to reset command buffer! (result: %d)", result);
         return false;
     }
 
     VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if((result = vkBeginCommandBuffer(cmd, &begin_info)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to begin command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to begin command buffer! (result: %d)", result);
         return false;
     }
 
@@ -130,15 +132,16 @@ void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index)
     cmd_end_rendering(cmd, renderer->swapchain, image_index);
 }
 
-void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index, uint32_t max_frame)
+void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index, uint32_t max_frame)
 {
+    PDevice* device        = pigment->device;
     uint32_t current_frame = renderer->swapchain->current_frame;
     VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
 
     VkResult result;
     if((result = vkEndCommandBuffer(cmd)) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to record command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to record command buffer! (result: %d)", result);
         return;
     }
 
@@ -159,7 +162,7 @@ void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index,
 
     if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, renderer->sync->in_flight_fences[current_frame])) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to submit draw command buffer! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return;
     }
 
@@ -177,7 +180,7 @@ void end_frame(PWindowRenderer* renderer, PDevice* device, uint32_t image_index,
     result = vkQueuePresentKHR(device->present_queue, &present_info);
     if(result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR)
     {
-        fprintf(stderr, "Failed to present swap chain image!\n");
+        PLOG_ERROR(pigment, "Failed to present swap chain image!");
     }
 
     uint32_t next_frame                = current_frame + 1;
@@ -286,7 +289,7 @@ void pigment_cmd_set_scissor(Pigment* pigment, uint32_t window_index, int32_t x,
         return;
     }
     VkRect2D rect = {
-        .offset = {x, y},
+        .offset = {    x,      y},
         .extent = {width, height},
     };
     vkCmdSetScissorWithCount(cmd, 1, &rect);

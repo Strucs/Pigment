@@ -19,11 +19,11 @@
 
 #include "defines.h"
 
-PInstance* create_instance(PAppInfo* info);
-void destroy_instance(PInstance* instance);
-int get_extensions(PInstance* instance);
-bool check_layers(LayerList* requested_layers);
+PInstance* create_instance(Pigment* pigment, PAppInfo* info);
+void destroy_instance(Pigment* pigment);
+int get_extensions(Pigment* pigment, PInstance* instance);
+bool check_layers(Pigment* pigment, LayerList* requested_layers);
 
-void setup_debug_messenger(PInstance* instance);
+void setup_debug_messenger(Pigment* pigment);
 
 #endif

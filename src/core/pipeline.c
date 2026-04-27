@@ -16,8 +16,9 @@
 
 #include "pipeline.h"
 #include "structs.h"
+#include "log_internal.h"
 
-static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code, uint32_t shader_size);
+static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
 static VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point);
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void);
 static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology);
@@ -30,8 +31,8 @@ static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_in
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
 static PLayout* get_or_create_default_layout(Pigment* pigment);
 static void retain_layout(PLayout* layout);
-static void release_layout(PLayoutList* list, PLayout* layout, PDevice* device);
-static void pipeline_list_destroy(PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline, PDevice* device);
+static void release_layout(Pigment* pigment, PLayoutList* list, PLayout* layout);
+static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline);
 
 #define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
 
@@ -40,7 +41,7 @@ PPipelineList* create_pipeline_list(void)
     return calloc(1, sizeof(PPipelineList));
 }
 
-void destroy_pipeline_list(PPipelineList* list, PLayoutList* layouts, PDevice* device)
+void destroy_pipeline_list(Pigment* pigment, PPipelineList* list, PLayoutList* layouts)
 {
     if(list == NULL)
     {
@@ -49,7 +50,7 @@ void destroy_pipeline_list(PPipelineList* list, PLayoutList* layouts, PDevice* d
 
     while(list->count > 0)
     {
-        pipeline_list_destroy(list, layouts, list->pipelines[0], device);
+        pipeline_list_destroy(pigment, list, layouts, list->pipelines[0]);
     }
     free(list->pipelines);
     free(list);
@@ -60,7 +61,7 @@ PLayoutList* create_layout_list(void)
     return calloc(1, sizeof(PLayoutList));
 }
 
-void destroy_layout_list(PLayoutList* list, PDevice* device)
+void destroy_layout_list(Pigment* pigment, PLayoutList* list)
 {
     if(list == NULL)
     {
@@ -73,7 +74,7 @@ void destroy_layout_list(PLayoutList* list, PDevice* device)
         {
             if(entry->layout != VK_NULL_HANDLE)
             {
-                vkDestroyPipelineLayout(device->logical_device, entry->layout, NULL);
+                vkDestroyPipelineLayout(pigment->device->logical_device, entry->layout, NULL);
             }
             free(entry);
         }
@@ -89,15 +90,13 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         return NULL;
     }
 
-    VkDevice device       = pigment->device->logical_device;
     PPipelineBuild* build = calloc(1, sizeof(*build));
     if(build == NULL)
     {
-        perror("pigment_pipeline_build_from_desc");
         return NULL;
     }
 
-    build->vertex_module = create_shader_module(device, desc->vertex_spv, desc->vertex_spv_size);
+    build->vertex_module = create_shader_module(pigment, desc->vertex_spv, desc->vertex_spv_size);
     if(build->vertex_module == NULL)
     {
         goto ERROR;
@@ -106,7 +105,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
 
     if(desc->fragment_spv != NULL)
     {
-        build->fragment_module = create_shader_module(device, desc->fragment_spv, desc->fragment_spv_size);
+        build->fragment_module = create_shader_module(pigment, desc->fragment_spv, desc->fragment_spv_size);
         if(build->fragment_module == NULL)
         {
             goto ERROR;
@@ -116,7 +115,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
 
     if(desc->blend_modes != NULL && desc->blend_mode_count != desc->color_format_count)
     {
-        fprintf(stderr, "pigment_pipeline_build_from_desc: blend_mode_count (%u) must equal color_format_count (%u) when blend_modes is not NULL.\n", desc->blend_mode_count, desc->color_format_count);
+        PLOG_ERROR(pigment, "pigment_pipeline_build_from_desc: blend_mode_count (%u) must equal color_format_count (%u) when blend_modes is not NULL.", desc->blend_mode_count, desc->color_format_count);
         goto ERROR;
     }
 
@@ -126,7 +125,6 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         build->color_formats = malloc(desc->color_format_count * sizeof(*build->color_formats));
         if(build->color_formats == NULL)
         {
-            perror("pigment_pipeline_build_from_desc");
             goto ERROR;
         }
         for(uint32_t i = 0; i < desc->color_format_count; i++)
@@ -138,7 +136,6 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         build->blend_attachments      = malloc(desc->color_format_count * sizeof(*build->blend_attachments));
         if(build->blend_attachments == NULL)
         {
-            perror("pigment_pipeline_build_from_desc");
             goto ERROR;
         }
         for(uint32_t i = 0; i < desc->color_format_count; i++)
@@ -179,7 +176,6 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
     build->dynamic_state_list  = malloc(build->dynamic_state_count * sizeof(*build->dynamic_state_list));
     if(build->dynamic_state_list == NULL)
     {
-        perror("pigment_pipeline_build_from_desc");
         goto ERROR;
     }
     memcpy(build->dynamic_state_list, base_dynamic_state_list, sizeof(base_dynamic_state_list));
@@ -232,7 +228,7 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
 
     if(build->layout != NULL)
     {
-        release_layout(pigment->layouts, build->layout, pigment->device);
+        release_layout(pigment, pigment->layouts, build->layout);
     }
 
     free(build->color_formats);
@@ -258,7 +254,7 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
     {
         if(builds[i] == NULL)
         {
-            fprintf(stderr, "pigment_create_graphic_pipelines: builds[%u] is NULL\n", i);
+            PLOG_ERROR(pigment, "pigment_create_graphic_pipelines: builds[%u] is NULL", i);
             goto FREE;
         }
     }
@@ -279,7 +275,6 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
 
         if(new_ptr == NULL)
         {
-            perror("pigment_create_graphic_pipelines");
             goto FREE;
         }
 
@@ -300,7 +295,6 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
         temp_pipelines[i] = calloc(1, sizeof(**temp_pipelines));
         if(temp_pipelines[i] == NULL)
         {
-            perror("pigment_create_graphic_pipelines");
             goto FREE;
         }
         temp_pipelines_allocated++;
@@ -327,7 +321,7 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
     VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, NULL, vk_pipelines);
     if(result != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create graphics pipelines! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create graphics pipelines! (result: %d)", result);
         for(uint32_t i = 0; i < count; i++)
         {
             if(vk_pipelines[i] != VK_NULL_HANDLE)
@@ -384,7 +378,7 @@ void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
     }
 
     vkDeviceWaitIdle(pigment->device->logical_device);
-    pipeline_list_destroy(pigment->pipelines, pigment->layouts, pipeline, pigment->device);
+    pipeline_list_destroy(pigment, pigment->pipelines, pigment->layouts, pipeline);
 }
 
 void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* pipeline)
@@ -418,7 +412,7 @@ void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* p
     }
 }
 
-static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code, uint32_t shader_size)
+static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size)
 {
     VkShaderModule shader_module;
 
@@ -428,9 +422,9 @@ static VkShaderModule create_shader_module(VkDevice device, const uint32_t* code
         .pCode    = code
     };
 
-    if(vkCreateShaderModule(device, &create_info, NULL, &shader_module) != VK_SUCCESS)
+    if(vkCreateShaderModule(pigment->device->logical_device, &create_info, NULL, &shader_module) != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create shader module!\n");
+        PLOG_ERROR(pigment, "Failed to create shader module!");
         return NULL;
     }
 
@@ -634,7 +628,6 @@ static PLayout* get_or_create_default_layout(Pigment* pigment)
 
         if(new_ptr == NULL)
         {
-            perror("get_or_create_default_layout");
             return NULL;
         }
 
@@ -660,14 +653,13 @@ static PLayout* get_or_create_default_layout(Pigment* pigment)
     VkResult result            = vkCreatePipelineLayout(pigment->device->logical_device, &create_info, NULL, &vk_layout);
     if(result != VK_SUCCESS)
     {
-        fprintf(stderr, "Failed to create pipeline layout! (result: %d)\n", result);
+        PLOG_ERROR(pigment, "Failed to create pipeline layout! (result: %d)", result);
         return NULL;
     }
 
     PLayout* layout = calloc(1, sizeof(*layout));
     if(layout == NULL)
     {
-        perror("get_or_create_default_layout");
         vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, NULL);
         return NULL;
     }
@@ -691,7 +683,7 @@ static void retain_layout(PLayout* layout)
     layout->refcount++;
 }
 
-static void release_layout(PLayoutList* list, PLayout* layout, PDevice* device)
+static void release_layout(Pigment* pigment, PLayoutList* list, PLayout* layout)
 {
     if(layout == NULL)
     {
@@ -719,12 +711,12 @@ static void release_layout(PLayoutList* list, PLayout* layout, PDevice* device)
 
     if(layout->layout != VK_NULL_HANDLE)
     {
-        vkDestroyPipelineLayout(device->logical_device, layout->layout, NULL);
+        vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, NULL);
     }
     free(layout);
 }
 
-static void pipeline_list_destroy(PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline, PDevice* device)
+static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline)
 {
     for(uint32_t i = 0; i < list->count; i++)
     {
@@ -736,11 +728,11 @@ static void pipeline_list_destroy(PPipelineList* list, PLayoutList* layouts, PPi
 
             if(pipeline->pipeline != VK_NULL_HANDLE)
             {
-                vkDestroyPipeline(device->logical_device, pipeline->pipeline, NULL);
+                vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, NULL);
             }
 
             free(pipeline);
-            release_layout(layouts, layout, device);
+            release_layout(pigment, layouts, layout);
             return;
         }
     }

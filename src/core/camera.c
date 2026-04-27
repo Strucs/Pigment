@@ -30,7 +30,6 @@ PCamera* pigment_create_camera(vec3 position)
     PCamera* camera = malloc(sizeof(*camera));
     if(camera == NULL)
     {
-        perror("pigment_create_camera");
         return NULL;
     }
 

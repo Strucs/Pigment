@@ -15,6 +15,7 @@
  */
 
 #include "pipeline_loader.h"
+#include "log_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +46,7 @@ char* load_shader_code(const char* file_path, uint32_t* shader_size)
     return shader_code;
 }
 
-uint32_t* compile_glsl_to_spv(const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size)
+uint32_t* compile_glsl_to_spv(Pigment* pigment, const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size)
 {
     shaderc_compiler_t compiler         = NULL;
     shaderc_compile_options_t options   = NULL;
@@ -54,14 +55,14 @@ uint32_t* compile_glsl_to_spv(const char* source_code, uint32_t source_size, PSh
     compiler = shaderc_compiler_initialize();
     if(compiler == NULL)
     {
-        fprintf(stderr, "Failed to initialize shader compiler.\n");
+        PLOG_ERROR(pigment, "Failed to initialize shader compiler.");
         goto ERROR;
     }
 
     options = shaderc_compile_options_initialize();
     if(options == NULL)
     {
-        fprintf(stderr, "Failed to initialize shader compile options.\n");
+        PLOG_ERROR(pigment, "Failed to initialize shader compile options.");
         goto ERROR;
     }
 
@@ -73,7 +74,7 @@ uint32_t* compile_glsl_to_spv(const char* source_code, uint32_t source_size, PSh
 
     if(shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success)
     {
-        fprintf(stderr, "GLSL compilation error: %s\n", shaderc_result_get_error_message(result));
+        PLOG_ERROR(pigment, "GLSL compilation error: %s", shaderc_result_get_error_message(result));
         goto ERROR;
     }
 
@@ -100,12 +101,12 @@ ERROR:
     return NULL;
 }
 
-PPipelineDesc default_graphic_pipeline_desc(const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
 {
     PPipelineDesc desc = {0};
 
-    desc.vertex_spv   = compile_glsl_to_spv(DEFAULT_VERTEX_SHADER, (uint32_t) strlen(DEFAULT_VERTEX_SHADER), P_SHADER_TYPE_VERTEX, "default.vert", &desc.vertex_spv_size);
-    desc.fragment_spv = compile_glsl_to_spv(DEFAULT_FRAGMENT_SHADER, (uint32_t) strlen(DEFAULT_FRAGMENT_SHADER), P_SHADER_TYPE_FRAGMENT, "default.frag", &desc.fragment_spv_size);
+    desc.vertex_spv   = compile_glsl_to_spv(pigment, DEFAULT_VERTEX_SHADER, (uint32_t) strlen(DEFAULT_VERTEX_SHADER), P_SHADER_TYPE_VERTEX, "default.vert", &desc.vertex_spv_size);
+    desc.fragment_spv = compile_glsl_to_spv(pigment, DEFAULT_FRAGMENT_SHADER, (uint32_t) strlen(DEFAULT_FRAGMENT_SHADER), P_SHADER_TYPE_FRAGMENT, "default.frag", &desc.fragment_spv_size);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;

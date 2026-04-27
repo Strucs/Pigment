@@ -20,12 +20,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef NDEBUG
-    #define VLAYERS_ENABLED 0
-#else
-    #define VLAYERS_ENABLED 1
-#endif
-
 #define PIGMENT_SUCCESS 0
 #define PIGMENT_ERROR 1
 
@@ -40,6 +34,20 @@ typedef struct PAppInfo {
     const char* app_name;
     uint32_t app_version;
 } PAppInfo;
+
+typedef enum PigmentLogSeverity{
+    PIGMENT_LOG_TRACE_BIT = 1 << 0,
+    PIGMENT_LOG_DEBUG_BIT = 1 << 1,
+    PIGMENT_LOG_INFO_BIT  = 1 << 2,
+    PIGMENT_LOG_WARN_BIT  = 1 << 3,
+    PIGMENT_LOG_ERROR_BIT = 1 << 4,
+} PigmentLogSeverity;
+
+typedef enum PigmentLogType {
+    PIGMENT_LOG_TYPE_GENERAL_BIT     = 1 << 0,
+    PIGMENT_LOG_TYPE_VALIDATION_BIT  = 1 << 1,
+    PIGMENT_LOG_TYPE_PERFORMANCE_BIT = 1 << 2,
+} PigmentLogType;
 
 typedef enum PFeature {
     P_FEATURE_DEPTH_BOUNDS_TEST       = 0,
@@ -163,6 +171,10 @@ typedef struct PMeshBuffers PMeshBuffers;
 
 typedef struct PSamplerDesc PSamplerDesc;
 
+typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
+
+typedef struct PigmentLogger PigmentLogger;
+
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,
     P_FORMAT_R8_UNORM            = 9,
@@ -203,6 +215,10 @@ typedef struct PigmentConfig {
     uint32_t max_images;
     uint32_t max_samplers;
     uint32_t max_frames_in_flight;
+    const PigmentLoggerCreateInfo* loggers;
+    uint32_t logger_count;
+    bool enable_validation;
+    bool enable_best_practices;
 } PigmentConfig;
 
 #endif
