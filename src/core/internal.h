@@ -21,6 +21,34 @@
 
 #include "structs.h"
 
+static inline bool name_in_list(const char* const* list, uint32_t count, const char* name)
+{
+    for(uint32_t i = 0; i < count; i++)
+    {
+        if(strcmp(list[i], name) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static inline bool extension_available(const VkExtensionProperties* available, uint32_t count, const char* name)
+{
+    for(uint32_t i = 0; i < count; i++)
+    {
+        if(strcmp(available[i].extensionName, name) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// window.c
+const char* const* window_get_vk_instance_extensions(Pigment* pigment, uint32_t* out_count);
+bool window_create_vk_surface(Pigment* pigment, PWindow* window, VkSurfaceKHR* out_surface);
+
 // device.c
 QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface);
 

@@ -219,6 +219,7 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     bool enable_validation;
     bool enable_best_practices;
+    const void* extra;
 } PigmentConfig;
 
 #endif

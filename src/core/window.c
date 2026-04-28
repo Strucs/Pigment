@@ -16,7 +16,7 @@
 
 #include "window.h"
 #include "pigment_sdl.h"
-#include "structs.h"
+#include "internal.h"
 #include "log_internal.h"
 
 static uint32_t find_index_by_window_id(Pigment* pigment, SDL_WindowID id);
@@ -131,6 +131,28 @@ void get_framebuffer_size(PWindow* window, uint32_t* out_width, uint32_t* out_he
     SDL_GetWindowSizeInPixels(window->window, &width, &height);
     *out_width  = (uint32_t) width;
     *out_height = (uint32_t) height;
+}
+
+const char* const* window_get_vk_instance_extensions(Pigment* pigment, uint32_t* extension_count)
+{
+    *extension_count              = 0;
+    const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(extension_count);
+    if(extensions == NULL)
+    {
+        PLOG_ERROR(pigment, "SDL_Vulkan_GetInstanceExtensions: %s", SDL_GetError());
+        return NULL;
+    }
+    return extensions;
+}
+
+bool window_create_vk_surface(Pigment* pigment, PWindow* window, VkSurfaceKHR* out_surface)
+{
+    if(!SDL_Vulkan_CreateSurface(window->window, pigment->instance->vulkan_instance, NULL, out_surface))
+    {
+        PLOG_ERROR(pigment, "SDL_Vulkan_CreateSurface: %s", SDL_GetError());
+        return false;
+    }
+    return true;
 }
 
 static uint32_t find_index_by_window_id(Pigment* pigment, SDL_WindowID id)

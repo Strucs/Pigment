@@ -17,6 +17,7 @@
 #include "device.h"
 #include "internal.h"
 #include "log_internal.h"
+#include "pigment_vk.h"
 
 #include <vulkan/vulkan_core.h>
 #define QUEUE_FAMILY_NUM 2
@@ -26,10 +27,46 @@ static void destroy_queue_family_set(QueueFamilySet* set);
 static void append_set(uint32_t* set, uint32_t* idx, uint32_t element);
 static QueueFamilyIndices* init_indices(void);
 static bool queue_families_indices_completed(QueueFamilyIndices indices);
-static bool check_device_extensions(VkPhysicalDevice device, ExtensionList requiered_extensions);
-static bool is_suitable(VkPhysicalDevice device, VkSurfaceKHR surface, ExtensionList requiered_extensions);
-static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface);
+
+static bool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available);
+static bool features_chain_supports(const void* req, const void* available, size_t struct_size);
+static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalDeviceFeatures* src, const VkPhysicalDeviceFeatures* available);
+static void merge_features_chain_or(void* dst, const void* src, const void* available, size_t struct_size);
+
+static bool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required);
+static bool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
+static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
 static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface);
+
+static inline VkPhysicalDeviceFeatures pigment_req_features(void)
+{
+    return (VkPhysicalDeviceFeatures) {
+        .samplerAnisotropy                      = VK_TRUE,
+        .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+    };
+}
+
+static inline VkPhysicalDeviceVulkan12Features pigment_req_features_12(void)
+{
+    return (VkPhysicalDeviceVulkan12Features) {
+        .sType                                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .descriptorIndexing                        = VK_TRUE,
+        .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+        .descriptorBindingVariableDescriptorCount  = VK_TRUE,
+        .descriptorBindingPartiallyBound           = VK_TRUE,
+        .runtimeDescriptorArray                    = VK_TRUE,
+        .bufferDeviceAddress                       = VK_TRUE,
+    };
+}
+
+static inline VkPhysicalDeviceVulkan13Features pigment_req_features_13(void)
+{
+    return (VkPhysicalDeviceVulkan13Features) {
+        .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        .dynamicRendering = VK_TRUE,
+        .synchronization2 = VK_TRUE,
+    };
+}
 
 static void append_set(uint32_t* set, uint32_t* idx, uint32_t element)
 {
@@ -112,137 +149,228 @@ static bool queue_families_indices_completed(QueueFamilyIndices indices)
     return indices.graphics_family.has_value && indices.present_family.has_value;
 }
 
-static bool check_device_extensions(VkPhysicalDevice device, ExtensionList requiered_extensions)
+static bool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available)
 {
-    uint32_t extensions_count;
-    VkExtensionProperties* available_extensions;
-    bool extensions_found;
-
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensions_count, NULL);    // Store the number of layers in layers_count
-
-    available_extensions = malloc(extensions_count * sizeof(*available_extensions));
-    if(available_extensions == NULL)
+    if(req == NULL)
     {
-        goto ERROR;
+        return true;
     }
-
-    vkEnumerateDeviceExtensionProperties(device, NULL, &extensions_count, available_extensions);    // Store all the layers in available_layers
-
-    // Search if all requested layers are available
-    for(size_t i = 0; i < requiered_extensions.size; i++)
+    const VkBool32* req_fields       = (const VkBool32*) req;
+    const VkBool32* available_fields = (const VkBool32*) available;
+    const size_t count               = sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
+    for(size_t i = 0; i < count; i++)
     {
-        extensions_found = false;
-
-        for(size_t j = 0; j < extensions_count; j++)
+        if(req_fields[i] && !available_fields[i])
         {
-            if(strcmp(requiered_extensions.names[i], available_extensions[j].extensionName) == 0)
-            {
-                extensions_found = true;
-                break;
-            }
-        }
-
-        if(!extensions_found)
-        {
-            goto ERROR;
+            return false;
         }
     }
-
-    free(available_extensions);
-
     return true;
-
-ERROR:
-    free(available_extensions);
-    return false;
 }
 
-static bool is_suitable(VkPhysicalDevice device, VkSurfaceKHR surface, ExtensionList requiered_extensions)
+static bool features_chain_supports(const void* req, const void* available, size_t struct_size)
 {
-    QueueFamilyIndices* indices;
-    SwapChainSupportDetails* details;
+    if(req == NULL)
+    {
+        return true;
+    }
+    const size_t header              = sizeof(VkBaseOutStructure);
+    const VkBool32* req_fields       = (const VkBool32*) ((const char*) req + header);
+    const VkBool32* available_fields = (const VkBool32*) ((const char*) available + header);
+    const size_t count               = (struct_size - header) / sizeof(VkBool32);
+    for(size_t i = 0; i < count; i++)
+    {
+        if(req_fields[i] && !available_fields[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalDeviceFeatures* src, const VkPhysicalDeviceFeatures* available)
+{
+    if(src == NULL)
+    {
+        return;
+    }
+    VkBool32* dst_fields             = (VkBool32*) dst;
+    const VkBool32* src_fields       = (const VkBool32*) src;
+    const VkBool32* available_fields = available != NULL ? (const VkBool32*) available : NULL;
+    const size_t count               = sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
+    for(size_t i = 0; i < count; i++)
+    {
+        if(src_fields[i] && (available_fields == NULL || available_fields[i]))
+        {
+            dst_fields[i] = VK_TRUE;
+        }
+    }
+}
+
+static void merge_features_chain_or(void* dst, const void* src, const void* available, size_t struct_size)
+{
+    if(src == NULL)
+    {
+        return;
+    }
+    const size_t header              = sizeof(VkBaseOutStructure);
+    VkBool32* dst_fields             = (VkBool32*) ((char*) dst + header);
+    const VkBool32* src_fields       = (const VkBool32*) ((const char*) src + header);
+    const VkBool32* available_fields = available != NULL ? (const VkBool32*) ((const char*) available + header) : NULL;
+    const size_t count               = (struct_size - header) / sizeof(VkBool32);
+    for(size_t i = 0; i < count; i++)
+    {
+        if(src_fields[i] && (available_fields == NULL || available_fields[i]))
+        {
+            dst_fields[i] = VK_TRUE;
+        }
+    }
+}
+
+static bool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required)
+{
+    uint32_t count                   = 0;
+    VkExtensionProperties* available = NULL;
+
+    vkEnumerateDeviceExtensionProperties(device, NULL, &count, NULL);
+    if(count == 0 && required->size > 0)
+    {
+        return false;
+    }
+
+    if(count > 0)
+    {
+        available = malloc(count * sizeof(*available));
+        if(available == NULL)
+        {
+            return false;
+        }
+        vkEnumerateDeviceExtensionProperties(device, NULL, &count, available);
+    }
+
+    bool extensions_found = true;
+    for(size_t i = 0; i < required->size; i++)
+    {
+        if(!extension_available(available, count, required->names[i]))
+        {
+            extensions_found = false;
+            break;
+        }
+    }
+
+    free(available);
+    return extensions_found;
+}
+
+static bool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
+{
+    QueueFamilyIndices* indices      = NULL;
+    SwapChainSupportDetails* details = NULL;
+    bool result                      = false;
 
     indices = find_queue_families(device, surface);
     if(indices == NULL)
     {
-        goto ERROR;
+        goto FREE;
     }
 
-    bool is_completed = queue_families_indices_completed(*indices);
-
-    bool extensions_supported = check_device_extensions(device, requiered_extensions);
-
-    bool suitable_swap_chain = false;
-    if(extensions_supported)
+    if(!queue_families_indices_completed(*indices))
     {
-        details = get_support_details(device, surface);
-        if(details == NULL)
+        PLOG_TRACE(pigment, "Device rejected: incomplete queue families");
+        goto FREE;
+    }
+
+    if(!check_device_extensions_supported(device, req_extensions))
+    {
+        PLOG_TRACE(pigment, "Device rejected: missing required extensions");
+        goto FREE;
+    }
+
+    details = get_support_details(device, surface);
+    if(details == NULL)
+    {
+        goto FREE;
+    }
+    if(details->formats_count == 0 || details->present_modes_count == 0)
+    {
+        PLOG_TRACE(pigment, "Device rejected: no surface formats or present modes");
+        goto FREE;
+    }
+
+    VkPhysicalDeviceVulkan11Features available_11 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+    VkPhysicalDeviceVulkan12Features available_12 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &available_11};
+    VkPhysicalDeviceVulkan13Features available_13 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, .pNext = &available_12};
+    VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
+    vkGetPhysicalDeviceFeatures2(device, &available_2);
+
+    const VkPhysicalDeviceFeatures req         = pigment_req_features();
+    const VkPhysicalDeviceVulkan12Features r12 = pigment_req_features_12();
+    const VkPhysicalDeviceVulkan13Features r13 = pigment_req_features_13();
+    if(!features10_supports(&req, &available_2.features) || !features_chain_supports(&r12, &available_12, sizeof(available_12)) || !features_chain_supports(&r13, &available_13, sizeof(available_13)))
+    {
+        PLOG_TRACE(pigment, "Device rejected: missing core Pigment features");
+        goto FREE;
+    }
+
+    if(vk_init != NULL)
+    {
+        if(!features10_supports(vk_init->req_features, &available_2.features))
         {
-            goto ERROR;
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.0)");
+            goto FREE;
         }
-        suitable_swap_chain = (details->formats_count != 0) && (details->present_modes_count != 0);
+        if(!features_chain_supports(vk_init->req_features_11, &available_11, sizeof(available_11)))
+        {
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.1)");
+            goto FREE;
+        }
+        if(!features_chain_supports(vk_init->req_features_12, &available_12, sizeof(available_12)))
+        {
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.2)");
+            goto FREE;
+        }
+        if(!features_chain_supports(vk_init->req_features_13, &available_13, sizeof(available_13)))
+        {
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.3)");
+            goto FREE;
+        }
+    }
+
+    result = true;
+
+FREE:
+    free(indices);
+    if(details != NULL)
+    {
         destroy_support_details(details);
     }
-
-    free(indices);
-    indices = NULL;
-
-    VkPhysicalDeviceVulkan12Features vk12_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-    };
-
-    VkPhysicalDeviceVulkan13Features vk13_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-        .pNext = &vk12_features
-    };
-
-    VkPhysicalDeviceFeatures2 available_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-        .pNext = &vk13_features
-    };
-
-    vkGetPhysicalDeviceFeatures2(device, &available_features);
-
-    bool has_base_features = available_features.features.samplerAnisotropy && available_features.features.shaderSampledImageArrayDynamicIndexing;
-
-    bool has_descriptor_indexing = vk12_features.descriptorIndexing && vk12_features.shaderSampledImageArrayNonUniformIndexing && vk12_features.runtimeDescriptorArray && vk12_features.descriptorBindingVariableDescriptorCount && vk12_features.descriptorBindingPartiallyBound;
-
-    bool has_bda = vk12_features.bufferDeviceAddress;
-
-    bool has_dynamic_rendering = vk13_features.dynamicRendering;
-    bool has_sync2             = vk13_features.synchronization2;
-
-    return is_completed && extensions_supported && suitable_swap_chain && has_base_features && has_descriptor_indexing && has_bda && has_dynamic_rendering && has_sync2;
-
-ERROR:
-    free(indices);
-    return false;
+    return result;
 }
 
-static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface)
+static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
 {
-    VkPhysicalDevice* devices;
-    uint32_t devices_count;
+    VkPhysicalDevice* devices = NULL;
+    uint32_t devices_count    = 0;
 
     vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, NULL);
 
     if(devices_count == 0)
     {
         PLOG_ERROR(pigment, "Failed to find GPUs compatible with Vulkan");
-        goto ERROR;
+        return PIGMENT_ERROR;
     }
 
     devices = malloc(devices_count * sizeof(*devices));
     if(devices == NULL)
     {
-        goto ERROR;
+        return PIGMENT_ERROR;
     }
 
     vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, devices);
 
     for(size_t i = 0; i < devices_count; i++)
     {
-        if(is_suitable(devices[i], surface->surface, *device->extensions))
+        if(is_suitable(pigment, devices[i], surface->surface, req_extensions, vk_init))
         {
             device->physical_device = devices[i];
             break;
@@ -254,7 +382,7 @@ static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* sur
     if(device->physical_device == VK_NULL_HANDLE)
     {
         PLOG_ERROR(pigment, "Failed to find a suitable GPU");
-        goto ERROR;
+        return PIGMENT_ERROR;
     }
 
     VkPhysicalDeviceProperties device_properties;
@@ -263,9 +391,6 @@ static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* sur
     PLOG_INFO(pigment, "GPU picked: %s", device_properties.deviceName);
 
     return PIGMENT_SUCCESS;
-
-ERROR:
-    return PIGMENT_ERROR;
 }
 
 QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface)
@@ -329,6 +454,7 @@ static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* su
     QueueFamilyIndices* indices                 = NULL;
     VkDeviceQueueCreateInfo* queue_create_infos = NULL;
     QueueFamilySet* set                         = NULL;
+    const PVkInitInfo* vk_init                  = (const PVkInitInfo*) pigment->config.extra;
 
     indices = find_queue_families(device->physical_device, surface->surface);
     if(indices == NULL)
@@ -357,39 +483,56 @@ static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* su
         queue_create_infos[i].pQueuePriorities = &queue_priority;
     }
 
-    VkPhysicalDeviceFeatures2 available = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-    vkGetPhysicalDeviceFeatures2(device->physical_device, &available);
+    VkPhysicalDeviceVulkan11Features available_11 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+    VkPhysicalDeviceVulkan12Features available_12 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &available_11};
+    VkPhysicalDeviceVulkan13Features available_13 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, .pNext = &available_12};
+    VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
+    vkGetPhysicalDeviceFeatures2(device->physical_device, &available_2);
 
-    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (bool) available.features.depthBounds;
-    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (bool) available.features.fillModeNonSolid;
+    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (bool) available_2.features.depthBounds;
+    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (bool) available_2.features.fillModeNonSolid;
 
+    VkPhysicalDeviceVulkan11Features vk11_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+    };
     VkPhysicalDeviceVulkan12Features vk12_features = {
-        .sType                                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .descriptorIndexing                        = VK_TRUE,
-        .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-        .descriptorBindingVariableDescriptorCount  = VK_TRUE,
-        .descriptorBindingPartiallyBound           = VK_TRUE,
-        .runtimeDescriptorArray                    = VK_TRUE,
-        .bufferDeviceAddress                       = VK_TRUE
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext = &vk11_features,
     };
-
     VkPhysicalDeviceVulkan13Features vk13_features = {
-        .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-        .dynamicRendering = VK_TRUE,
-        .synchronization2 = VK_TRUE,
-        .pNext            = &vk12_features
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+        .pNext = &vk12_features,
     };
-
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
-                     .samplerAnisotropy                      = VK_TRUE,
-                     .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
-                     .fillModeNonSolid                       = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
-                     .depthBounds                            = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
+                     .fillModeNonSolid = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
+                     .depthBounds      = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
                      },
-        .pNext = &vk13_features
+        .pNext = &vk13_features,
     };
+
+    const VkPhysicalDeviceFeatures req         = pigment_req_features();
+    const VkPhysicalDeviceVulkan12Features r12 = pigment_req_features_12();
+    const VkPhysicalDeviceVulkan13Features r13 = pigment_req_features_13();
+    merge_features10_or(&features.features, &req, NULL);
+    merge_features_chain_or(&vk12_features, &r12, NULL, sizeof(vk12_features));
+    merge_features_chain_or(&vk13_features, &r13, NULL, sizeof(vk13_features));
+
+    if(vk_init != NULL)
+    {
+        merge_features10_or(&features.features, vk_init->req_features, NULL);
+        merge_features10_or(&features.features, vk_init->opt_features, &available_2.features);
+
+        merge_features_chain_or(&vk11_features, vk_init->req_features_11, NULL, sizeof(vk11_features));
+        merge_features_chain_or(&vk11_features, vk_init->opt_features_11, &available_11, sizeof(vk11_features));
+
+        merge_features_chain_or(&vk12_features, vk_init->req_features_12, NULL, sizeof(vk12_features));
+        merge_features_chain_or(&vk12_features, vk_init->opt_features_12, &available_12, sizeof(vk12_features));
+
+        merge_features_chain_or(&vk13_features, vk_init->req_features_13, NULL, sizeof(vk13_features));
+        merge_features_chain_or(&vk13_features, vk_init->opt_features_13, &available_13, sizeof(vk13_features));
+    }
 
     VkDeviceCreateInfo create_info = {
         .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -400,6 +543,11 @@ static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* su
         .enabledExtensionCount   = device->extensions->size,
         .ppEnabledExtensionNames = device->extensions->names
     };
+
+    if(vk_init != NULL && vk_init->device_pnext_chain != NULL)
+    {
+        pigment_vk_append_pnext(&create_info, vk_init->device_pnext_chain);
+    }
 
     if(pigment->config.validation_enabled)
     {
@@ -439,7 +587,19 @@ ERROR:
 
 PDevice* create_device(Pigment* pigment, PSurface* surface)
 {
-    PDevice* device;
+    PDevice* device                             = NULL;
+    ExtensionList req_extensions                = {0};
+    VkExtensionProperties* available_extensions = NULL;
+    uint32_t available_extension_count          = 0;
+    const PVkInitInfo* vk_init                  = (const PVkInitInfo*) pigment->config.extra;
+
+    static const char* default_req_extensions[] = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+#ifdef __APPLE__
+        "VK_KHR_portability_subset",
+#endif
+    };
+    const uint32_t default_req_count = sizeof(default_req_extensions) / sizeof(default_req_extensions[0]);
 
     device = calloc(1, sizeof(*device));
     if(device == NULL)
@@ -447,33 +607,91 @@ PDevice* create_device(Pigment* pigment, PSurface* surface)
         goto ERROR;
     }
 
-    const char* extensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-#ifdef __APPLE__
-        "VK_KHR_portability_subset"
-#endif
-    };
+    uint32_t max_req     = default_req_count + (vk_init != NULL ? vk_init->req_device_extensions_count : 0);
+    req_extensions.names = malloc(max_req * sizeof(*req_extensions.names));
+    if(req_extensions.names == NULL)
+    {
+        goto ERROR;
+    }
 
+    for(uint32_t i = 0; i < default_req_count; i++)
+    {
+        req_extensions.names[req_extensions.size++] = default_req_extensions[i];
+    }
+    if(vk_init != NULL)
+    {
+        for(uint32_t i = 0; i < vk_init->req_device_extensions_count; i++)
+        {
+            const char* name = vk_init->req_device_extensions[i];
+            if(!name_in_list((const char* const*) req_extensions.names, req_extensions.size, name))
+            {
+                req_extensions.names[req_extensions.size++] = name;
+            }
+        }
+    }
+
+    if(pick_physical_device(pigment, device, surface, &req_extensions, vk_init) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, NULL);
+    if(available_extension_count > 0)
+    {
+        available_extensions = malloc(available_extension_count * sizeof(*available_extensions));
+        if(available_extensions == NULL)
+        {
+            goto ERROR;
+        }
+        vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, available_extensions);
+    }
+
+    uint32_t max_final = req_extensions.size + (vk_init != NULL ? vk_init->opt_device_extensions_count : 0);
     device->extensions = calloc(1, sizeof(*device->extensions));
     if(device->extensions == NULL)
     {
         goto ERROR;
     }
-
-    device->extensions->size  = sizeof(extensions) / sizeof(extensions[0]);
-    device->extensions->names = malloc(device->extensions->size * sizeof(*(device->extensions->names)));
+    device->extensions->names = malloc(max_final * sizeof(*device->extensions->names));
     if(device->extensions->names == NULL)
     {
         goto ERROR;
     }
 
-    memcpy(device->extensions->names, extensions, device->extensions->size * sizeof(*extensions));
+    for(uint32_t i = 0; i < req_extensions.size; i++)
+    {
+        device->extensions->names[device->extensions->size++] = req_extensions.names[i];
+    }
 
-    pick_physical_device(pigment, device, surface);
-    create_logical_device(pigment, device, surface);
+    if(vk_init != NULL)
+    {
+        for(uint32_t i = 0; i < vk_init->opt_device_extensions_count; i++)
+        {
+            const char* name = vk_init->opt_device_extensions[i];
+            if(!extension_available(available_extensions, available_extension_count, name))
+            {
+                PLOG_WARN(pigment, "Optional device extension not available, skipping: %s", name);
+                continue;
+            }
+            if(!name_in_list((const char* const*) device->extensions->names, device->extensions->size, name))
+            {
+                device->extensions->names[device->extensions->size++] = name;
+            }
+        }
+    }
+
+    if(create_logical_device(pigment, device, surface) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    free(req_extensions.names);
+    free(available_extensions);
     return device;
 
 ERROR:
+    free(req_extensions.names);
+    free(available_extensions);
     if(device != NULL)
     {
         if(device->extensions != NULL)
@@ -494,6 +712,10 @@ void destroy_device(Pigment* pigment)
         return;
     }
     vkDestroyDevice(device->logical_device, NULL);
+    if(device->extensions != NULL)
+    {
+        free(device->extensions->names);
+    }
     free(device->extensions);
     free(device);
 }

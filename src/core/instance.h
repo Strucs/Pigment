@@ -21,8 +21,6 @@
 
 PInstance* create_instance(Pigment* pigment, PAppInfo* info);
 void destroy_instance(Pigment* pigment);
-int get_extensions(Pigment* pigment, PInstance* instance);
-bool check_layers(Pigment* pigment, LayerList* requested_layers);
 
 void setup_debug_messenger(Pigment* pigment);
 

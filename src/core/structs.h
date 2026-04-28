@@ -88,6 +88,7 @@ typedef struct PRuntimeConfig {
     uint32_t max_samplers;
     bool validation_enabled;
     bool best_practices_enabled;
+    const void* extra;
 } PRuntimeConfig;
 
 struct Pigment {

@@ -38,9 +38,8 @@ PSurface* create_surface(Pigment* pigment, PWindow* window)
         return NULL;
     }
 
-    if(!SDL_Vulkan_CreateSurface(window->window, pigment->instance->vulkan_instance, NULL, &surface->surface))
+    if(!window_create_vk_surface(pigment, window, &surface->surface))
     {
-        PLOG_ERROR(pigment, "SDL_Vulkan_CreateSurface: %s", SDL_GetError());
         free(surface);
         return NULL;
     }

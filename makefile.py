@@ -3,7 +3,7 @@ import os
 import shutil
 
 def build_static_lib(config: powermake.Config):
-    config.add_includedirs("src/core", "src/loader", "src/external")
+    config.add_includedirs("src/core", "src/loader", "src/external", "src/vulkan")
 
     all_files = powermake.get_files("./src/**/*.c")
     external_files = {f for f in all_files if os.sep + "external" + os.sep in os.path.normpath(f)}
@@ -22,12 +22,12 @@ def build_static_lib(config: powermake.Config):
         if len(parts) < 3:
             continue
         module = parts[1]
-        if module == "external":
+        if module == "external" and parts[-1] != "volk.h":
             continue
         if module == "core" and parts[-1] in ("structs.h", "internal.h", "log_internal.h"):
             continue
         rest_parts = parts[2:-1]
-        if module == "core":
+        if module == "core" or module == "external":
             new_dir = os.path.join(include_dir, *rest_parts)
         else:
             new_dir = os.path.join(include_dir, module, *rest_parts)
@@ -45,7 +45,7 @@ def build_static_lib(config: powermake.Config):
 
     powermake.archive_files(config, list(objects) + list(ext_objects))
 
-    config.remove_includedirs("src/core", "src/loader", "src/external")
+    config.remove_includedirs("src/core", "src/loader", "src/external", "src/vulkan")
 
 def build_example(config: powermake.Config, example_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")

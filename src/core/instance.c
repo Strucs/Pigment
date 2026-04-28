@@ -15,9 +15,13 @@
  */
 
 #include "instance.h"
-#include "structs.h"
+#include "internal.h"
 #include "log_internal.h"
+#include "pigment_vk.h"
 
+static bool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
+static int build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count);
+static int build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count);
 static PigmentLogSeverity vk_severity_to_pigment(VkDebugUtilsMessageSeverityFlagBitsEXT severity);
 static PigmentLogType vk_type_to_pigment(VkDebugUtilsMessageTypeFlagsEXT type);
 static void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT* create_info, Pigment* pigment);
@@ -32,9 +36,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 
 PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 {
-    VkApplicationInfo app_info       = {0};
-    VkInstanceCreateInfo create_info = {0};
-    PInstance* instance;
+    PInstance* instance                         = NULL;
+    VkLayerProperties* available_layers         = NULL;
+    VkExtensionProperties* available_extensions = NULL;
+    uint32_t available_layer_count              = 0;
+    uint32_t available_extension_count          = 0;
 
     instance = calloc(1, sizeof(*instance));
     if(instance == NULL)
@@ -47,25 +53,6 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         PLOG_WARN(pigment, "PAppInfo is NULL. Using default values.");
     }
 
-    const char* layers[] = {
-        "VK_LAYER_KHRONOS_validation",
-    };
-
-    instance->layers = calloc(1, sizeof(*(instance->layers)));
-    if(instance->layers == NULL)
-    {
-        goto ERROR;
-    }
-
-    instance->layers->size  = sizeof(layers) / sizeof(layers[0]);
-    instance->layers->names = malloc(instance->layers->size * sizeof(*(instance->layers->names)));
-    if(instance->layers->names == NULL)
-    {
-        goto ERROR;
-    }
-
-    memcpy(instance->layers->names, layers, instance->layers->size * sizeof(*layers));
-
     VkResult volk_result = volkInitialize();
     if(volk_result != VK_SUCCESS)
     {
@@ -73,13 +60,60 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         goto ERROR;
     }
 
-    if(pigment->config.validation_enabled && !check_layers(pigment, instance->layers))
+    const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
+
+    vkEnumerateInstanceLayerProperties(&available_layer_count, NULL);
+    if(available_layer_count > 0)
     {
-        PLOG_WARN(pigment, "Validation layers requested but VK_LAYER_KHRONOS_validation is not installed. Continuing without validation.");
-        pigment->config.validation_enabled     = false;
-        pigment->config.best_practices_enabled = false;
+        available_layers = malloc(available_layer_count * sizeof(*available_layers));
+        if(available_layers == NULL)
+        {
+            goto ERROR;
+        }
+        vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers);
     }
 
+    vkEnumerateInstanceExtensionProperties(NULL, &available_extension_count, NULL);
+    if(available_extension_count > 0)
+    {
+        available_extensions = malloc(available_extension_count * sizeof(*available_extensions));
+        if(available_extensions == NULL)
+        {
+            goto ERROR;
+        }
+        vkEnumerateInstanceExtensionProperties(NULL, &available_extension_count, available_extensions);
+    }
+
+    if(pigment->config.validation_enabled)
+    {
+        bool layer_ok       = layer_available(available_layers, available_layer_count, "VK_LAYER_KHRONOS_validation");
+        bool debug_utils_ok = extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        if(!layer_ok)
+        {
+            PLOG_WARN(pigment, "VK_LAYER_KHRONOS_validation not installed. Disabling validation.");
+        }
+        if(!debug_utils_ok)
+        {
+            PLOG_WARN(pigment, "VK_EXT_debug_utils not available. Disabling validation.");
+        }
+        if(!layer_ok || !debug_utils_ok)
+        {
+            pigment->config.validation_enabled     = false;
+            pigment->config.best_practices_enabled = false;
+        }
+    }
+
+    if(build_instance_layers(pigment, instance, vk_init, available_layers, available_layer_count) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    if(build_instance_extensions(pigment, instance, vk_init, available_extensions, available_extension_count) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    VkApplicationInfo app_info  = {0};
     app_info.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName   = info != NULL ? info->app_name : "Unnamed";
     app_info.applicationVersion = info != NULL ? info->app_version : PIGMENT_MAKE_VERSION(0, 0, 1);
@@ -87,18 +121,16 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     app_info.engineVersion      = VK_MAKE_VERSION(0, 0, 3);
     app_info.apiVersion         = VK_API_VERSION_1_3;
 
-    if(get_extensions(pigment, instance) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-
-    create_info.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    create_info.pApplicationInfo = &app_info;
+    VkInstanceCreateInfo create_info = {0};
+    create_info.sType                = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    create_info.pApplicationInfo     = &app_info;
 #ifdef __APPLE__
     create_info.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
     create_info.enabledExtensionCount   = instance->extensions->size;
     create_info.ppEnabledExtensionNames = instance->extensions->names;
+    create_info.enabledLayerCount       = instance->layers->size;
+    create_info.ppEnabledLayerNames     = instance->layers->size > 0 ? instance->layers->names : NULL;
 
     VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {0};
     VkValidationFeatureEnableEXT enabled_features[]      = {VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};
@@ -110,9 +142,6 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     if(pigment->config.validation_enabled)
     {
-        create_info.enabledLayerCount   = instance->layers->size;
-        create_info.ppEnabledLayerNames = instance->layers->names;
-
         populate_debug_messenger_create_info(&debug_create_info, pigment);
         if(pigment->config.best_practices_enabled)
         {
@@ -122,8 +151,12 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     }
     else
     {
-        create_info.enabledLayerCount = 0;
-        create_info.pNext             = NULL;
+        create_info.pNext = NULL;
+    }
+
+    if(vk_init != NULL && vk_init->instance_pnext_chain != NULL)
+    {
+        pigment_vk_append_pnext(&create_info, vk_init->instance_pnext_chain);
     }
 
     VkResult result;
@@ -135,9 +168,14 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     volkLoadInstance(instance->vulkan_instance);
 
+    free(available_layers);
+    free(available_extensions);
+
     return instance;
 
 ERROR:
+    free(available_layers);
+    free(available_extensions);
     if(instance != NULL)
     {
         if(instance->layers != NULL)
@@ -145,9 +183,191 @@ ERROR:
             free(instance->layers->names);
         }
         free(instance->layers);
+        if(instance->extensions != NULL)
+        {
+            free(instance->extensions->names);
+        }
+        free(instance->extensions);
         free(instance);
     }
     return NULL;
+}
+
+static int build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count)
+{
+    instance->layers = calloc(1, sizeof(*(instance->layers)));
+    if(instance->layers == NULL)
+    {
+        goto ERROR;
+    }
+
+    uint32_t max_layers = 0;
+    if(pigment->config.validation_enabled)
+    {
+        max_layers++;
+    }
+
+    if(vk_init != NULL)
+    {
+        max_layers += vk_init->req_instance_layers_count;
+        max_layers += vk_init->opt_instance_layers_count;
+    }
+
+    if(max_layers == 0)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    instance->layers->names = malloc(max_layers * sizeof(*(instance->layers->names)));
+    if(instance->layers->names == NULL)
+    {
+        goto ERROR;
+    }
+
+    if(pigment->config.validation_enabled)
+    {
+        instance->layers->names[instance->layers->size++] = "VK_LAYER_KHRONOS_validation";
+    }
+
+    if(vk_init == NULL)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    for(uint32_t i = 0; i < vk_init->req_instance_layers_count; i++)
+    {
+        const char* name = vk_init->req_instance_layers[i];
+        if(!layer_available(available, available_count, name))
+        {
+            PLOG_ERROR(pigment, "Required instance layer not available: %s", name);
+            goto ERROR;
+        }
+        if(!name_in_list((const char* const*) instance->layers->names, instance->layers->size, name))
+        {
+            instance->layers->names[instance->layers->size++] = name;
+        }
+    }
+
+    for(uint32_t i = 0; i < vk_init->opt_instance_layers_count; i++)
+    {
+        const char* name = vk_init->opt_instance_layers[i];
+        if(!layer_available(available, available_count, name))
+        {
+            PLOG_WARN(pigment, "Optional instance layer not available, skipping: %s", name);
+            continue;
+        }
+        if(!name_in_list((const char* const*) instance->layers->names, instance->layers->size, name))
+        {
+            instance->layers->names[instance->layers->size++] = name;
+        }
+    }
+
+    return PIGMENT_SUCCESS;
+
+ERROR:
+    if(instance->layers != NULL)
+    {
+        free(instance->layers->names);
+    }
+    free(instance->layers);
+    instance->layers = NULL;
+    return PIGMENT_ERROR;
+}
+
+static int build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count)
+{
+    const char** names = NULL;
+    uint32_t count     = 0;
+
+    instance->extensions = calloc(1, sizeof(*(instance->extensions)));
+    if(instance->extensions == NULL)
+    {
+        goto ERROR;
+    }
+
+    uint32_t window_extension_count      = 0;
+    const char* const* window_extensions = window_get_vk_instance_extensions(pigment, &window_extension_count);
+    if(window_extensions == NULL)
+    {
+        goto ERROR;
+    }
+
+    uint32_t max_extensions = window_extension_count;
+#ifdef __APPLE__
+    max_extensions++;
+#endif
+    if(pigment->config.validation_enabled)
+    {
+        max_extensions++;
+    }
+    if(vk_init != NULL)
+    {
+        max_extensions += vk_init->req_instance_extensions_count;
+        max_extensions += vk_init->opt_instance_extensions_count;
+    }
+
+    names = malloc(max_extensions * sizeof(*names));
+    if(names == NULL)
+    {
+        goto ERROR;
+    }
+
+    for(uint32_t i = 0; i < window_extension_count; i++)
+    {
+        names[count++] = window_extensions[i];
+    }
+
+#ifdef __APPLE__
+    if(extension_available(available, available_count, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) && !name_in_list((const char* const*) names, count, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
+    {
+        names[count++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+    }
+#endif
+    if(pigment->config.validation_enabled && !name_in_list((const char* const*) names, count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+    {
+        names[count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    }
+
+    if(vk_init != NULL)
+    {
+        for(uint32_t i = 0; i < vk_init->req_instance_extensions_count; i++)
+        {
+            const char* name = vk_init->req_instance_extensions[i];
+            if(!extension_available(available, available_count, name))
+            {
+                PLOG_ERROR(pigment, "Required instance extension not available: %s", name);
+                goto ERROR;
+            }
+            if(!name_in_list((const char* const*) names, count, name))
+            {
+                names[count++] = name;
+            }
+        }
+
+        for(uint32_t i = 0; i < vk_init->opt_instance_extensions_count; i++)
+        {
+            const char* name = vk_init->opt_instance_extensions[i];
+            if(!extension_available(available, available_count, name))
+            {
+                PLOG_WARN(pigment, "Optional instance extension not available, skipping: %s", name);
+                continue;
+            }
+            if(!name_in_list((const char* const*) names, count, name))
+            {
+                names[count++] = name;
+            }
+        }
+    }
+
+    instance->extensions->names = names;
+    instance->extensions->size  = count;
+    return PIGMENT_SUCCESS;
+
+ERROR:
+    free(names);
+    free(instance->extensions);
+    instance->extensions = NULL;
+    return PIGMENT_ERROR;
 }
 
 void destroy_instance(Pigment* pigment)
@@ -169,103 +389,16 @@ void destroy_instance(Pigment* pigment)
     free(instance);
 }
 
-int get_extensions(Pigment* pigment, PInstance* instance)
+static bool layer_available(const VkLayerProperties* available, uint32_t count, const char* name)
 {
-    Uint32 sdl_extensions_count       = 0;
-    const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_extensions_count);
-
-    if(sdl_extensions == NULL)
+    for(uint32_t i = 0; i < count; i++)
     {
-        PLOG_ERROR(pigment, "SDL_Vulkan_GetInstanceExtensions: %s", SDL_GetError());
-        goto ERROR;
-    }
-
-    instance->extensions = malloc(sizeof(*instance->extensions));
-    if(instance->extensions == NULL)
-    {
-        goto ERROR;
-    }
-
-    bool want_debug_utils = pigment->config.validation_enabled;
-    uint32_t extra_count  = 0;
-#ifdef __APPLE__
-    extra_count++;
-#endif
-    if(want_debug_utils)
-    {
-        extra_count++;
-    }
-
-    instance->extensions->size  = sdl_extensions_count + extra_count;
-    instance->extensions->names = malloc(instance->extensions->size * sizeof(*instance->extensions->names));
-    if(instance->extensions->names == NULL)
-    {
-        goto ERROR;
-    }
-
-    memcpy(instance->extensions->names, sdl_extensions, sdl_extensions_count * sizeof(*sdl_extensions));
-
-    uint32_t idx = sdl_extensions_count;
-#ifdef __APPLE__
-    instance->extensions->names[idx++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-#endif
-    if(want_debug_utils)
-    {
-        instance->extensions->names[idx++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-    }
-
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    if(instance->extensions != NULL)
-    {
-        free(instance->extensions->names);
-    }
-    free(instance->extensions);
-    return PIGMENT_ERROR;
-}
-
-bool check_layers(Pigment* pigment, LayerList* requested_layers)
-{
-    uint32_t layers_count;
-    VkLayerProperties* available_layers;
-    bool layer_found;
-
-    vkEnumerateInstanceLayerProperties(&layers_count, NULL);    // Store the number of layers in layers_count
-
-    available_layers = malloc(layers_count * sizeof(*available_layers));
-    if(available_layers == NULL)
-    {
-        return false;
-    }
-
-    vkEnumerateInstanceLayerProperties(&layers_count, available_layers);    // Store all the layers in available_layers
-
-    // Search if all requested layers are available
-    for(size_t i = 0; i < requested_layers->size; i++)
-    {
-        layer_found = false;
-
-        for(size_t j = 0; j < layers_count; j++)
+        if(strcmp(available[i].layerName, name) == 0)
         {
-            PLOG_TRACE(pigment, "Available layer: %s", available_layers[j].layerName);
-            if(strcmp(requested_layers->names[i], available_layers[j].layerName) == 0)
-            {
-                layer_found = true;
-                break;
-            }
-        }
-
-        if(!layer_found)
-        {
-            free(available_layers);
-            return false;
+            return true;
         }
     }
-
-    free(available_layers);
-
-    return true;
+    return false;
 }
 
 static PigmentLogSeverity vk_severity_to_pigment(VkDebugUtilsMessageSeverityFlagBitsEXT severity)

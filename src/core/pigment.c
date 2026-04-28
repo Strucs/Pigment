@@ -61,6 +61,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     pigment->config.max_samplers           = (config && config->max_samplers) ? config->max_samplers : PIGMENT_DEFAULT_MAX_SAMPLERS;
     pigment->config.validation_enabled     = config && config->enable_validation;
     pigment->config.best_practices_enabled = config && config->enable_best_practices;
+    pigment->config.extra                  = config ? config->extra : NULL;
 
     pigment->window_capacity = PIGMENT_DEFAULT_WINDOW_CAPACITY;
     pigment->window_count    = 0;
