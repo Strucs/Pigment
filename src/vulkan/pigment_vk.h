@@ -20,6 +20,9 @@
 #include <pigment.h>
 #include <volk.h>
 
+typedef struct PVkAllocation PVkAllocation;
+typedef struct PVkAllocator PVkAllocator;
+
 /**
  * @brief Vulkan-specific initialization info. All fields are optional.
  *
@@ -52,6 +55,7 @@ typedef struct PVkInitInfo {
     uint32_t opt_instance_layers_count;
 
     /* Merged with Pigment default features */
+
     const VkPhysicalDeviceFeatures* req_features;
     const VkPhysicalDeviceVulkan11Features* req_features_11;
     const VkPhysicalDeviceVulkan12Features* req_features_12;
@@ -60,7 +64,35 @@ typedef struct PVkInitInfo {
     const VkPhysicalDeviceVulkan11Features* opt_features_11;
     const VkPhysicalDeviceVulkan12Features* opt_features_12;
     const VkPhysicalDeviceVulkan13Features* opt_features_13;
+
+    /**
+     * NULL = Pigment uses its default allocator. Caller owns the allocator
+     * and is responsible for destroying it after destroy_pigment.
+     */
+    PVkAllocator* allocator;
 } PVkInitInfo;
+
+struct PVkAllocator {
+    void* user_data;
+
+    VkResult (*create_buffer)(void* user_data, const VkBufferCreateInfo* info, VkMemoryPropertyFlags properties, VkBuffer* out_buffer, PVkAllocation** out_allocation);
+    void (*destroy_buffer)(void* user_data, VkBuffer buffer, PVkAllocation* allocation);
+
+    VkResult (*create_image)(void* user_data, const VkImageCreateInfo* info, VkMemoryPropertyFlags properties, VkImage* out_image, PVkAllocation** out_allocation);
+    void (*destroy_image)(void* user_data, VkImage image, PVkAllocation* allocation);
+
+    VkResult (*map)(void* user_data, PVkAllocation* allocation, void** out_data);
+    void (*unmap)(void* user_data, PVkAllocation* allocation);
+
+    void (*destroy)(void* user_data);
+};
+
+typedef struct PVkDefaultAllocatorCreateInfo {
+    VkDeviceSize block_size;
+} PVkDefaultAllocatorCreateInfo;
+
+PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info);
+void pigment_vk_destroy_allocator(PVkAllocator* allocator);
 
 static inline void pigment_vk_append_pnext(void* head, void* tail)
 {

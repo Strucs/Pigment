@@ -64,14 +64,13 @@ void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // buffers.c
-int create_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* buffer_memory, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
-int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool);
-int create_index_buffer(Pigment* pigment, VkBuffer* buffer, VkDeviceMemory* memory, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool);
-uint32_t find_memory_type(Pigment* pigment, uint32_t type_filter, VkMemoryPropertyFlags properties);
+int create_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool);
+int create_index_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool);
 
 // texture.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels);
-int create_vk_image(Pigment* pigment, VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
 
 // depth.c
 void destroy_depth_resources(Pigment* pigment, PSwapchain* swapchain);

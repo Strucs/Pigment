@@ -38,12 +38,12 @@ PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t
 
     VkCommandPool pool = command_pool->pool;
 
-    if(create_vertex_buffer(pigment, &mesh->vertex_buffer, &mesh->vertex_buffer_memory, &mesh->vertex_buffer_address, vertices, (VkDeviceSize) vertices_size, pool) != PIGMENT_SUCCESS)
+    if(create_vertex_buffer(pigment, &mesh->vertex_buffer, &mesh->vertex_buffer_allocation, &mesh->vertex_buffer_address, vertices, (VkDeviceSize) vertices_size, pool) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    if(create_index_buffer(pigment, &mesh->index_buffer, &mesh->index_buffer_memory, indices, index_count, pool) != PIGMENT_SUCCESS)
+    if(create_index_buffer(pigment, &mesh->index_buffer, &mesh->index_buffer_allocation, indices, index_count, pool) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -62,10 +62,8 @@ void pigment_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh)
         return;
     }
 
-    VkDevice dev = pigment->device->logical_device;
-    vkDestroyBuffer(dev, mesh->vertex_buffer, NULL);
-    vkFreeMemory(dev, mesh->vertex_buffer_memory, NULL);
-    vkDestroyBuffer(dev, mesh->index_buffer, NULL);
-    vkFreeMemory(dev, mesh->index_buffer_memory, NULL);
+    PVkAllocator* alloc = pigment->allocator;
+    alloc->destroy_buffer(alloc->user_data, mesh->vertex_buffer, mesh->vertex_buffer_allocation);
+    alloc->destroy_buffer(alloc->user_data, mesh->index_buffer, mesh->index_buffer_allocation);
     free(mesh);
 }

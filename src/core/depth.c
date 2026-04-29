@@ -23,11 +23,10 @@ static VkFormat find_supported_format(Pigment* pigment, VkFormat* candidates, ui
 
 int create_depth_resources(Pigment* pigment, PSwapchain* swapchain)
 {
-    PDevice* device         = pigment->device;
     VkFormat depth_format   = find_depth_format(pigment);
     swapchain->depth_format = depth_format;
 
-    if(create_vk_image(pigment, &swapchain->depth_image, &swapchain->depth_image_memory, swapchain->extent.width, swapchain->extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    if(create_vk_image(pigment, &swapchain->depth_image, &swapchain->depth_image_allocation, swapchain->extent.width, swapchain->extent.height, 1, depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -40,8 +39,7 @@ int create_depth_resources(Pigment* pigment, PSwapchain* swapchain)
     return PIGMENT_SUCCESS;
 
 ERROR:
-    vkDestroyImage(device->logical_device, swapchain->depth_image, NULL);
-    vkFreeMemory(device->logical_device, swapchain->depth_image_memory, NULL);
+    destroy_depth_resources(pigment, swapchain);
     return PIGMENT_ERROR;
 }
 
@@ -51,10 +49,9 @@ void destroy_depth_resources(Pigment* pigment, PSwapchain* swapchain)
     {
         return;
     }
-    PDevice* device = pigment->device;
-    vkDestroyImageView(device->logical_device, swapchain->depth_image_view, NULL);
-    vkDestroyImage(device->logical_device, swapchain->depth_image, NULL);
-    vkFreeMemory(device->logical_device, swapchain->depth_image_memory, NULL);
+    PVkAllocator* alloc = pigment->allocator;
+    vkDestroyImageView(pigment->device->logical_device, swapchain->depth_image_view, NULL);
+    alloc->destroy_image(alloc->user_data, swapchain->depth_image, swapchain->depth_image_allocation);
 }
 
 static VkFormat find_supported_format(Pigment* pigment, VkFormat* candidates, uint32_t candidates_number, VkImageTiling tiling, VkFormatFeatureFlags features)

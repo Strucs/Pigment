@@ -105,6 +105,23 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     {
         goto ERROR;
     }
+
+    const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
+    if(vk_init != NULL && vk_init->allocator != NULL)
+    {
+        pigment->allocator      = vk_init->allocator;
+        pigment->owns_allocator = false;
+    }
+    else
+    {
+        pigment->allocator      = pigment_vk_create_default_allocator(pigment, NULL);
+        pigment->owns_allocator = true;
+    }
+
+    if(pigment->allocator == NULL)
+    {
+        goto ERROR;
+    }
     pigment->command_pools = create_command_pools(pigment);
     if(pigment->command_pools == NULL)
     {
@@ -184,6 +201,10 @@ void destroy_pigment(Pigment* pigment)
     destroy_images(pigment, pigment->images);
     destroy_samplers(pigment, pigment->samplers);
     destroy_command_pools(pigment, pigment->command_pools);
+    if(pigment->owns_allocator)
+    {
+        pigment_vk_destroy_allocator(pigment->allocator);
+    }
     destroy_device(pigment);
     for(uint32_t i = 0; i < pigment->window_count; i++)
     {

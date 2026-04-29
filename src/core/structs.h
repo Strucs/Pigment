@@ -18,6 +18,7 @@
 #define STRUCT_H
 
 #include "defines.h"
+#include "pigment_vk.h"
 
 #include <volk.h>
 #include <SDL3/SDL.h>
@@ -32,7 +33,7 @@
 #ifndef _WIN32
     #include <pthread.h>
 
-    typedef pthread_rwlock_t pigment_rwlock_t;
+typedef pthread_rwlock_t pigment_rwlock_t;
 
     #define pigment_rwlock_init(l) pthread_rwlock_init((l), NULL)
     #define pigment_rwlock_destroy(l) pthread_rwlock_destroy(l)
@@ -58,10 +59,10 @@
         #undef far
     #endif
 
-    typedef SRWLOCK pigment_rwlock_t;
+typedef SRWLOCK pigment_rwlock_t;
 
     #define pigment_rwlock_init(l) (InitializeSRWLock(l), 0)
-    #define pigment_rwlock_destroy(l) ((void)(l))
+    #define pigment_rwlock_destroy(l) ((void) (l))
     #define pigment_rwlock_rdlock(l) AcquireSRWLockShared(l)
     #define pigment_rwlock_rdunlock(l) ReleaseSRWLockShared(l)
     #define pigment_rwlock_wrlock(l) AcquireSRWLockExclusive(l)
@@ -99,6 +100,8 @@ struct Pigment {
 
     PInstance* instance;
     PDevice* device;
+    PVkAllocator* allocator;
+    bool owns_allocator;
     PDescriptor* descriptor;
     PCommandPoolList* command_pools;
     PImageList* images;
@@ -189,7 +192,7 @@ struct PSwapchain {
     VkExtent2D extent;
     uint32_t current_frame;
     VkImage depth_image;
-    VkDeviceMemory depth_image_memory;
+    PVkAllocation* depth_image_allocation;
     VkImageView depth_image_view;
     VkFormat depth_format;
 };
@@ -274,7 +277,7 @@ struct PDrawPushConstants {
 
 struct PUniformBuffers {
     VkBuffer* uniform_buffers;
-    VkDeviceMemory* uniform_buffers_memory;
+    PVkAllocation** uniform_buffers_allocations;
     void** uniform_buffers_mapped;
 };
 
@@ -287,7 +290,7 @@ struct PDescriptor {
 struct PImage {
     VkImage image;
     VkImageView image_view;
-    VkDeviceMemory image_memory;
+    PVkAllocation* image_allocation;
     uint32_t mip_levels;
 };
 
@@ -310,10 +313,10 @@ struct PSamplerList {
 
 struct PMeshBuffers {
     VkBuffer vertex_buffer;
-    VkDeviceMemory vertex_buffer_memory;
+    PVkAllocation* vertex_buffer_allocation;
     VkDeviceAddress vertex_buffer_address;
     VkBuffer index_buffer;
-    VkDeviceMemory index_buffer_memory;
+    PVkAllocation* index_buffer_allocation;
 };
 
 #endif

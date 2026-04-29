@@ -24,8 +24,8 @@ static int create_sampler(Pigment* pigment, PSampler* sampler, PSamplerDesc* des
 static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels);
 static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels);
-static int prepare_image_upload(Pigment* pigment, PImage* image, VkBuffer* staging_buffer, VkDeviceMemory* staging_memory, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
-static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, VkDeviceMemory* staging_mems, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
+static int prepare_image_upload(Pigment* pigment, PImage* image, VkBuffer* staging_buffer, PVkAllocation** staging_allocation, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, PVkAllocation** staging_allocations, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage* images, const PFormat* formats, uint32_t count);
 static void batch_write_descriptors(Pigment* pigment, uint32_t start_slot, uint32_t count);
 
@@ -101,20 +101,21 @@ ERROR:
 
 void destroy_images(Pigment* pigment, PImageList* image_list)
 {
-    PDevice* device = pigment->device;
-    if(image_list != NULL)
+    if(image_list == NULL)
     {
-        for(size_t i = 0; i < image_list->count; i++)
-        {
-            vkDestroyImageView(device->logical_device, image_list->images[i].image_view, NULL);
-            vkDestroyImage(device->logical_device, image_list->images[i].image, NULL);
-            vkFreeMemory(device->logical_device, image_list->images[i].image_memory, NULL);
-        }
-
-        free(image_list->images);
-
-        free(image_list);
+        return;
     }
+
+    PVkAllocator* alloc = pigment->allocator;
+
+    for(size_t i = 0; i < image_list->count; i++)
+    {
+        vkDestroyImageView(pigment->device->logical_device, image_list->images[i].image_view, NULL);
+        alloc->destroy_image(alloc->user_data, image_list->images[i].image, image_list->images[i].image_allocation);
+    }
+
+    free(image_list->images);
+    free(image_list);
 }
 
 uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
@@ -173,19 +174,20 @@ uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixe
         return 0;
     }
 
-    VkBuffer* stagings           = calloc(count, sizeof(*stagings));
-    VkDeviceMemory* staging_mems = calloc(count, sizeof(*staging_mems));
-    PImage* new_images           = calloc(count, sizeof(*new_images));
-    uint32_t start_slot          = 0;
+    PVkAllocator* alloc                 = pigment->allocator;
+    VkBuffer* stagings                  = calloc(count, sizeof(*stagings));
+    PVkAllocation** staging_allocations = calloc(count, sizeof(*staging_allocations));
+    PImage* new_images                  = calloc(count, sizeof(*new_images));
+    uint32_t start_slot                 = 0;
 
-    if(stagings == NULL || staging_mems == NULL || new_images == NULL)
+    if(stagings == NULL || staging_allocations == NULL || new_images == NULL)
     {
         goto FREE;
     }
 
     VkCommandPool vk_pool = pool->pool;
     VkCommandBuffer cmd   = start_single_usage_commands(pigment, vk_pool);
-    int result            = batch_record_uploads(pigment, cmd, new_images, stagings, staging_mems, pixels, widths, heights, formats, count);
+    int result            = batch_record_uploads(pigment, cmd, new_images, stagings, staging_allocations, pixels, widths, heights, formats, count);
     end_single_usage_commands(pigment, &cmd, vk_pool);
 
     if(result == PIGMENT_SUCCESS)
@@ -195,24 +197,23 @@ uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixe
     }
 
 FREE:
-    if(stagings != NULL && staging_mems != NULL)
+    if(stagings != NULL && staging_allocations != NULL)
     {
         for(uint32_t i = 0; i < count; i++)
         {
-            vkDestroyBuffer(pigment->device->logical_device, stagings[i], NULL);
-            vkFreeMemory(pigment->device->logical_device, staging_mems[i], NULL);
+            alloc->destroy_buffer(alloc->user_data, stagings[i], staging_allocations[i]);
         }
     }
     free(stagings);
-    free(staging_mems);
+    free(staging_allocations);
     free(new_images);
     return start_slot;
 }
 
 int add_image_from_pixels(Pigment* pigment, PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool)
 {
-    PDevice* device = pigment->device;
-    PImage image    = {0};
+    PVkAllocator* alloc = pigment->allocator;
+    PImage image        = {0};
 
     if(pool == NULL)
     {
@@ -238,9 +239,8 @@ int add_image_from_pixels(Pigment* pigment, PImageList* image_list, const unsign
     return PIGMENT_SUCCESS;
 
 ERROR:
-    vkDestroyImageView(device->logical_device, image.image_view, NULL);
-    vkDestroyImage(device->logical_device, image.image, NULL);
-    vkFreeMemory(device->logical_device, image.image_memory, NULL);
+    vkDestroyImageView(pigment->device->logical_device, image.image_view, NULL);
+    alloc->destroy_image(alloc->user_data, image.image, image.image_allocation);
     PLOG_ERROR(pigment, "Failed to add image from pixels.");
     return PIGMENT_ERROR;
 }
@@ -253,11 +253,11 @@ int add_default_image(Pigment* pigment, PImageList* image_list, PCommandPool* po
 
 static int create_image(Pigment* pigment, PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool)
 {
-    PDevice* device                      = pigment->device;
-    VkBuffer staging_buffer              = VK_NULL_HANDLE;
-    VkDeviceMemory staging_buffer_memory = VK_NULL_HANDLE;
+    PVkAllocator* alloc               = pigment->allocator;
+    VkBuffer staging_buffer           = VK_NULL_HANDLE;
+    PVkAllocation* staging_allocation = NULL;
 
-    if(prepare_image_upload(pigment, image, &staging_buffer, &staging_buffer_memory, pixels, width, height, format) != PIGMENT_SUCCESS)
+    if(prepare_image_upload(pigment, image, &staging_buffer, &staging_allocation, pixels, width, height, format) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -268,14 +268,12 @@ static int create_image(Pigment* pigment, PImage* image, const unsigned char* pi
     cmd_generate_mipmaps(cmd, image->image, (int32_t) width, (int32_t) height, image->mip_levels);
     end_single_usage_commands(pigment, &cmd, command_pool);
 
-    vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
-    vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
+    alloc->destroy_buffer(alloc->user_data, staging_buffer, staging_allocation);
 
     return PIGMENT_SUCCESS;
 
 ERROR:
-    vkDestroyBuffer(device->logical_device, staging_buffer, NULL);
-    vkFreeMemory(device->logical_device, staging_buffer_memory, NULL);
+    alloc->destroy_buffer(alloc->user_data, staging_buffer, staging_allocation);
     PLOG_ERROR(pigment, "Failed to create image image!");
     return PIGMENT_ERROR;
 }
@@ -425,9 +423,8 @@ void destroy_samplers(Pigment* pigment, PSamplerList* sampler_list)
     }
 }
 
-int create_vk_image(Pigment* pigment, VkImage* image, VkDeviceMemory* image_memory, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties)
+int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties)
 {
-    PDevice* device                     = pigment->device;
     VkImageCreateInfo image_create_info = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType     = VK_IMAGE_TYPE_2D,
@@ -444,40 +441,15 @@ int create_vk_image(Pigment* pigment, VkImage* image, VkDeviceMemory* image_memo
         .sharingMode   = VK_SHARING_MODE_EXCLUSIVE
     };
 
-    VkResult result;
-    if((result = vkCreateImage(device->logical_device, &image_create_info, NULL, image)) != VK_SUCCESS)
+    PVkAllocator* alloc = pigment->allocator;
+    VkResult result     = alloc->create_image(alloc->user_data, &image_create_info, properties, image, allocation);
+    if(result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create image! (result: %d)", result);
-        goto ERROR;
-    }
-
-    VkMemoryRequirements memory_requirements;
-    vkGetImageMemoryRequirements(device->logical_device, *image, &memory_requirements);
-
-    VkMemoryAllocateInfo alloc_info = {
-        .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize  = memory_requirements.size,
-        .memoryTypeIndex = find_memory_type(pigment, memory_requirements.memoryTypeBits, properties)
-    };
-
-    if((result = vkAllocateMemory(device->logical_device, &alloc_info, NULL, image_memory)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to allocate image memory! (result: %d)", result);
-        goto ERROR;
-    }
-
-    if((result = vkBindImageMemory(device->logical_device, *image, *image_memory, 0)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to bind image memory! (result: %d)", result);
-        goto ERROR;
+        PLOG_ERROR(pigment, "Failed to create image (result: %d)", result);
+        return PIGMENT_ERROR;
     }
 
     return PIGMENT_SUCCESS;
-
-ERROR:
-    vkFreeMemory(device->logical_device, *image_memory, NULL);
-    vkDestroyImage(device->logical_device, *image, NULL);
-    return PIGMENT_ERROR;
 }
 
 // Record into an existing command buffer
@@ -628,9 +600,10 @@ static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t ima
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-static int prepare_image_upload(Pigment* pigment, PImage* image, VkBuffer* staging_buffer, VkDeviceMemory* staging_memory, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
+static int prepare_image_upload(Pigment* pigment, PImage* image, VkBuffer* staging_buffer, PVkAllocation** staging_allocation, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
     PDevice* device     = pigment->device;
+    PVkAllocator* alloc = pigment->allocator;
     uint32_t pixel_size = pformat_pixel_size(format);
     if(pixel_size == 0)
     {
@@ -649,20 +622,20 @@ static int prepare_image_upload(Pigment* pigment, PImage* image, VkBuffer* stagi
     VkDeviceSize image_size = (uint64_t) (width * height * pixel_size);
     image->mip_levels       = (uint32_t) (floor(log2(imax(width, height)))) + 1;
 
-    if(create_buffer(pigment, staging_buffer, staging_memory, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
+    if(create_buffer(pigment, staging_buffer, staging_allocation, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR;
     }
 
-    void* data;
-    if(vkMapMemory(device->logical_device, *staging_memory, 0, image_size, 0, &data) != VK_SUCCESS)
+    void* data = NULL;
+    if(alloc->map(alloc->user_data, *staging_allocation, &data) != VK_SUCCESS)
     {
         return PIGMENT_ERROR;
     }
     memcpy(data, pixels, (size_t) image_size);
-    vkUnmapMemory(device->logical_device, *staging_memory);
+    alloc->unmap(alloc->user_data, *staging_allocation);
 
-    if(create_vk_image(pigment, &image->image, &image->image_memory, width, height, image->mip_levels, (VkFormat) format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    if(create_vk_image(pigment, &image->image, &image->image_allocation, width, height, image->mip_levels, (VkFormat) format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR;
     }
@@ -670,11 +643,11 @@ static int prepare_image_upload(Pigment* pigment, PImage* image, VkBuffer* stagi
     return PIGMENT_SUCCESS;
 }
 
-static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, VkDeviceMemory* staging_mems, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
+static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* out_images, VkBuffer* stagings, PVkAllocation** staging_allocations, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
 {
     for(uint32_t i = 0; i < count; i++)
     {
-        if(prepare_image_upload(pigment, &out_images[i], &stagings[i], &staging_mems[i], pixels[i], widths[i], heights[i], formats[i]) != PIGMENT_SUCCESS)
+        if(prepare_image_upload(pigment, &out_images[i], &stagings[i], &staging_allocations[i], pixels[i], widths[i], heights[i], formats[i]) != PIGMENT_SUCCESS)
         {
             return PIGMENT_ERROR;
         }
