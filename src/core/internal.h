@@ -78,7 +78,4 @@ void destroy_depth_resources(Pigment* pigment, PSwapchain* swapchain);
 // uniform.c
 void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera);
 
-// camera.c
-void get_view_matrix(PCamera* camera, UniformBufferObject* ubo);
-
 #endif

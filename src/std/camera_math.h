@@ -1,5 +1,5 @@
 /**
- * Copyright 2025-2026 Angel-Leduc TA
+ * Copyright 2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef CAMERA_H
-#define CAMERA_H
+#ifndef CAMERA_MATH_H
+#define CAMERA_MATH_H
 
 #include "defines.h"
 
-PCamera* pigment_create_camera(void);
-void pigment_destroy_camera(PCamera* camera);
-
-void pigment_camera_set_view(PCamera* camera, mat4 view);
-void pigment_camera_set_projection(PCamera* camera, mat4 projection);
+void pigment_perspective(float fov_rad, float aspect, float near, mat4 out);
+void pigment_perspective_finite(float fov_rad, float aspect, float near, float far, mat4 out);
+void pigment_ortho(float left, float right, float bottom, float top, float near, float far, mat4 out);
 
 #endif

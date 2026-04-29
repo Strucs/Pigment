@@ -15,17 +15,9 @@
  */
 
 #include "camera.h"
-#include "defines.h"
+#include "structs.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <cglm/quat.h>
-
-void get_view_matrix(PCamera* camera, UniformBufferObject* ubo);
-
-PCamera* pigment_create_camera(vec3 position)
+PCamera* pigment_create_camera(void)
 {
     PCamera* camera = malloc(sizeof(*camera));
     if(camera == NULL)
@@ -33,18 +25,8 @@ PCamera* pigment_create_camera(vec3 position)
         return NULL;
     }
 
-    vec3 front = {0.0f, 0.0f, -1.0f};
-    vec3 up    = {0.0f, 1.0f, 0.0f};
-
-    memcpy(camera->position, position, sizeof(vec3));
-    memcpy(camera->front, front, sizeof(front));
-    memcpy(camera->up, up, sizeof(up));
-
-    camera->speed = 5.0f;
-
-    camera->roll  = 0.0f;
-    camera->pitch = 0.0f;
-    camera->yaw   = -90.0f;
+    glm_mat4_identity(camera->view);
+    glm_mat4_identity(camera->projection);
 
     return camera;
 }
@@ -54,10 +36,22 @@ void pigment_destroy_camera(PCamera* camera)
     free(camera);
 }
 
-void get_view_matrix(PCamera* camera, UniformBufferObject* ubo)
+void pigment_camera_set_view(PCamera* camera, mat4 view)
 {
-    vec3 target;
-    glm_vec3_add(camera->position, camera->front, target);
+    if(camera == NULL)
+    {
+        return;
+    }
 
-    glm_lookat(camera->position, target, camera->up, ubo->view);
+    glm_mat4_copy(view, camera->view);
+}
+
+void pigment_camera_set_projection(PCamera* camera, mat4 projection)
+{
+    if(camera == NULL)
+    {
+        return;
+    }
+
+    glm_mat4_copy(projection, camera->projection);
 }

@@ -3,7 +3,7 @@ import os
 import shutil
 
 def build_static_lib(config: powermake.Config):
-    config.add_includedirs("src/core", "src/loader", "src/external", "src/vulkan")
+    config.add_includedirs("src/core", "src/std", "src/external", "src/vulkan")
 
     all_files = powermake.get_files("./src/**/*.c")
     external_files = {f for f in all_files if os.sep + "external" + os.sep in os.path.normpath(f)}
@@ -45,7 +45,7 @@ def build_static_lib(config: powermake.Config):
 
     powermake.archive_files(config, list(objects) + list(ext_objects))
 
-    config.remove_includedirs("src/core", "src/loader", "src/external", "src/vulkan")
+    config.remove_includedirs("src/core", "src/std", "src/external", "src/vulkan")
 
 def build_example(config: powermake.Config, example_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")

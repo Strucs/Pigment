@@ -1,7 +1,7 @@
 #include <pigment.h>
 #include <pigment_sdl.h>
-#include <loader/gltf_loader.h>
-#include <loader/pipeline_loader.h>
+#include <std/gltf_loader.h>
+#include <std/pipeline_loader.h>
 
 #include "../common/fps_camera.h"
 
@@ -35,16 +35,16 @@ int main(void)
 
     PigmentLoggerCreateInfo loggers[] = {
         {
-            .severity_filter = PIGMENT_LOG_TRACE_BIT | PIGMENT_LOG_DEBUG_BIT | PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
-            .type_filter     = PIGMENT_LOG_TYPE_GENERAL_BIT | PIGMENT_LOG_TYPE_VALIDATION_BIT | PIGMENT_LOG_TYPE_PERFORMANCE_BIT,
-            .callback        = pigment_default_log_callback,
-            .user_data       = NULL,
-        },
+         .severity_filter = PIGMENT_LOG_TRACE_BIT | PIGMENT_LOG_DEBUG_BIT | PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
+         .type_filter     = PIGMENT_LOG_TYPE_GENERAL_BIT | PIGMENT_LOG_TYPE_VALIDATION_BIT | PIGMENT_LOG_TYPE_PERFORMANCE_BIT,
+         .callback        = pigment_default_log_callback,
+         .user_data       = NULL,
+         },
     };
     PigmentConfig config = {
-        .loggers               = loggers,
-        .logger_count          = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation     = true,
+        .loggers           = loggers,
+        .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation = true,
     };
 
     pigment = init_pigment(&app_info, &window_info, &config);
@@ -55,14 +55,14 @@ int main(void)
     }
 
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
-    camera               = pigment_create_camera(camera_position);
+    camera               = pigment_create_camera();
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
         goto FREE;
     }
 
-    FPSCameraState fps_state = fps_camera_state_init();
+    FPSCameraState fps_state = fps_camera_state_init(camera, pigment_get_sdl_window(pigment, 0), camera_position);
     SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), true);
 
     PWindowRenderer* renderer   = pigment_get_window_renderer(pigment, 0);
@@ -160,7 +160,7 @@ int main(void)
         while(SDL_PollEvent(&event))
         {
             pigment_handle_sdl_event(pigment, &event);
-            fps_camera_handle_sdl_event(&fps_state, &event);
+            fps_camera_handle_sdl_event(camera, &fps_state, &event);
         }
 
         fps_camera_update(camera, &fps_state);

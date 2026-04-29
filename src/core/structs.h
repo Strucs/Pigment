@@ -221,6 +221,11 @@ struct PLayoutList {
     uint32_t capacity;
 };
 
+struct PCamera {
+    mat4 view;
+    mat4 projection;
+};
+
 struct PPipelineBuild {
     VkShaderModule vertex_module;
     VkShaderModule fragment_module;

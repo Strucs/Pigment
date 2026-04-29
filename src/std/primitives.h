@@ -1,5 +1,5 @@
 /**
- * Copyright 2025-2026 Angel-Leduc TA
+ * Copyright 2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef CAMERA_H
-#define CAMERA_H
+#ifndef PRIMITIVES_H
+#define PRIMITIVES_H
 
 #include "defines.h"
 
-PCamera* pigment_create_camera(void);
-void pigment_destroy_camera(PCamera* camera);
+typedef struct PMeshData {
+    PVertex* vertices;
+    uint32_t vertex_count;
+    uint32_t* indices;
+    uint32_t index_count;
+} PMeshData;
 
-void pigment_camera_set_view(PCamera* camera, mat4 view);
-void pigment_camera_set_projection(PCamera* camera, mat4 projection);
+PMeshData pigment_cube_mesh(void);
+PMeshData pigment_quad_mesh(void);
+PMeshData pigment_plane_mesh(uint32_t segments);
+PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments);
+
+void pigment_free_mesh_data(PMeshData* mesh);
+
+PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, const PMeshData* data);
 
 #endif

@@ -19,24 +19,9 @@
 
 void update_uniform_buffer(PUniformBuffers* buffers, PSwapchain* swapchain, PCamera* camera)
 {
-    float fov    = glm_rad(45.0f);
-    float aspect = (float) swapchain->extent.width / (float) swapchain->extent.height;
-    float near   = 0.1f;
-    float f      = 1.0f / tanf(fov / 2.0f);
-
-    // Infinite reverse Z projection (near=1, far=0, no far plane clipping)
-    mat4 projection = {
-        { f / aspect, 0.0f,  0.0f,  0.0f },
-        { 0.0f,       f,     0.0f,  0.0f },
-        { 0.0f,       0.0f,  0.0f, -1.0f },
-        { 0.0f,       0.0f,  near,  0.0f }
-    };
-
     UniformBufferObject ubo;
-    get_view_matrix(camera, &ubo);
-    glm_mat4_copy(projection, ubo.projection);
-
-    ubo.projection[1][1] *= -1;
+    glm_mat4_copy(camera->view, ubo.view);
+    glm_mat4_copy(camera->projection, ubo.projection);
 
     memcpy(buffers->uniform_buffers_mapped[swapchain->current_frame], &ubo, sizeof(ubo));
 }
