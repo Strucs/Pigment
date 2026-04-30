@@ -1,9 +1,8 @@
 #version 450
 
 #extension GL_EXT_nonuniform_qualifier : require
-#define MAX_SAMPLERS 16
 
-layout (binding = 1) uniform sampler _sampler[MAX_SAMPLERS];
+layout (binding = 1) uniform sampler _sampler[];
 layout (binding = 2) uniform texture2D _image[];
 
 layout (location = 0) in vec4 fragColor;

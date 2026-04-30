@@ -41,11 +41,15 @@
 "    Vertex vertices[];\n" \
 "};\n" \
 "\n" \
+"layout(buffer_reference, std430) readonly buffer TransformBuffer {\n" \
+"    mat4 transforms[];\n" \
+"};\n" \
+"\n" \
 "layout(push_constant) uniform constants {\n" \
-"    mat4         world_matrix;\n" \
-"    VertexBuffer vertex_buffer;\n" \
-"    int          image_index;\n" \
-"    int          sampler_index;\n" \
+"    VertexBuffer    vertex_buffer;\n" \
+"    TransformBuffer transform_buffer;\n" \
+"    int             image_index;\n" \
+"    int             sampler_index;\n" \
 "} push;\n" \
 "\n" \
 "layout(location = 0) out vec4 fragColor;\n" \
@@ -55,14 +59,15 @@
 "\n" \
 "void main()\n" \
 "{\n" \
-"    Vertex v = push.vertex_buffer.vertices[gl_VertexIndex];\n" \
+"    Vertex v          = push.vertex_buffer.vertices[gl_VertexIndex];\n" \
+"    mat4 world_matrix = push.transform_buffer.transforms[gl_InstanceIndex];\n" \
 "\n" \
 "    fragColor        = v.color;\n" \
 "    fragTexCoord     = vec2(v.uv_x, v.uv_y);\n" \
 "    fragImageIndex   = push.image_index;\n" \
 "    fragSamplerIndex = push.sampler_index;\n" \
 "\n" \
-"    gl_Position = ubo.proj * ubo.view * push.world_matrix * vec4(v.pos, 1.0);\n" \
+"    gl_Position = ubo.proj * ubo.view * world_matrix * vec4(v.pos, 1.0);\n" \
 "}\n"
 
 #define DEFAULT_FRAGMENT_SHADER \

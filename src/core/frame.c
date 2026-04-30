@@ -187,39 +187,6 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
     renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
-void pigment_draw(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PDrawCall* draw_cmds, uint32_t draw_cmd_count)
-{
-    if(pigment == NULL || pipeline == NULL || draw_cmds == NULL || draw_cmd_count == 0 || window_index >= pigment->window_count)
-    {
-        return;
-    }
-
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    uint32_t current_frame    = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
-    PLayout* layout           = pipeline->layout;
-
-    for(uint32_t i = 0; i < draw_cmd_count; i++)
-    {
-        PDrawCall* draw_call = &draw_cmds[i];
-        if(draw_call->mesh == NULL)
-        {
-            continue;
-        }
-
-        PDrawPushConstants push = {0};
-        glm_mat4_copy(draw_call->transform, push.world_matrix);
-        push.vertex_buffer = draw_call->mesh->vertex_buffer_address;
-        push.image_index   = draw_call->image_index;
-        push.sampler_index = draw_call->sampler_index;
-
-        vkCmdPushConstants(cmd, layout->layout, layout->push_stages, 0, layout->push_size, &push);
-
-        vkCmdBindIndexBuffer(cmd, draw_call->mesh->index_buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, draw_call->index_count, 1, draw_call->first_index, 0, 0);
-    }
-}
-
 static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index)
 {
     if(pigment == NULL || window_index >= pigment->window_count)
@@ -325,4 +292,26 @@ void pigment_cmd_set_depth_bounds(Pigment* pigment, uint32_t window_index, bool 
     {
         vkCmdSetDepthBounds(cmd, min, max);
     }
+}
+
+void pigment_cmd_push_constants(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE || pipeline == NULL || pipeline->layout == NULL)
+    {
+        return;
+    }
+    PLayout* layout = pipeline->layout;
+    vkCmdPushConstants(cmd, layout->layout, layout->push_stages, offset, size, data);
+}
+
+void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PMeshBuffers* mesh, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE || mesh == NULL)
+    {
+        return;
+    }
+    vkCmdBindIndexBuffer(cmd, mesh->index_buffer, (VkDeviceSize) index_buffer_offset, VK_INDEX_TYPE_UINT32);
+    vkCmdDrawIndexed(cmd, index_count, instance_count, first_index, vertex_offset, first_instance);
 }

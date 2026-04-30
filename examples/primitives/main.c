@@ -1,5 +1,6 @@
 #include <pigment.h>
 #include <pigment_sdl.h>
+#include <std/draw.h>
 #include <std/pipeline_loader.h>
 #include <std/primitives.h>
 
@@ -15,21 +16,24 @@ int main(void)
     PWindowInfo window_info = {
         .width                  = 1280,
         .height                 = 720,
-        .title                  = "Primitives (cube + sphere + plane + quad)",
+        .title                  = "Primitives + Instancing",
         .preferred_present_mode = P_PRESENT_MODE_DEFAULT,
         .flags                  = P_WINDOW_FLAGS_DEFAULT,
     };
 
-    Pigment* pigment         = NULL;
-    PCamera* camera          = NULL;
-    PPipeline* pipeline      = NULL;
-    PPipelineBuild* build    = NULL;
-    PMeshBuffers* gpu_cube   = NULL;
-    PMeshBuffers* gpu_sphere = NULL;
-    PMeshBuffers* gpu_plane  = NULL;
-    PMeshBuffers* gpu_quad   = NULL;
-    PDrawCall draw_calls[4]  = {0};
-    int error_code           = 1;
+    Pigment* pigment            = NULL;
+    PCamera* camera             = NULL;
+    PStdDrawState* draw_state   = NULL;
+    PPipeline* pipeline         = NULL;
+    PPipelineBuild* build       = NULL;
+    PMeshBuffers* gpu_cube      = NULL;
+    PMeshBuffers* gpu_sphere    = NULL;
+    PMeshBuffers* gpu_plane     = NULL;
+    PMeshBuffers* gpu_quad      = NULL;
+    PDrawCall draw_calls[5]     = {0};
+    mat4 transforms[4]          = {0};
+    mat4 sphere_transforms[100] = {0};
+    int error_code              = 1;
 
     PigmentLoggerCreateInfo loggers[] = {
         {
@@ -49,6 +53,13 @@ int main(void)
     if(pigment == NULL)
     {
         fprintf(stderr, "Failed to initialize Pigment!\n");
+        goto FREE;
+    }
+
+    draw_state = pigment_std_draw_init(pigment, 4096);
+    if(draw_state == NULL)
+    {
+        fprintf(stderr, "Failed to init draw state!\n");
         goto FREE;
     }
 
@@ -108,34 +119,49 @@ int main(void)
         goto FREE;
     }
 
-    glm_mat4_identity(draw_calls[0].transform);
-    glm_translate(draw_calls[0].transform, (vec3) {-3.0f, 0.0f, 0.0f});
-    draw_calls[0].mesh          = gpu_cube;
-    draw_calls[0].index_count   = cube_idx;
-    draw_calls[0].image_index   = (uint32_t) -1;
-    draw_calls[0].sampler_index = 0;
+    glm_mat4_identity(transforms[0]);
+    glm_translate(transforms[0], (vec3) {-3.0f, 0.0f, 0.0f});
+    draw_calls[0].mesh           = gpu_cube;
+    draw_calls[0].transforms     = &transforms[0];
+    draw_calls[0].instance_count = 1;
+    draw_calls[0].index_count    = cube_idx;
+    draw_calls[0].image_index    = (uint32_t) -1;
+    draw_calls[0].sampler_index  = 0;
 
-    glm_mat4_identity(draw_calls[1].transform);
-    glm_translate(draw_calls[1].transform, (vec3) {-1.0f, 0.0f, 0.0f});
-    draw_calls[1].mesh          = gpu_sphere;
-    draw_calls[1].index_count   = sphere_idx;
-    draw_calls[1].image_index   = (uint32_t) -1;
-    draw_calls[1].sampler_index = 0;
+    glm_mat4_identity(transforms[1]);
+    glm_translate(transforms[1], (vec3) {-1.0f, 0.0f, 0.0f});
+    draw_calls[1].mesh           = gpu_sphere;
+    draw_calls[1].transforms     = &transforms[1];
+    draw_calls[1].instance_count = 1;
+    draw_calls[1].index_count    = sphere_idx;
+    draw_calls[1].image_index    = (uint32_t) -1;
+    draw_calls[1].sampler_index  = 0;
 
-    glm_mat4_identity(draw_calls[2].transform);
-    glm_translate(draw_calls[2].transform, (vec3) {0.0f, -0.6f, 0.0f});
-    glm_scale(draw_calls[2].transform, (vec3) {10.0f, 1.0f, 10.0f});
-    draw_calls[2].mesh          = gpu_plane;
-    draw_calls[2].index_count   = plane_idx;
-    draw_calls[2].image_index   = (uint32_t) -1;
-    draw_calls[2].sampler_index = 0;
+    glm_mat4_identity(transforms[2]);
+    glm_translate(transforms[2], (vec3) {0.0f, -2.0f, 0.0f});
+    glm_scale(transforms[2], (vec3) {10.0f, 1.0f, 10.0f});
+    draw_calls[2].mesh           = gpu_plane;
+    draw_calls[2].transforms     = &transforms[2];
+    draw_calls[2].instance_count = 1;
+    draw_calls[2].index_count    = plane_idx;
+    draw_calls[2].image_index    = (uint32_t) -1;
+    draw_calls[2].sampler_index  = 0;
 
-    glm_mat4_identity(draw_calls[3].transform);
-    glm_translate(draw_calls[3].transform, (vec3) {2.0f, 0.0f, 0.0f});
-    draw_calls[3].mesh          = gpu_quad;
-    draw_calls[3].index_count   = quad_idx;
-    draw_calls[3].image_index   = (uint32_t) -1;
-    draw_calls[3].sampler_index = 0;
+    glm_mat4_identity(transforms[3]);
+    glm_translate(transforms[3], (vec3) {2.0f, 0.0f, 0.0f});
+    draw_calls[3].mesh           = gpu_quad;
+    draw_calls[3].transforms     = &transforms[3];
+    draw_calls[3].instance_count = 1;
+    draw_calls[3].index_count    = quad_idx;
+    draw_calls[3].image_index    = (uint32_t) -1;
+    draw_calls[3].sampler_index  = 0;
+
+    draw_calls[4].mesh           = gpu_sphere;
+    draw_calls[4].transforms     = sphere_transforms;
+    draw_calls[4].instance_count = 100;
+    draw_calls[4].index_count    = sphere_idx;
+    draw_calls[4].image_index    = (uint32_t) -1;
+    draw_calls[4].sampler_index  = 0;
 
     pigment_show_window(pigment, 0);
 
@@ -150,6 +176,19 @@ int main(void)
 
         fps_camera_update(camera, &fps_state);
 
+        float t = (float) ((double) SDL_GetPerformanceCounter() / (double) SDL_GetPerformanceFrequency());
+        for(uint32_t i = 0; i < 10; i++)
+        {
+            for(uint32_t j = 0; j < 10; j++)
+            {
+                uint32_t idx = i + 10 * j;
+                float bob    = sinf(t * 2.0f + (float) i * 0.3f) * 0.8f;
+                glm_mat4_identity(sphere_transforms[idx]);
+                glm_translate(sphere_transforms[idx], (vec3) {((float) i - 4.5f) * 2.0f, bob, ((float) j - 4.5f) * 2.0f - 12.0f});
+                glm_rotate(sphere_transforms[idx], t, (vec3) {0.0f, 1.0f, 0.0f});
+            }
+        }
+
         pigment_wait_frame_ready(pigment, 0);
 
         if(!pigment_begin_frame(pigment, 0, camera))
@@ -159,7 +198,7 @@ int main(void)
 
         pigment_begin_swapchain_pass(pigment, 0);
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, 0, pipeline, draw_calls, 4);
+        pigment_draw(pigment, draw_state, 0, pipeline, draw_calls, 5);
         pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
@@ -189,6 +228,7 @@ FREE:
         }
     }
     pigment_destroy_camera(camera);
+    pigment_std_draw_shutdown(pigment, draw_state);
     destroy_pigment(pigment);
 
     return error_code;

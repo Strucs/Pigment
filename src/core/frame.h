@@ -24,7 +24,9 @@ bool begin_frame(Pigment* pigment, PUniformBuffers* buffers, PWindowRenderer* re
 void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index, uint32_t max_frame);
 void begin_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);
 void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);
-void pigment_draw(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PDrawCall* draw_cmds, uint32_t draw_cmd_count);
+
+void pigment_cmd_push_constants(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data);
+void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PMeshBuffers* mesh, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
 
 // Dynamic state setters. Call between pigment_bind_pipeline and pigment_draw.
 // Each pigment_bind_pipeline resets these states to default values, so they need to be set again if you want to change them.

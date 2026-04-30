@@ -189,15 +189,6 @@ typedef enum PFormat {
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 
-typedef struct PDrawCall {
-    PMeshBuffers* mesh;
-    mat4 transform;
-    uint32_t first_index;
-    uint32_t index_count;
-    uint32_t image_index;
-    uint32_t sampler_index;
-} PDrawCall;
-
 typedef struct PVertex {
     vec3 pos;
     float uv_x;

@@ -274,8 +274,8 @@ struct PSync {
 };
 
 struct PDrawPushConstants {
-    mat4 world_matrix;
     VkDeviceAddress vertex_buffer;
+    VkDeviceAddress transform_buffer;
     uint32_t image_index;
     uint32_t sampler_index;
 };
