@@ -19,8 +19,8 @@
 
 #include "defines.h"
 
-PCamera* pigment_create_camera(void);
-void pigment_destroy_camera(PCamera* camera);
+PCamera* pigment_create_camera(Pigment* pigment);
+void pigment_destroy_camera(Pigment* pigment, PCamera* camera);
 
 void pigment_camera_set_view(PCamera* camera, mat4 view);
 void pigment_camera_set_projection(PCamera* camera, mat4 projection);

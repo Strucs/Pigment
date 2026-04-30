@@ -20,7 +20,7 @@
 #include "defines.h"
 
 PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images);
-int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
+int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
 
 void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor);
 

@@ -20,7 +20,7 @@
 #include "log_internal.h"
 
 static int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
-static int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count);
+static int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count);
 
 PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images)
 {
@@ -30,14 +30,6 @@ PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t
     {
         goto ERROR;
     }
-
-    VkDescriptorSetLayoutBinding uniform_buffer_set_layout_binding = {
-        .binding            = 0,
-        .descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount    = 1,
-        .pImmutableSamplers = NULL,
-        .stageFlags         = VK_SHADER_STAGE_VERTEX_BIT
-    };
 
     VkDescriptorSetLayoutBinding sampler_set_layout_binding = {
         .binding            = 1,
@@ -56,13 +48,11 @@ PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t
     };
 
     VkDescriptorSetLayoutBinding descriptor_set_layout_binding[] = {
-        uniform_buffer_set_layout_binding,
         sampler_set_layout_binding,
         image_set_layout_binding
     };
 
     VkDescriptorBindingFlagsEXT descriptor_binding_flags[] = {
-        0,
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
     };
@@ -94,13 +84,13 @@ ERROR:
     return NULL;
 }
 
-int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
+int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
 {
     if(create_descriptor_pool(pigment, descriptor, max_samplers, max_images, descriptor_count))
     {
         goto ERROR;
     }
-    if(create_descriptor_sets(pigment, descriptor, buffers, images, samplers, max_images, descriptor_count))
+    if(create_descriptor_sets(pigment, descriptor, images, samplers, max_images, descriptor_count))
     {
         goto ERROR;
     }
@@ -135,7 +125,6 @@ int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t m
 {
     PDevice* device                   = pigment->device;
     VkDescriptorPoolSize pool_sizes[] = {
-        create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptor_count),
         create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_SAMPLER, descriptor_count * max_samplers),
         create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, descriptor_count * max_images),
     };
@@ -157,7 +146,7 @@ int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t m
     return PIGMENT_SUCCESS;
 }
 
-int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBuffers* buffers, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count)
+int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count)
 {
     PDevice* device                      = pigment->device;
     VkDescriptorSetLayout* layouts       = NULL;
@@ -224,23 +213,9 @@ int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBu
 
     for(size_t i = 0; i < descriptor_count; i++)
     {
-        VkWriteDescriptorSet descriptor_set_writes[3] = {0};
-
-        VkDescriptorBufferInfo buffer_info = {
-            .buffer = buffers->uniform_buffers[i],
-            .offset = 0,
-            .range  = sizeof(UniformBufferObject)
-        };
+        VkWriteDescriptorSet descriptor_set_writes[2] = {0};
 
         uint32_t descriptor_set_write_number = sizeof(descriptor_set_writes) / sizeof(descriptor_set_writes[0]);
-
-        descriptor_set_writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[0].dstSet          = descriptor->descriptor_sets[i];
-        descriptor_set_writes[0].dstBinding      = 0;
-        descriptor_set_writes[0].dstArrayElement = 0;
-        descriptor_set_writes[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptor_set_writes[0].descriptorCount = 1;
-        descriptor_set_writes[0].pBufferInfo     = &buffer_info;
 
         for(size_t s = 0; s < samplers->count; s++)
         {
@@ -249,13 +224,13 @@ int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBu
             sampler_infos[s].imageLayout = 0;
         }
 
-        descriptor_set_writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[1].dstSet          = descriptor->descriptor_sets[i];
-        descriptor_set_writes[1].dstBinding      = 1;
-        descriptor_set_writes[1].dstArrayElement = 0;
-        descriptor_set_writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
-        descriptor_set_writes[1].descriptorCount = samplers->count;
-        descriptor_set_writes[1].pImageInfo      = sampler_infos;
+        descriptor_set_writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set_writes[0].dstSet          = descriptor->descriptor_sets[i];
+        descriptor_set_writes[0].dstBinding      = 1;
+        descriptor_set_writes[0].dstArrayElement = 0;
+        descriptor_set_writes[0].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
+        descriptor_set_writes[0].descriptorCount = samplers->count;
+        descriptor_set_writes[0].pImageInfo      = sampler_infos;
 
         for(size_t j = 0; j < images->count; j++)
         {
@@ -263,13 +238,13 @@ int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PUniformBu
             image_infos[j].imageView   = images->images[j].image_view;
         }
 
-        descriptor_set_writes[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[2].dstSet          = descriptor->descriptor_sets[i];
-        descriptor_set_writes[2].dstBinding      = 2;
-        descriptor_set_writes[2].dstArrayElement = 0;
-        descriptor_set_writes[2].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        descriptor_set_writes[2].descriptorCount = images->count;
-        descriptor_set_writes[2].pImageInfo      = image_infos;
+        descriptor_set_writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set_writes[1].dstSet          = descriptor->descriptor_sets[i];
+        descriptor_set_writes[1].dstBinding      = 2;
+        descriptor_set_writes[1].dstArrayElement = 0;
+        descriptor_set_writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        descriptor_set_writes[1].descriptorCount = images->count;
+        descriptor_set_writes[1].pImageInfo      = image_infos;
 
         vkUpdateDescriptorSets(device->logical_device, descriptor_set_write_number, descriptor_set_writes, 0, NULL);
     }

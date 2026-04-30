@@ -134,8 +134,14 @@ void pigment_draw(Pigment* pigment, PStdDrawState* state, uint32_t window_index,
         state->last_seen_frame = current_frame;
     }
 
-    uint32_t slot_base       = current_frame * state->per_frame_capacity;
-    mat4* transforms_mapped  = (mat4*) state->transforms.mapped;
+    uint32_t slot_base      = current_frame * state->per_frame_capacity;
+    mat4* transforms_mapped = (mat4*) state->transforms.mapped;
+
+    VkDeviceAddress camera_slot_address = 0;
+    if(renderer->current_camera != NULL)
+    {
+        camera_slot_address = renderer->current_camera->address + (VkDeviceSize) current_frame * 2 * sizeof(mat4);
+    }
 
     for(uint32_t i = 0; i < draw_count; i++)
     {
@@ -157,6 +163,7 @@ void pigment_draw(Pigment* pigment, PStdDrawState* state, uint32_t window_index,
         PDrawPushConstants push = {
             .vertex_buffer    = draw_call->mesh->vertex_buffer_address,
             .transform_buffer = state->transforms.address,
+            .camera_buffer    = camera_slot_address,
             .image_index      = draw_call->image_index,
             .sampler_index    = draw_call->sampler_index,
         };

@@ -1,11 +1,6 @@
 #version 450
 #extension GL_EXT_buffer_reference : require
 
-layout(binding = 0) uniform UniformBufferObject {
-    mat4 view;
-    mat4 proj;
-} ubo;
-
 struct Vertex {
     vec3  pos;
     float uv_x;
@@ -22,9 +17,15 @@ layout(buffer_reference, std430) readonly buffer TransformBuffer {
     mat4 transforms[];
 };
 
+layout(buffer_reference, std430) readonly buffer CameraBuffer {
+    mat4 view;
+    mat4 proj;
+};
+
 layout(push_constant) uniform constants {
     VertexBuffer    vertex_buffer;
     TransformBuffer transform_buffer;
+    CameraBuffer    camera_buffer;
     int             image_index;
     int             sampler_index;
 } push;
@@ -44,5 +45,5 @@ void main()
     fragImageIndex   = push.image_index;
     fragSamplerIndex = push.sampler_index;
 
-    gl_Position = ubo.proj * ubo.view * world_matrix * vec4(v.pos, 1.0);
+    gl_Position = push.camera_buffer.proj * push.camera_buffer.view * world_matrix * vec4(v.pos, 1.0);
 }

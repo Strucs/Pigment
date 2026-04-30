@@ -18,6 +18,8 @@
 #include "internal.h"
 #include "log_internal.h"
 
+#include <math.h>
+
 static int image_list_append(PImageList* image_list, PImage image);
 static int create_image(Pigment* pigment, PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool);
 static int create_sampler(Pigment* pigment, PSampler* sampler, PSamplerDesc* desc);

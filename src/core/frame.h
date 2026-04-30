@@ -20,7 +20,7 @@
 #include "defines.h"
 #include "pipeline.h"
 
-bool begin_frame(Pigment* pigment, PUniformBuffers* buffers, PWindowRenderer* renderer, PCamera* camera, uint32_t* out_image_index);
+bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index);
 void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index, uint32_t max_frame);
 void begin_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);
 void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);

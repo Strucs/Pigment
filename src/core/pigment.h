@@ -37,8 +37,10 @@ bool pigment_should_run(Pigment* pigment);
 void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentMode mode);
 
 void pigment_wait_frame_ready(Pigment* pigment, uint32_t window_index);
-bool pigment_begin_frame(Pigment* pigment, uint32_t window_index, PCamera* camera);
+bool pigment_begin_frame(Pigment* pigment, uint32_t window_index);
 void pigment_end_frame(Pigment* pigment, uint32_t window_index);
+
+void pigment_bind_camera(Pigment* pigment, uint32_t window_index, PCamera* camera);
 
 void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index);
 void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index);

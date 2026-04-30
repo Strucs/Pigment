@@ -64,7 +64,7 @@ int main(void)
     }
 
     vec3 camera_position = {0.0f, 1.5f, 6.0f};
-    camera               = pigment_create_camera();
+    camera               = pigment_create_camera(pigment);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
@@ -191,12 +191,13 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, 0);
 
-        if(!pigment_begin_frame(pigment, 0, camera))
+        if(!pigment_begin_frame(pigment, 0))
         {
             continue;
         }
 
         pigment_begin_swapchain_pass(pigment, 0);
+        pigment_bind_camera(pigment, 0, camera);
         pigment_bind_pipeline(pigment, 0, pipeline);
         pigment_draw(pigment, draw_state, 0, pipeline, draw_calls, 5);
         pigment_end_swapchain_pass(pigment, 0);
@@ -227,7 +228,7 @@ FREE:
             pigment_destroy_mesh(pigment, gpu_quad);
         }
     }
-    pigment_destroy_camera(camera);
+    pigment_destroy_camera(pigment, camera);
     pigment_std_draw_shutdown(pigment, draw_state);
     destroy_pigment(pigment);
 

@@ -24,11 +24,6 @@
 "#version 450\n" \
 "#extension GL_EXT_buffer_reference : require\n" \
 "\n" \
-"layout(binding = 0) uniform UniformBufferObject {\n" \
-"    mat4 view;\n" \
-"    mat4 proj;\n" \
-"} ubo;\n" \
-"\n" \
 "struct Vertex {\n" \
 "    vec3  pos;\n" \
 "    float uv_x;\n" \
@@ -45,9 +40,15 @@
 "    mat4 transforms[];\n" \
 "};\n" \
 "\n" \
+"layout(buffer_reference, std430) readonly buffer CameraBuffer {\n" \
+"    mat4 view;\n" \
+"    mat4 proj;\n" \
+"};\n" \
+"\n" \
 "layout(push_constant) uniform constants {\n" \
 "    VertexBuffer    vertex_buffer;\n" \
 "    TransformBuffer transform_buffer;\n" \
+"    CameraBuffer    camera_buffer;\n" \
 "    int             image_index;\n" \
 "    int             sampler_index;\n" \
 "} push;\n" \
@@ -67,7 +68,7 @@
 "    fragImageIndex   = push.image_index;\n" \
 "    fragSamplerIndex = push.sampler_index;\n" \
 "\n" \
-"    gl_Position = ubo.proj * ubo.view * world_matrix * vec4(v.pos, 1.0);\n" \
+"    gl_Position = push.camera_buffer.proj * push.camera_buffer.view * world_matrix * vec4(v.pos, 1.0);\n" \
 "}\n"
 
 #define DEFAULT_FRAGMENT_SHADER \

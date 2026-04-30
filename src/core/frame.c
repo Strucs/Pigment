@@ -23,7 +23,7 @@
 
 static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index);
 
-bool begin_frame(Pigment* pigment, PUniformBuffers* buffers, PWindowRenderer* renderer, PCamera* camera, uint32_t* out_image_index)
+bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index)
 {
     PDevice* device = pigment->device;
     if(renderer->framebuffer_resized)
@@ -77,8 +77,6 @@ bool begin_frame(Pigment* pigment, PUniformBuffers* buffers, PWindowRenderer* re
         PLOG_ERROR(pigment, "Failed to acquire swapchain image!");
         return false;
     }
-
-    update_uniform_buffer(buffers, renderer->swapchain, camera);
 
     vkResetFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame]);
 

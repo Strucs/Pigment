@@ -66,7 +66,7 @@ int main(void)
     }
 
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
-    camera               = pigment_create_camera();
+    camera               = pigment_create_camera(pigment);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
@@ -115,6 +115,12 @@ int main(void)
     uint32_t draw_count = asset->surface_count;
     draw_calls          = calloc(draw_count, sizeof(PDrawCall));
     transform_storage   = calloc(draw_count, sizeof(mat4));
+    if(draw_calls == NULL || transform_storage == NULL)
+    {
+        fprintf(stderr, "Failed to allocate draw_calls or transform_storage!\n");
+        goto FREE;
+    }
+
     for(uint32_t i = 0; i < draw_count; i++)
     {
         PRawSurface* s = &asset->surfaces[i];
@@ -152,6 +158,12 @@ int main(void)
     uint32_t draw_count2 = asset2->surface_count;
     draw_calls2          = calloc(draw_count2, sizeof(PDrawCall));
     transform_storage2   = calloc(draw_count2, sizeof(mat4));
+    if(draw_calls2 == NULL || transform_storage2 == NULL)
+    {
+        fprintf(stderr, "Failed to allocate draw_calls2 or transform_storage2!\n");
+        goto FREE;
+    }
+
     for(uint32_t i = 0; i < draw_count2; i++)
     {
         PRawSurface* s = &asset2->surfaces[i];
@@ -184,12 +196,13 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, 0);
 
-        if(!pigment_begin_frame(pigment, 0, camera))
+        if(!pigment_begin_frame(pigment, 0))
         {
             continue;
         }
 
         pigment_begin_swapchain_pass(pigment, 0);
+        pigment_bind_camera(pigment, 0, camera);
 
         pigment_bind_pipeline(pigment, 0, pipeline);
         pigment_draw(pigment, draw_state, 0, pipeline, draw_calls, draw_count);
@@ -221,7 +234,7 @@ FREE:
     free(transform_storage2);
     free_mesh_asset(asset);
     free_mesh_asset(asset2);
-    pigment_destroy_camera(camera);
+    pigment_destroy_camera(pigment, camera);
     pigment_std_draw_shutdown(pigment, draw_state);
     destroy_pigment(pigment);
 

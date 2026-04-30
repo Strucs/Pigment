@@ -145,12 +145,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     {
         goto ERROR;
     }
-    pigment->buffers = create_uniform_buffers(pigment, pigment->config.max_frames_in_flight);
-    if(pigment->buffers == NULL)
-    {
-        goto ERROR;
-    }
-    update_descriptor(pigment, pigment->descriptor, pigment->buffers, pigment->images, pigment->samplers, pigment->config.max_samplers, pigment->config.max_images, pigment->config.max_frames_in_flight);
+    update_descriptor(pigment, pigment->descriptor, pigment->images, pigment->samplers, pigment->config.max_samplers, pigment->config.max_images, pigment->config.max_frames_in_flight);
 
     pigment->layouts = create_layout_list();
     if(pigment->layouts == NULL)
@@ -196,7 +191,6 @@ void destroy_pigment(Pigment* pigment)
     }
     destroy_pipeline_list(pigment, pigment->pipelines, pigment->layouts);
     destroy_layout_list(pigment, pigment->layouts);
-    destroy_uniform_buffers(pigment, pigment->buffers, pigment->config.max_frames_in_flight);
     destroy_descriptor(pigment, pigment->descriptor);
     destroy_images(pigment, pigment->images);
     destroy_samplers(pigment, pigment->samplers);
@@ -294,14 +288,14 @@ void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentM
     pigment->windows[window_index]->info->preferred_present_mode = mode;
 }
 
-bool pigment_begin_frame(Pigment* pigment, uint32_t window_index, PCamera* camera)
+bool pigment_begin_frame(Pigment* pigment, uint32_t window_index)
 {
     if(pigment == NULL || window_index >= pigment->window_count)
     {
         return false;
     }
 
-    return begin_frame(pigment, pigment->buffers, pigment->renderers[window_index], camera, &pigment->renderers[window_index]->current_image_index);
+    return begin_frame(pigment, pigment->renderers[window_index], &pigment->renderers[window_index]->current_image_index);
 }
 
 void pigment_end_frame(Pigment* pigment, uint32_t window_index)
@@ -312,6 +306,22 @@ void pigment_end_frame(Pigment* pigment, uint32_t window_index)
     }
 
     end_frame(pigment, pigment->renderers[window_index], pigment->renderers[window_index]->current_image_index, pigment->config.max_frames_in_flight);
+}
+
+void pigment_bind_camera(Pigment* pigment, uint32_t window_index, PCamera* camera)
+{
+    if(pigment == NULL || camera == NULL || window_index >= pigment->window_count)
+    {
+        return;
+    }
+
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    uint32_t current_frame    = renderer->swapchain->current_frame;
+
+    PCameraData* slot = (PCameraData*) camera->mapped + current_frame;
+    *slot             = camera->data;
+
+    renderer->current_camera = camera;
 }
 
 void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index)

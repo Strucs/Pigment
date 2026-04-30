@@ -5,6 +5,9 @@
 #include <std/camera_math.h>
 #include <SDL3/SDL.h>
 
+#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <cglm/cglm.h>
+
 #include <math.h>
 
 typedef struct FPSCameraState {

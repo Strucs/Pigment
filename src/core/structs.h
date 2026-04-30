@@ -106,7 +106,6 @@ struct Pigment {
     PCommandPoolList* command_pools;
     PImageList* images;
     PSamplerList* samplers;
-    PUniformBuffers* buffers;
     PPipelineList* pipelines;
     PLayoutList* layouts;
 
@@ -131,6 +130,7 @@ struct PWindowRenderer {
     uint32_t pending_height;
     PPresentMode requested_present_mode;
     bool transparent_framebuffer;
+    PCamera* current_camera;
 };
 
 struct PInstance {
@@ -221,9 +221,18 @@ struct PLayoutList {
     uint32_t capacity;
 };
 
-struct PCamera {
+typedef struct PCameraData {
     mat4 view;
     mat4 projection;
+} PCameraData;
+
+struct PCamera {
+    PCameraData data;
+
+    VkBuffer buffer;
+    PVkAllocation* allocation;
+    VkDeviceAddress address;
+    void* mapped;
 };
 
 struct PPipelineBuild {
@@ -276,14 +285,9 @@ struct PSync {
 struct PDrawPushConstants {
     VkDeviceAddress vertex_buffer;
     VkDeviceAddress transform_buffer;
+    VkDeviceAddress camera_buffer;
     uint32_t image_index;
     uint32_t sampler_index;
-};
-
-struct PUniformBuffers {
-    VkBuffer* uniform_buffers;
-    PVkAllocation** uniform_buffers_allocations;
-    void** uniform_buffers_mapped;
 };
 
 struct PDescriptor {

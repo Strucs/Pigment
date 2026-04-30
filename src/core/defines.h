@@ -35,7 +35,7 @@ typedef struct PAppInfo {
     uint32_t app_version;
 } PAppInfo;
 
-typedef enum PigmentLogSeverity{
+typedef enum PigmentLogSeverity {
     PIGMENT_LOG_TRACE_BIT = 1 << 0,
     PIGMENT_LOG_DEBUG_BIT = 1 << 1,
     PIGMENT_LOG_INFO_BIT  = 1 << 2,
@@ -52,7 +52,7 @@ typedef enum PigmentLogType {
 typedef enum PFeature {
     P_FEATURE_DEPTH_BOUNDS_TEST       = 0,
     P_FEATURE_WIREFRAME_RASTERIZATION = 1,
-    P_FEATURE_COUNT // size of the device feature array
+    P_FEATURE_COUNT    // size of the device feature array
 } PFeature;
 
 typedef enum {
@@ -151,8 +151,6 @@ typedef struct PSync PSync;
 
 typedef struct PDrawPushConstants PDrawPushConstants;
 
-typedef struct PUniformBuffers PUniformBuffers;
-
 typedef struct PDescriptor PDescriptor;
 
 typedef struct PImage PImage;
@@ -186,8 +184,11 @@ typedef enum PFormat {
     P_FORMAT_R16G16B16A16_SFLOAT = 97,
 } PFormat;
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
+typedef float vec3[3];
+typedef float vec4[4];
+typedef float mat4[4][4];
+
+#define MAT4_IDENTITY {{1.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}}
 
 typedef struct PVertex {
     vec3 pos;
@@ -196,11 +197,6 @@ typedef struct PVertex {
     float uv_y;
     vec4 color;
 } __attribute__((aligned(16))) PVertex;
-
-typedef struct UniformBufferObject {
-    alignas(16) mat4 view;
-    alignas(16) mat4 projection;
-} UniformBufferObject;
 
 typedef struct PigmentConfig {
     uint32_t max_images;
