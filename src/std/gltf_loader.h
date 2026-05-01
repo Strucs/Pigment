@@ -18,12 +18,12 @@
 #define GLTF_LOADER_H
 
 #include "defines.h"
+#include "material.h"
 
 typedef struct PRawSurface {
     uint32_t start_index;
     uint32_t index_count;
-    uint32_t image_index;
-    uint32_t sampler_index;
+    uint32_t material_id;
     uint32_t node_index;
 } PRawSurface;
 
@@ -46,6 +46,8 @@ typedef struct MeshAsset {
     uint32_t surface_count;
     uint32_t surface_capacity;
 
+    PMaterialDesc* surface_descs;
+
     mat4* node_transforms;
     uint32_t node_count;
     uint32_t node_capacity;
@@ -60,6 +62,6 @@ typedef struct MeshAsset {
 MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath);
 void free_mesh_asset(MeshAsset* mesh);
 
-void upload_mesh_textures(Pigment* pigment, MeshAsset* asset);
+int upload_mesh_textures(Pigment* pigment, MeshAsset* asset, PMaterials* materials);
 
 #endif

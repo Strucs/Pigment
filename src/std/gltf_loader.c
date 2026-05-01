@@ -24,7 +24,6 @@
 #include <cgltf.h>
 #include <stb_image.h>
 
-
 #define NO_MATERIAL UINT32_MAX
 #define MISSING_TEXTURE UINT32_MAX
 #define DEFAULT_CAPACITY 8
@@ -40,8 +39,8 @@ static int darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t ad
 static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s);
 static PrimAttrs find_primitive_attrs(cgltf_primitive* prim);
 static int append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs);
-static void resolve_primitive_material(cgltf_material* mat, cgltf_data* data, uint32_t* tex_idx, uint32_t* samp_idx);
-static int append_surface(MeshAsset* asset, PRawSurface surface);
+static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data* data);
+static int append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
 static int process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
 static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node);
 
@@ -238,57 +237,102 @@ static int append_primitive_indices(MeshAsset* asset, cgltf_accessor* indices, u
     return PIGMENT_SUCCESS;
 }
 
-static void resolve_primitive_material(cgltf_material* mat, cgltf_data* data, uint32_t* tex_idx, uint32_t* samp_idx)
+static void resolve_texture_view(cgltf_texture_view* tv, cgltf_data* data, int32_t* image, int32_t* sampler)
 {
-    *tex_idx               = NO_MATERIAL;
-    *samp_idx              = NO_MATERIAL;
-    cgltf_texture_view* tv = NULL;
-
-    if(mat == NULL)
-    {
-        return;
-    }
-
-    if(mat->has_pbr_metallic_roughness && mat->pbr_metallic_roughness.base_color_texture.texture)
-    {
-        tv = &mat->pbr_metallic_roughness.base_color_texture;
-    }
-    else if(mat->has_pbr_specular_glossiness && mat->pbr_specular_glossiness.diffuse_texture.texture)
-    {
-        tv = &mat->pbr_specular_glossiness.diffuse_texture;
-    }
-    else if(mat->emissive_texture.texture)
-    {
-        tv = &mat->emissive_texture;
-    }
-
+    *image   = (int32_t) NO_MATERIAL;
+    *sampler = (int32_t) NO_MATERIAL;
     if(tv == NULL || tv->texture == NULL)
     {
         return;
     }
+
     if(tv->texture->image)
     {
-        *tex_idx = (uint32_t) (tv->texture->image - data->images);
+        *image = (int32_t) (tv->texture->image - data->images);
     }
+
     if(tv->texture->sampler)
     {
-        *samp_idx = (uint32_t) (tv->texture->sampler - data->samplers);
+        *sampler = (int32_t) (tv->texture->sampler - data->samplers);
     }
 }
 
-static int append_surface(MeshAsset* asset, PRawSurface surface)
+static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data* data)
 {
-    if(darray_reserve((void**) &asset->surfaces, asset->surface_count, &asset->surface_capacity, 1, sizeof(PRawSurface)))
+    PMaterialDesc desc = {
+        .albedo_image               = (int32_t) NO_MATERIAL,
+        .albedo_sampler             = (int32_t) NO_MATERIAL,
+        .metallic_roughness_image   = (int32_t) NO_MATERIAL,
+        .metallic_roughness_sampler = (int32_t) NO_MATERIAL,
+        .normal_image               = (int32_t) NO_MATERIAL,
+        .normal_sampler             = (int32_t) NO_MATERIAL,
+        .emissive_image             = (int32_t) NO_MATERIAL,
+        .emissive_sampler           = (int32_t) NO_MATERIAL,
+        .occlusion_image            = (int32_t) NO_MATERIAL,
+        .occlusion_sampler          = (int32_t) NO_MATERIAL,
+        .base_color_factor          = {1.0f, 1.0f, 1.0f, 1.0f},
+        .emissive_factor            = {0.0f, 0.0f, 0.0f, 0.0f},
+        .metallic_factor            = 1.0f,
+        .roughness_factor           = 1.0f,
+        .normal_scale               = 1.0f,
+        .occlusion_scale         = 1.0f,
+    };
+
+    if(mat == NULL)
     {
-        return PIGMENT_ERROR;
+        return desc;
     }
 
-    if(asset->surfaces == NULL)
+    if(mat->has_pbr_metallic_roughness)
     {
-        return PIGMENT_ERROR;
+        cgltf_pbr_metallic_roughness* mr = &mat->pbr_metallic_roughness;
+        resolve_texture_view(&mr->base_color_texture, data, &desc.albedo_image, &desc.albedo_sampler);
+        resolve_texture_view(&mr->metallic_roughness_texture, data, &desc.metallic_roughness_image, &desc.metallic_roughness_sampler);
+        memcpy(desc.base_color_factor, mr->base_color_factor, sizeof(desc.base_color_factor));
+        desc.metallic_factor  = mr->metallic_factor;
+        desc.roughness_factor = mr->roughness_factor;
+    }
+    else if(mat->has_pbr_specular_glossiness)
+    {
+        cgltf_pbr_specular_glossiness* sg = &mat->pbr_specular_glossiness;
+        resolve_texture_view(&sg->diffuse_texture, data, &desc.albedo_image, &desc.albedo_sampler);
+        memcpy(desc.base_color_factor, sg->diffuse_factor, sizeof(desc.base_color_factor));
     }
 
-    asset->surfaces[asset->surface_count] = surface;
+    resolve_texture_view(&mat->normal_texture, data, &desc.normal_image, &desc.normal_sampler);
+    desc.normal_scale = mat->normal_texture.scale;
+
+    resolve_texture_view(&mat->occlusion_texture, data, &desc.occlusion_image, &desc.occlusion_sampler);
+    desc.occlusion_scale = mat->occlusion_texture.scale;
+
+    resolve_texture_view(&mat->emissive_texture, data, &desc.emissive_image, &desc.emissive_sampler);
+    memcpy(desc.emissive_factor, mat->emissive_factor, 3 * sizeof(float));
+    desc.emissive_factor[3] = 0.0f;
+
+    return desc;
+}
+
+static int append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc)
+{
+    if((uint64_t) asset->surface_count + 1 > asset->surface_capacity)
+    {
+        uint32_t new_cap = (asset->surface_capacity == 0) ? DEFAULT_CAPACITY : asset->surface_capacity * 2;
+
+        PRawSurface* new_surfaces = realloc(asset->surfaces, sizeof(PRawSurface) * new_cap);
+        PMaterialDesc* new_descs  = realloc(asset->surface_descs, sizeof(PMaterialDesc) * new_cap);
+
+        if(new_surfaces == NULL || new_descs == NULL)
+        {
+            return PIGMENT_ERROR;
+        }
+
+        asset->surfaces         = new_surfaces;
+        asset->surface_descs    = new_descs;
+        asset->surface_capacity = new_cap;
+    }
+
+    asset->surfaces[asset->surface_count]      = surface;
+    asset->surface_descs[asset->surface_count] = *desc;
     asset->surface_count++;
 
     return PIGMENT_SUCCESS;
@@ -327,18 +371,16 @@ static int process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive
         }
     }
 
-    uint32_t tex_idx, samp_idx;
-    resolve_primitive_material(prim->material, data, &tex_idx, &samp_idx);
+    PMaterialDesc desc = resolve_primitive_material(prim->material, data);
 
     PRawSurface surface = {
-        .start_index   = index_start,
-        .index_count   = asset->index_count - index_start,
-        .image_index   = tex_idx,
-        .sampler_index = samp_idx,
-        .node_index    = node_idx,
+        .start_index = index_start,
+        .index_count = asset->index_count - index_start,
+        .material_id = NO_MATERIAL,
+        .node_index  = node_idx,
     };
 
-    return append_surface(asset, surface);
+    return append_surface(asset, surface, &desc);
 }
 
 static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
@@ -526,13 +568,14 @@ FREE:
     return asset;
 }
 
-void upload_mesh_textures(Pigment* pigment, MeshAsset* asset)
+int upload_mesh_textures(Pigment* pigment, MeshAsset* asset, PMaterials* materials)
 {
     if(pigment == NULL || asset == NULL)
     {
-        return;
+        return PIGMENT_ERROR;
     }
 
+    int status                   = PIGMENT_SUCCESS;
     const unsigned char** pixels = NULL;
     uint32_t* tex_map            = NULL;
     uint32_t* samp_map           = NULL;
@@ -553,6 +596,7 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset)
 
         if(tex_map == NULL || pixels == NULL || widths == NULL || heights == NULL || formats == NULL || src_indices == NULL)
         {
+            status = PIGMENT_ERROR;
             goto FREE;
         }
 
@@ -599,26 +643,48 @@ void upload_mesh_textures(Pigment* pigment, MeshAsset* asset)
 
     for(uint32_t i = 0; i < asset->surface_count; i++)
     {
-        PRawSurface* s = &asset->surfaces[i];
+        PMaterialDesc desc = asset->surface_descs[i];
 
-        if(s->image_index == NO_MATERIAL)
+        int32_t* image_fields[]   = {&desc.albedo_image, &desc.metallic_roughness_image, &desc.normal_image, &desc.emissive_image, &desc.occlusion_image};
+        int32_t* sampler_fields[] = {&desc.albedo_sampler, &desc.metallic_roughness_sampler, &desc.normal_sampler, &desc.emissive_sampler, &desc.occlusion_sampler};
+
+        for(uint32_t k = 0; k < sizeof(image_fields) / sizeof(image_fields[0]); k++)
         {
-            s->image_index = 0;
-        }
-        else if(tex_map && s->image_index < asset->image_count)
-        {
-            s->image_index = tex_map[s->image_index];
+            int32_t img = *image_fields[k];
+            if(img == (int32_t) NO_MATERIAL)
+            {
+                *image_fields[k] = 0;
+            }
+            else if(tex_map && (uint32_t) img < asset->image_count)
+            {
+                *image_fields[k] = (int32_t) tex_map[img];
+            }
+
+            int32_t samp = *sampler_fields[k];
+            if(samp == (int32_t) NO_MATERIAL)
+            {
+                *sampler_fields[k] = 0;
+            }
+            else if(samp_map && (uint32_t) samp < asset->sampler_count)
+            {
+                *sampler_fields[k] = (int32_t) samp_map[samp];
+            }
         }
 
-        if(s->sampler_index == NO_MATERIAL)
+        if(materials != NULL)
         {
-            s->sampler_index = 0;
-        }
-        else if(samp_map && s->sampler_index < asset->sampler_count)
-        {
-            s->sampler_index = samp_map[s->sampler_index];
+            uint32_t mid = pigment_std_material_create(pigment, materials, &desc);
+            if(mid == UINT32_MAX)
+            {
+                status = PIGMENT_ERROR;
+                goto FREE;
+            }
+            asset->surfaces[i].material_id = mid;
         }
     }
+
+    free(asset->surface_descs);
+    asset->surface_descs = NULL;
 
 FREE:
     free(pixels);
@@ -628,6 +694,7 @@ FREE:
     free(heights);
     free(formats);
     free(src_indices);
+    return status;
 }
 
 void free_mesh_asset(MeshAsset* asset)
@@ -648,6 +715,7 @@ void free_mesh_asset(MeshAsset* asset)
     free(asset->vertices);
     free(asset->indices);
     free(asset->surfaces);
+    free(asset->surface_descs);
     free(asset->node_transforms);
     free(asset);
 }

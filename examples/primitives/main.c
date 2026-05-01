@@ -1,6 +1,7 @@
 #include <pigment.h>
 #include <pigment_sdl.h>
 #include <std/draw.h>
+#include <std/material.h>
 #include <std/pipeline_loader.h>
 #include <std/primitives.h>
 
@@ -21,19 +22,20 @@ int main(void)
         .flags                  = P_WINDOW_FLAGS_DEFAULT,
     };
 
-    Pigment* pigment            = NULL;
-    PCamera* camera             = NULL;
-    PStdDrawState* draw_state   = NULL;
-    PPipeline* pipeline         = NULL;
-    PPipelineBuild* build       = NULL;
-    PMeshBuffers* gpu_cube      = NULL;
-    PMeshBuffers* gpu_sphere    = NULL;
-    PMeshBuffers* gpu_plane     = NULL;
-    PMeshBuffers* gpu_quad      = NULL;
-    PDrawCall draw_calls[5]     = {0};
-    mat4 transforms[4]          = {0};
-    mat4 sphere_transforms[100] = {0};
-    int error_code              = 1;
+    Pigment* pigment                    = NULL;
+    PCamera* camera                     = NULL;
+    PInstanceRing* ring                 = NULL;
+    PMaterials* materials               = NULL;
+    PPipeline* pipeline                 = NULL;
+    PPipelineBuild* build               = NULL;
+    PMeshBuffers* gpu_cube              = NULL;
+    PMeshBuffers* gpu_sphere            = NULL;
+    PMeshBuffers* gpu_plane             = NULL;
+    PMeshBuffers* gpu_quad              = NULL;
+    PDrawCall draw_calls[5]             = {0};
+    PInstanceData instances[4]          = {0};
+    PInstanceData sphere_instances[100] = {0};
+    int error_code                      = 1;
 
     PigmentLoggerCreateInfo loggers[] = {
         {
@@ -56,10 +58,45 @@ int main(void)
         goto FREE;
     }
 
-    draw_state = pigment_std_draw_init(pigment, 4096);
-    if(draw_state == NULL)
+    ring = pigment_std_create_instance_ring(pigment, 4096);
+    if(ring == NULL)
     {
-        fprintf(stderr, "Failed to init draw state!\n");
+        fprintf(stderr, "Failed to create instance ring!\n");
+        goto FREE;
+    }
+
+    materials = pigment_std_create_materials(pigment, 64);
+    if(materials == NULL)
+    {
+        fprintf(stderr, "Failed to create materials!\n");
+        goto FREE;
+    }
+
+    uint32_t mat_default = pigment_std_material_create(
+        pigment,
+        materials,
+        &(PMaterialDesc) {
+            .albedo_image               = -1,
+            .albedo_sampler             = -1,
+            .metallic_roughness_image   = -1,
+            .metallic_roughness_sampler = -1,
+            .normal_image               = -1,
+            .normal_sampler             = -1,
+            .emissive_image             = -1,
+            .emissive_sampler           = -1,
+            .occlusion_image            = -1,
+            .occlusion_sampler          = -1,
+            .base_color_factor          = {1.0f, 1.0f, 1.0f, 1.0f},
+            .emissive_factor            = {0.0f, 0.0f, 0.0f, 0.0f},
+            .metallic_factor            = 1.0f,
+            .roughness_factor           = 1.0f,
+            .normal_scale               = 1.0f,
+            .occlusion_scale            = 1.0f,
+        }
+    );
+    if(mat_default == UINT32_MAX)
+    {
+        fprintf(stderr, "Failed to create default material!\n");
         goto FREE;
     }
 
@@ -80,8 +117,6 @@ int main(void)
 
     PPipelineDesc desc = default_graphic_pipeline_desc(pigment, &color_format, 1, depth_format);
     build              = pigment_pipeline_build_from_desc(pigment, &desc);
-    free((void*) desc.vertex_spv);
-    free((void*) desc.fragment_spv);
     if(build == NULL)
     {
         fprintf(stderr, "Failed to build pipeline!\n");
@@ -119,49 +154,47 @@ int main(void)
         goto FREE;
     }
 
-    glm_mat4_identity(transforms[0]);
-    glm_translate(transforms[0], (vec3) {-3.0f, 0.0f, 0.0f});
+    glm_mat4_identity(instances[0].transform);
+    glm_translate(instances[0].transform, (vec3) {-3.0f, 0.0f, 0.0f});
+    instances[0].material_id     = mat_default;
     draw_calls[0].mesh           = gpu_cube;
-    draw_calls[0].transforms     = &transforms[0];
+    draw_calls[0].instances      = &instances[0];
     draw_calls[0].instance_count = 1;
     draw_calls[0].index_count    = cube_idx;
-    draw_calls[0].image_index    = (uint32_t) -1;
-    draw_calls[0].sampler_index  = 0;
 
-    glm_mat4_identity(transforms[1]);
-    glm_translate(transforms[1], (vec3) {-1.0f, 0.0f, 0.0f});
+    glm_mat4_identity(instances[1].transform);
+    glm_translate(instances[1].transform, (vec3) {-1.0f, 0.0f, 0.0f});
+    instances[1].material_id     = mat_default;
     draw_calls[1].mesh           = gpu_sphere;
-    draw_calls[1].transforms     = &transforms[1];
+    draw_calls[1].instances      = &instances[1];
     draw_calls[1].instance_count = 1;
     draw_calls[1].index_count    = sphere_idx;
-    draw_calls[1].image_index    = (uint32_t) -1;
-    draw_calls[1].sampler_index  = 0;
 
-    glm_mat4_identity(transforms[2]);
-    glm_translate(transforms[2], (vec3) {0.0f, -2.0f, 0.0f});
-    glm_scale(transforms[2], (vec3) {10.0f, 1.0f, 10.0f});
+    glm_mat4_identity(instances[2].transform);
+    glm_translate(instances[2].transform, (vec3) {0.0f, -2.0f, 0.0f});
+    glm_scale(instances[2].transform, (vec3) {10.0f, 1.0f, 10.0f});
+    instances[2].material_id     = mat_default;
     draw_calls[2].mesh           = gpu_plane;
-    draw_calls[2].transforms     = &transforms[2];
+    draw_calls[2].instances      = &instances[2];
     draw_calls[2].instance_count = 1;
     draw_calls[2].index_count    = plane_idx;
-    draw_calls[2].image_index    = (uint32_t) -1;
-    draw_calls[2].sampler_index  = 0;
 
-    glm_mat4_identity(transforms[3]);
-    glm_translate(transforms[3], (vec3) {2.0f, 0.0f, 0.0f});
+    glm_mat4_identity(instances[3].transform);
+    glm_translate(instances[3].transform, (vec3) {2.0f, 0.0f, 0.0f});
+    instances[3].material_id     = mat_default;
     draw_calls[3].mesh           = gpu_quad;
-    draw_calls[3].transforms     = &transforms[3];
+    draw_calls[3].instances      = &instances[3];
     draw_calls[3].instance_count = 1;
     draw_calls[3].index_count    = quad_idx;
-    draw_calls[3].image_index    = (uint32_t) -1;
-    draw_calls[3].sampler_index  = 0;
 
+    for(uint32_t i = 0; i < 100; i++)
+    {
+        sphere_instances[i].material_id = mat_default;
+    }
     draw_calls[4].mesh           = gpu_sphere;
-    draw_calls[4].transforms     = sphere_transforms;
+    draw_calls[4].instances      = sphere_instances;
     draw_calls[4].instance_count = 100;
     draw_calls[4].index_count    = sphere_idx;
-    draw_calls[4].image_index    = (uint32_t) -1;
-    draw_calls[4].sampler_index  = 0;
 
     pigment_show_window(pigment, 0);
 
@@ -183,9 +216,9 @@ int main(void)
             {
                 uint32_t idx = i + 10 * j;
                 float bob    = sinf(t * 2.0f + (float) i * 0.3f) * 0.8f;
-                glm_mat4_identity(sphere_transforms[idx]);
-                glm_translate(sphere_transforms[idx], (vec3) {((float) i - 4.5f) * 2.0f, bob, ((float) j - 4.5f) * 2.0f - 12.0f});
-                glm_rotate(sphere_transforms[idx], t, (vec3) {0.0f, 1.0f, 0.0f});
+                glm_mat4_identity(sphere_instances[idx].transform);
+                glm_translate(sphere_instances[idx].transform, (vec3) {((float) i - 4.5f) * 2.0f, bob, ((float) j - 4.5f) * 2.0f - 12.0f});
+                glm_rotate(sphere_instances[idx].transform, t, (vec3) {0.0f, 1.0f, 0.0f});
             }
         }
 
@@ -199,7 +232,7 @@ int main(void)
         pigment_begin_swapchain_pass(pigment, 0);
         pigment_bind_camera(pigment, 0, camera);
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, draw_state, 0, pipeline, draw_calls, 5);
+        pigment_draw(pigment, ring, materials, 0, pipeline, draw_calls, 5);
         pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
@@ -229,7 +262,8 @@ FREE:
         }
     }
     pigment_destroy_camera(pigment, camera);
-    pigment_std_draw_shutdown(pigment, draw_state);
+    pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_materials(pigment, materials);
     destroy_pigment(pigment);
 
     return error_code;

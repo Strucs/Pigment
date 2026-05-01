@@ -20,21 +20,25 @@
 #include "defines.h"
 #include "pipeline.h"
 
-typedef struct PStdDrawState PStdDrawState;
+typedef struct PInstanceRing PInstanceRing;
+typedef struct PMaterials PMaterials;
+
+typedef struct PInstanceData {
+    mat4 transform;
+    uint32_t material_id;
+} __attribute__((aligned(16))) PInstanceData;
 
 typedef struct PDrawCall {
     PMeshBuffers* mesh;
-    mat4* transforms;
+    PInstanceData* instances;
     uint32_t instance_count;
     uint32_t first_index;
     uint32_t index_count;
-    uint32_t image_index;
-    uint32_t sampler_index;
 } PDrawCall;
 
-PStdDrawState* pigment_std_draw_init(Pigment* pigment, uint32_t max_transforms_per_frame);
-void pigment_std_draw_shutdown(Pigment* pigment, PStdDrawState* state);
+PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_instances_per_frame);
+void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
 
-void pigment_draw(Pigment* pigment, PStdDrawState* state, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
+void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
 
 #endif

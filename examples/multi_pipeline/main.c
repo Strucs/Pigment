@@ -2,6 +2,7 @@
 #include <pigment_sdl.h>
 #include <std/draw.h>
 #include <std/gltf_loader.h>
+#include <std/material.h>
 #include <std/pipeline_loader.h>
 
 #include "../common/fps_camera.h"
@@ -23,20 +24,21 @@ int main(void)
         .flags                  = P_WINDOW_FLAGS_DEFAULT,
     };
 
-    Pigment* pigment          = NULL;
-    PCamera* camera           = NULL;
-    PStdDrawState* draw_state = NULL;
-    PPipeline* pipelines[2]   = {NULL, NULL};
-    PMeshBuffers* gpu_mesh    = NULL;
-    MeshAsset* asset          = NULL;
-    PMeshBuffers* gpu_mesh2   = NULL;
-    MeshAsset* asset2         = NULL;
-    PDrawCall* draw_calls     = NULL;
-    PDrawCall* draw_calls2    = NULL;
-    mat4* transform_storage   = NULL;
-    mat4* transform_storage2  = NULL;
-    PPipelineBuild* builds[2] = {NULL, NULL};
-    int error_code            = 1;
+    Pigment* pigment                 = NULL;
+    PCamera* camera                  = NULL;
+    PInstanceRing* ring              = NULL;
+    PMaterials* materials            = NULL;
+    PPipeline* pipelines[2]          = {NULL, NULL};
+    PMeshBuffers* gpu_mesh           = NULL;
+    MeshAsset* asset                 = NULL;
+    PMeshBuffers* gpu_mesh2          = NULL;
+    MeshAsset* asset2                = NULL;
+    PDrawCall* draw_calls            = NULL;
+    PDrawCall* draw_calls2           = NULL;
+    PInstanceData* instance_storage  = NULL;
+    PInstanceData* instance_storage2 = NULL;
+    PPipelineBuild* builds[2]        = {NULL, NULL};
+    int error_code                   = 1;
 
     PigmentLoggerCreateInfo loggers[] = {
         {
@@ -59,10 +61,17 @@ int main(void)
         goto FREE;
     }
 
-    draw_state = pigment_std_draw_init(pigment, 4096);
-    if(draw_state == NULL)
+    ring = pigment_std_create_instance_ring(pigment, 4096);
+    if(ring == NULL)
     {
-        fprintf(stderr, "Failed to init draw state!\n");
+        fprintf(stderr, "Failed to create instance ring!\n");
+        goto FREE;
+    }
+
+    materials = pigment_std_create_materials(pigment, 64);
+    if(materials == NULL)
+    {
+        fprintf(stderr, "Failed to create materials!\n");
         goto FREE;
     }
 
@@ -91,11 +100,6 @@ int main(void)
     builds[0] = pigment_pipeline_build_from_desc(pigment, &desc_opaque);
     builds[1] = pigment_pipeline_build_from_desc(pigment, &desc_additive);
 
-    free((void*) desc_opaque.vertex_spv);
-    free((void*) desc_opaque.fragment_spv);
-    free((void*) desc_additive.vertex_spv);
-    free((void*) desc_additive.fragment_spv);
-
     if(builds[0] == NULL || builds[1] == NULL)
     {
         fprintf(stderr, "Failed to build pipelines!\n");
@@ -117,7 +121,11 @@ int main(void)
         goto FREE;
     }
 
-    upload_mesh_textures(pigment, asset);
+    if(upload_mesh_textures(pigment, asset, materials) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to upload mesh textures/materials!\n");
+        goto FREE;
+    }
 
     gpu_mesh = pigment_upload_mesh(
         pigment,
@@ -129,24 +137,23 @@ int main(void)
 
     uint32_t draw_count = asset->surface_count;
     draw_calls          = calloc(draw_count, sizeof(PDrawCall));
-    transform_storage   = calloc(draw_count, sizeof(mat4));
-    if(draw_calls == NULL || transform_storage == NULL)
+    instance_storage    = calloc(draw_count, sizeof(PInstanceData));
+    if(draw_calls == NULL || instance_storage == NULL)
     {
-        fprintf(stderr, "Failed to allocate draw_calls or transform_storage!\n");
+        fprintf(stderr, "Failed to allocate draw_calls or instance_storage!\n");
         goto FREE;
     }
 
     for(uint32_t i = 0; i < draw_count; i++)
     {
         PRawSurface* s = &asset->surfaces[i];
-        glm_mat4_copy(asset->node_transforms[s->node_index], transform_storage[i]);
-        draw_calls[i].mesh           = gpu_mesh;
-        draw_calls[i].transforms     = &transform_storage[i];
-        draw_calls[i].instance_count = 1;
-        draw_calls[i].first_index    = s->start_index;
-        draw_calls[i].index_count    = s->index_count;
-        draw_calls[i].image_index    = s->image_index;
-        draw_calls[i].sampler_index  = s->sampler_index;
+        glm_mat4_copy(asset->node_transforms[s->node_index], instance_storage[i].transform);
+        instance_storage[i].material_id = s->material_id;
+        draw_calls[i].mesh              = gpu_mesh;
+        draw_calls[i].instances         = &instance_storage[i];
+        draw_calls[i].instance_count    = 1;
+        draw_calls[i].first_index       = s->start_index;
+        draw_calls[i].index_count       = s->index_count;
     }
     free_mesh_asset(asset);
     asset = NULL;
@@ -160,7 +167,11 @@ int main(void)
         goto FREE;
     }
 
-    upload_mesh_textures(pigment, asset2);
+    if(upload_mesh_textures(pigment, asset2, materials) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to upload mesh textures/materials!\n");
+        goto FREE;
+    }
 
     gpu_mesh2 = pigment_upload_mesh(
         pigment,
@@ -172,26 +183,25 @@ int main(void)
 
     uint32_t draw_count2 = asset2->surface_count;
     draw_calls2          = calloc(draw_count2, sizeof(PDrawCall));
-    transform_storage2   = calloc(draw_count2, sizeof(mat4));
-    if(draw_calls2 == NULL || transform_storage2 == NULL)
+    instance_storage2    = calloc(draw_count2, sizeof(PInstanceData));
+    if(draw_calls2 == NULL || instance_storage2 == NULL)
     {
-        fprintf(stderr, "Failed to allocate draw_calls2 or transform_storage2!\n");
+        fprintf(stderr, "Failed to allocate draw_calls2 or instance_storage2!\n");
         goto FREE;
     }
 
     for(uint32_t i = 0; i < draw_count2; i++)
     {
         PRawSurface* s = &asset2->surfaces[i];
-        glm_mat4_copy(asset2->node_transforms[s->node_index], transform_storage2[i]);
+        glm_mat4_copy(asset2->node_transforms[s->node_index], instance_storage2[i].transform);
         vec3 translation = {2.f, 0.0f, 0.0f};
-        glm_translate(transform_storage2[i], translation);
-        draw_calls2[i].mesh           = gpu_mesh2;
-        draw_calls2[i].transforms     = &transform_storage2[i];
-        draw_calls2[i].instance_count = 1;
-        draw_calls2[i].first_index    = s->start_index;
-        draw_calls2[i].index_count    = s->index_count;
-        draw_calls2[i].image_index    = s->image_index;
-        draw_calls2[i].sampler_index  = s->sampler_index;
+        glm_translate(instance_storage2[i].transform, translation);
+        instance_storage2[i].material_id = s->material_id;
+        draw_calls2[i].mesh              = gpu_mesh2;
+        draw_calls2[i].instances         = &instance_storage2[i];
+        draw_calls2[i].instance_count    = 1;
+        draw_calls2[i].first_index       = s->start_index;
+        draw_calls2[i].index_count       = s->index_count;
     }
     free_mesh_asset(asset2);
     asset2 = NULL;
@@ -220,11 +230,11 @@ int main(void)
         pigment_bind_camera(pigment, 0, camera);
 
         pigment_bind_pipeline(pigment, 0, pipelines[0]);
-        pigment_draw(pigment, draw_state, 0, pipelines[0], draw_calls, draw_count);
+        pigment_draw(pigment, ring, materials, 0, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, 0, pipelines[1]);
         pigment_cmd_set_depth(pigment, 0, true, false, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, draw_state, 0, pipelines[1], draw_calls2, draw_count2);
+        pigment_draw(pigment, ring, materials, 0, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_swapchain_pass(pigment, 0);
 
@@ -248,12 +258,13 @@ FREE:
     }
     free(draw_calls);
     free(draw_calls2);
-    free(transform_storage);
-    free(transform_storage2);
+    free(instance_storage);
+    free(instance_storage2);
     free_mesh_asset(asset);
     free_mesh_asset(asset2);
     pigment_destroy_camera(pigment, camera);
-    pigment_std_draw_shutdown(pigment, draw_state);
+    pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_materials(pigment, materials);
     destroy_pigment(pigment);
 
     return error_code;

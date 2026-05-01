@@ -1,9 +1,28 @@
 import powermake
 import os
 import shutil
+import subprocess
+
+def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
+    if os.path.exists(dst):
+        dst_mtime = os.path.getmtime(dst)
+        sources_mtime = max(os.path.getmtime(p) for p in [src] + deps)
+        if dst_mtime >= sources_mtime:
+            return False
+    result = subprocess.run(["glslc", src, "-o", dst], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(result.stdout)
+        print(result.stderr)
+        raise SystemExit(f"glslc failed for {src}")
+    print(f"[shader] {src} -> {dst}")
+    return True
 
 def build_static_lib(config: powermake.Config):
+    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
+    shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
+
     config.add_includedirs("src/core", "src/std", "src/external", "src/vulkan")
+    config.add_flags(f"--embed-dir={shaders_dir}")
 
     all_files = powermake.get_files("./src/**/*.c")
     external_files = {f for f in all_files if os.sep + "external" + os.sep in os.path.normpath(f)}
@@ -11,8 +30,6 @@ def build_static_lib(config: powermake.Config):
 
     headers = powermake.get_files("./src/**/*.h")
     shaders = powermake.get_files("./shaders/*")
-    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
-    shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
 
     powermake.utils.makedirs(shaders_dir)
 
@@ -34,8 +51,21 @@ def build_static_lib(config: powermake.Config):
         powermake.utils.makedirs(new_dir)
         shutil.copy2(file, new_dir)
 
+    shader_includes = [f for f in shaders if os.path.splitext(f)[1] in (".glsl", ".h")]
+    any_shader_rebuilt = False
     for file in shaders:
-        shutil.copy2(file, shaders_dir)
+        base = os.path.basename(file)
+        name, ext = os.path.splitext(base)
+        if ext not in (".vert", ".frag", ".comp", ".geom", ".tesc", ".tese"):
+            continue
+        dst = os.path.join(shaders_dir, f"{name}_{ext[1:]}.spv")
+        if compile_shader_to_spv(file, dst, shader_includes):
+            any_shader_rebuilt = True
+
+    if any_shader_rebuilt:
+        for c_file in ["src/std/pipeline_loader.c"]:
+            if os.path.exists(c_file):
+                os.utime(c_file, None)
 
     ext_config = config.copy()
     ext_config.add_flags("-Wno-misleading-indentation")
@@ -46,6 +76,7 @@ def build_static_lib(config: powermake.Config):
     powermake.archive_files(config, list(objects) + list(ext_objects))
 
     config.remove_includedirs("src/core", "src/std", "src/external", "src/vulkan")
+    config.remove_flags(f"--embed-dir={shaders_dir}")
 
 def build_example(config: powermake.Config, example_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")

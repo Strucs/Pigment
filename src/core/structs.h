@@ -284,10 +284,9 @@ struct PSync {
 
 struct PDrawPushConstants {
     VkDeviceAddress vertex_buffer;
-    VkDeviceAddress transform_buffer;
+    VkDeviceAddress instance_buffer;
     VkDeviceAddress camera_buffer;
-    uint32_t image_index;
-    uint32_t sampler_index;
+    VkDeviceAddress material_buffer;
 };
 
 struct PDescriptor {

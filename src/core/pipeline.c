@@ -636,7 +636,7 @@ static PLayout* get_or_create_default_layout(Pigment* pigment)
     }
 
     VkPushConstantRange range = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
         .offset     = 0,
         .size       = sizeof(PDrawPushConstants),
     };
@@ -666,7 +666,7 @@ static PLayout* get_or_create_default_layout(Pigment* pigment)
 
     layout->layout      = vk_layout;
     layout->push_size   = sizeof(PDrawPushConstants);
-    layout->push_stages = VK_SHADER_STAGE_VERTEX_BIT;
+    layout->push_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     layout->refcount    = 0;
 
     list->entries[list->count++] = layout;

@@ -17,10 +17,18 @@
 #include "pipeline_loader.h"
 #include "log_internal.h"
 
+#include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <shaderc/shaderc.h>
+
+alignas(uint32_t) static constexpr unsigned char default_vertex_spv[] = {
+    #embed <default_vert.spv>
+};
+alignas(uint32_t) static constexpr unsigned char default_fragment_spv[] = {
+    #embed <default_frag.spv>
+};
 
 char* load_shader_code(const char* file_path, uint32_t* shader_size)
 {
@@ -103,10 +111,13 @@ ERROR:
 
 PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
 {
+    (void) pigment;
     PPipelineDesc desc = {0};
 
-    desc.vertex_spv   = compile_glsl_to_spv(pigment, DEFAULT_VERTEX_SHADER, (uint32_t) strlen(DEFAULT_VERTEX_SHADER), P_SHADER_TYPE_VERTEX, "default.vert", &desc.vertex_spv_size);
-    desc.fragment_spv = compile_glsl_to_spv(pigment, DEFAULT_FRAGMENT_SHADER, (uint32_t) strlen(DEFAULT_FRAGMENT_SHADER), P_SHADER_TYPE_FRAGMENT, "default.frag", &desc.fragment_spv_size);
+    desc.vertex_spv        = (const uint32_t*) default_vertex_spv;
+    desc.vertex_spv_size   = (uint32_t) sizeof(default_vertex_spv);
+    desc.fragment_spv      = (const uint32_t*) default_fragment_spv;
+    desc.fragment_spv_size = (uint32_t) sizeof(default_fragment_spv);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;
