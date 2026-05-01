@@ -149,8 +149,6 @@ typedef struct PCommandBuffers PCommandBuffers;
 
 typedef struct PSync PSync;
 
-typedef struct PDrawPushConstants PDrawPushConstants;
-
 typedef struct PDescriptor PDescriptor;
 
 typedef struct PImage PImage;
@@ -173,6 +171,12 @@ typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
 
 typedef struct PigmentLogger PigmentLogger;
 
+typedef enum PShaderStageFlags {
+    P_SHADER_STAGE_VERTEX_BIT   = 1 << 0,
+    P_SHADER_STAGE_FRAGMENT_BIT = 1 << 4,
+    P_SHADER_STAGE_COMPUTE_BIT  = 1 << 5,
+} PShaderStageFlags;
+
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,
     P_FORMAT_R8_UNORM            = 9,
@@ -189,14 +193,6 @@ typedef float vec4[4];
 typedef float mat4[4][4];
 
 #define MAT4_IDENTITY {{1.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}}
-
-typedef struct PVertex {
-    vec3 pos;
-    float uv_x;
-    vec3 normal;
-    float uv_y;
-    vec4 color;
-} __attribute__((aligned(16))) PVertex;
 
 typedef struct PigmentConfig {
     uint32_t max_images;

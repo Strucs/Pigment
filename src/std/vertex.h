@@ -14,22 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef LOADER_H
-#define LOADER_H
+#ifndef STD_VERTEX_H
+#define STD_VERTEX_H
 
 #include "defines.h"
-#include "pipeline.h"
 
-typedef enum PShaderType {
-    P_SHADER_TYPE_VERTEX   = 0,
-    P_SHADER_TYPE_FRAGMENT = 1,
-} PShaderType;
-
-char* load_shader_code(const char* file_path, uint32_t* shader_size);
-uint32_t* compile_glsl_to_spv(Pigment* pigment, const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size);
-
-PLayout* default_pipeline_layout(Pigment* pigment);
-
-PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format);
+typedef struct PVertex {
+    vec3 pos;
+    float uv_x;
+    vec3 normal;
+    float uv_y;
+    vec4 color;
+} __attribute__((aligned(16))) PVertex;
 
 #endif

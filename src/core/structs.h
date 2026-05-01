@@ -212,11 +212,10 @@ struct PLayout {
     VkPipelineLayout layout;
     uint32_t push_size;
     VkShaderStageFlags push_stages;
-    uint32_t refcount;
 };
 
 struct PLayoutList {
-    PLayout** entries;
+    PLayout** layouts;
     uint32_t count;
     uint32_t capacity;
 };
@@ -280,13 +279,6 @@ struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
     VkFence* in_flight_fences;
-};
-
-struct PDrawPushConstants {
-    VkDeviceAddress vertex_buffer;
-    VkDeviceAddress instance_buffer;
-    VkDeviceAddress camera_buffer;
-    VkDeviceAddress material_buffer;
 };
 
 struct PDescriptor {

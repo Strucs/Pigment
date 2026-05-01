@@ -86,6 +86,8 @@ typedef enum PSampleCount {
 } PSampleCount;
 
 typedef struct PPipelineDesc {
+    PLayout* layout;
+
     const uint32_t* vertex_spv;
     uint32_t vertex_spv_size;
     const uint32_t* fragment_spv;
@@ -110,11 +112,18 @@ typedef struct PPipelineDesc {
     PSampleCount sample_count;
 } PPipelineDesc;
 
+typedef struct PLayoutDesc {
+    uint32_t push_size;
+    PShaderStageFlags push_stages;
+} PLayoutDesc;
+
 PPipelineList* create_pipeline_list(void);
-void destroy_pipeline_list(Pigment* pigment, PPipelineList* list, PLayoutList* layouts);
+void destroy_pipeline_list(Pigment* pigment, PPipelineList* list);
 
 PLayoutList* create_layout_list(void);
 void destroy_layout_list(Pigment* pigment, PLayoutList* list);
+
+PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc);
 
 PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc);
 void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);

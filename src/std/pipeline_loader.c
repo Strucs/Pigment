@@ -15,6 +15,7 @@
  */
 
 #include "pipeline_loader.h"
+#include "std_internal.h"
 #include "log_internal.h"
 
 #include <stdalign.h>
@@ -109,10 +110,21 @@ ERROR:
     return NULL;
 }
 
+PLayout* default_pipeline_layout(Pigment* pigment)
+{
+    PLayoutDesc desc = {
+        .push_size   = sizeof(PStdPushConstants),
+        .push_stages = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
+    };
+
+    return pigment_create_layout(pigment, &desc);
+}
+
 PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
 {
-    (void) pigment;
     PPipelineDesc desc = {0};
+
+    desc.layout = default_pipeline_layout(pigment);
 
     desc.vertex_spv        = (const uint32_t*) default_vertex_spv;
     desc.vertex_spv_size   = (uint32_t) sizeof(default_vertex_spv);

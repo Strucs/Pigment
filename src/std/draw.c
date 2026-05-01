@@ -17,6 +17,7 @@
 #include "draw.h"
 #include "material.h"
 #include "frame.h"
+#include "std_internal.h"
 #include "internal.h"
 #include "log_internal.h"
 
@@ -145,7 +146,7 @@ void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, 
         memcpy(&instances_mapped[first_instance], draw_call->instances, draw_call->instance_count * sizeof(PInstanceData));
         ring->cursor += draw_call->instance_count;
 
-        PDrawPushConstants push = {
+        PStdPushConstants push = {
             .vertex_buffer   = draw_call->mesh->vertex_buffer_address,
             .instance_buffer = ring->address,
             .camera_buffer   = camera_slot_address,

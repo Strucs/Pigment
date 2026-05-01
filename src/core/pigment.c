@@ -189,7 +189,7 @@ void destroy_pigment(Pigment* pigment)
             destroy_swapchain(pigment, pigment->renderers[i]->swapchain);
         }
     }
-    destroy_pipeline_list(pigment, pigment->pipelines, pigment->layouts);
+    destroy_pipeline_list(pigment, pigment->pipelines);
     destroy_layout_list(pigment, pigment->layouts);
     destroy_descriptor(pigment, pigment->descriptor);
     destroy_images(pigment, pigment->images);

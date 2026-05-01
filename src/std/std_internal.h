@@ -14,26 +14,16 @@
  * limitations under the License.
  */
 
-#ifndef PRIMITIVES_H
-#define PRIMITIVES_H
+#ifndef STD_INTERNAL_H
+#define STD_INTERNAL_H
 
-#include "defines.h"
-#include "vertex.h"
+#include "pigment_vk.h"
 
-typedef struct PMeshData {
-    PVertex* vertices;
-    uint32_t vertex_count;
-    uint32_t* indices;
-    uint32_t index_count;
-} PMeshData;
-
-PMeshData pigment_cube_mesh(void);
-PMeshData pigment_quad_mesh(void);
-PMeshData pigment_plane_mesh(uint32_t segments);
-PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments);
-
-void pigment_free_mesh_data(PMeshData* mesh);
-
-PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, const PMeshData* data);
+typedef struct PStdPushConstants {
+    VkDeviceAddress vertex_buffer;
+    VkDeviceAddress instance_buffer;
+    VkDeviceAddress camera_buffer;
+    VkDeviceAddress material_buffer;
+} PStdPushConstants;
 
 #endif

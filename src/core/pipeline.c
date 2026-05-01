@@ -29,19 +29,17 @@ static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_creat
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
 static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
-static PLayout* get_or_create_default_layout(Pigment* pigment);
-static void retain_layout(PLayout* layout);
-static void release_layout(Pigment* pigment, PLayoutList* list, PLayout* layout);
-static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline);
+static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline);
 
 #define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
+#define PIGMENT_LAYOUT_LIST_INITIAL_CAPACITY 4
 
 PPipelineList* create_pipeline_list(void)
 {
     return calloc(1, sizeof(PPipelineList));
 }
 
-void destroy_pipeline_list(Pigment* pigment, PPipelineList* list, PLayoutList* layouts)
+void destroy_pipeline_list(Pigment* pigment, PPipelineList* list)
 {
     if(list == NULL)
     {
@@ -50,7 +48,7 @@ void destroy_pipeline_list(Pigment* pigment, PPipelineList* list, PLayoutList* l
 
     while(list->count > 0)
     {
-        pipeline_list_destroy(pigment, list, layouts, list->pipelines[0]);
+        pipeline_list_destroy(pigment, list, list->pipelines[0]);
     }
     free(list->pipelines);
     free(list);
@@ -69,7 +67,7 @@ void destroy_layout_list(Pigment* pigment, PLayoutList* list)
     }
     for(uint32_t i = 0; i < list->count; i++)
     {
-        PLayout* entry = list->entries[i];
+        PLayout* entry = list->layouts[i];
         if(entry != NULL)
         {
             if(entry->layout != VK_NULL_HANDLE)
@@ -79,7 +77,7 @@ void destroy_layout_list(Pigment* pigment, PLayoutList* list)
             free(entry);
         }
     }
-    free(list->entries);
+    free(list->layouts);
     free(list);
 }
 
@@ -186,13 +184,12 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
     }
     build->dynamic = configure_dynamic_state_create_info(build->dynamic_state_list, build->dynamic_state_count);
 
-    build->layout = get_or_create_default_layout(pigment);
-    if(build->layout == NULL)
+    if(desc->layout == NULL)
     {
+        PLOG_ERROR(pigment, "PPipelineDesc.layout is NULL");
         goto ERROR;
     }
-
-    retain_layout(build->layout);
+    build->layout = desc->layout;
 
     build->rendering = (VkPipelineRenderingCreateInfoKHR) {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
@@ -224,11 +221,6 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
     if(build->fragment_module != NULL)
     {
         vkDestroyShaderModule(device, build->fragment_module, NULL);
-    }
-
-    if(build->layout != NULL)
-    {
-        release_layout(pigment, pigment->layouts, build->layout);
     }
 
     free(build->color_formats);
@@ -338,8 +330,6 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
         temp_pipelines[i]->layout      = builds[i]->layout;
         list->pipelines[list->count++] = temp_pipelines[i];
         out[i]                         = temp_pipelines[i];
-
-        retain_layout(builds[i]->layout);
     }
 
     temp_pipelines_allocated = 0;
@@ -378,7 +368,7 @@ void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
     }
 
     vkDeviceWaitIdle(pigment->device->logical_device);
-    pipeline_list_destroy(pigment, pigment->pipelines, pigment->layouts, pipeline);
+    pipeline_list_destroy(pigment, pigment->pipelines, pipeline);
 }
 
 void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* pipeline)
@@ -612,41 +602,51 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
     return dynamic_state_create_info;
 }
 
-static PLayout* get_or_create_default_layout(Pigment* pigment)
+PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
 {
-    PLayoutList* list = pigment->layouts;
-
-    if(list->count > 0)
+    if(pigment == NULL || desc == NULL)
     {
-        return list->entries[0];
+        return NULL;
+    }
+
+    PLayoutList* list            = pigment->layouts;
+    VkShaderStageFlags vk_stages = (VkShaderStageFlags) desc->push_stages;
+
+    for(uint32_t i = 0; i < list->count; i++)
+    {
+        PLayout* candidate = list->layouts[i];
+        if(candidate->push_size == desc->push_size && candidate->push_stages == vk_stages)
+        {
+            return candidate;
+        }
     }
 
     if(list->count >= list->capacity)
     {
-        uint32_t new_capacity = list->capacity == 0 ? 4 : list->capacity * 2;
-        PLayout** new_ptr     = realloc(list->entries, new_capacity * sizeof(*new_ptr));
+        uint32_t new_capacity = list->capacity == 0 ? PIGMENT_LAYOUT_LIST_INITIAL_CAPACITY : list->capacity * 2;
+        PLayout** new_ptr     = realloc(list->layouts, new_capacity * sizeof(*new_ptr));
 
         if(new_ptr == NULL)
         {
             return NULL;
         }
 
-        list->entries  = new_ptr;
+        list->layouts  = new_ptr;
         list->capacity = new_capacity;
     }
 
     VkPushConstantRange range = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .stageFlags = vk_stages,
         .offset     = 0,
-        .size       = sizeof(PDrawPushConstants),
+        .size       = desc->push_size,
     };
 
     VkPipelineLayoutCreateInfo create_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount         = 1,
         .pSetLayouts            = &pigment->descriptor->descriptor_set_layout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges    = &range,
+        .pushConstantRangeCount = (desc->push_size > 0) ? 1 : 0,
+        .pPushConstantRanges    = (desc->push_size > 0) ? &range : NULL,
     };
 
     VkPipelineLayout vk_layout = VK_NULL_HANDLE;
@@ -665,64 +665,20 @@ static PLayout* get_or_create_default_layout(Pigment* pigment)
     }
 
     layout->layout      = vk_layout;
-    layout->push_size   = sizeof(PDrawPushConstants);
-    layout->push_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    layout->refcount    = 0;
+    layout->push_size   = desc->push_size;
+    layout->push_stages = vk_stages;
 
-    list->entries[list->count++] = layout;
+    list->layouts[list->count++] = layout;
 
     return layout;
 }
 
-static void retain_layout(PLayout* layout)
-{
-    if(layout == NULL)
-    {
-        return;
-    }
-    layout->refcount++;
-}
-
-static void release_layout(Pigment* pigment, PLayoutList* list, PLayout* layout)
-{
-    if(layout == NULL)
-    {
-        return;
-    }
-
-    if(layout->refcount > 0)
-    {
-        layout->refcount--;
-    }
-    if(layout->refcount > 0)
-    {
-        return;
-    }
-
-    for(uint32_t i = 0; i < list->count; i++)
-    {
-        if(list->entries[i] == layout)
-        {
-            list->entries[i] = list->entries[list->count - 1];
-            list->count--;
-            break;
-        }
-    }
-
-    if(layout->layout != VK_NULL_HANDLE)
-    {
-        vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, NULL);
-    }
-    free(layout);
-}
-
-static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PLayoutList* layouts, PPipeline* pipeline)
+static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline)
 {
     for(uint32_t i = 0; i < list->count; i++)
     {
         if(list->pipelines[i] == pipeline)
         {
-            PLayout* layout    = pipeline->layout;
             list->pipelines[i] = list->pipelines[list->count - 1];
             list->count--;
 
@@ -732,7 +688,6 @@ static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PLayout
             }
 
             free(pipeline);
-            release_layout(pigment, layouts, layout);
             return;
         }
     }

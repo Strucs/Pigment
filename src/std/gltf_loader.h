@@ -19,6 +19,7 @@
 
 #include "defines.h"
 #include "material.h"
+#include "vertex.h"
 
 typedef struct PRawSurface {
     uint32_t start_index;
