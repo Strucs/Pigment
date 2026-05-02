@@ -116,21 +116,24 @@ ERROR:
     return NULL;
 }
 
-PLayout* default_pipeline_layout(Pigment* pigment)
+PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
-    PLayoutDesc desc = {
-        .push_size   = sizeof(PStdPushConstants),
-        .push_stages = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
+    PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
+    PLayoutDesc desc                     = {
+        .set_layouts      = set_layouts,
+        .set_layout_count = 1,
+        .push_size        = sizeof(PStdPushConstants),
+        .push_stages      = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     };
 
     return pigment_create_layout(pigment, &desc);
 }
 
-PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
 {
     PPipelineDesc desc = {0};
 
-    desc.layout = default_pipeline_layout(pigment);
+    desc.layout = default_pipeline_layout(pigment, bindless);
 
     desc.vertex_spv        = (const uint32_t*) default_vertex_spv;
     desc.vertex_spv_size   = (uint32_t) sizeof(default_vertex_spv);
@@ -149,21 +152,24 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, const PFormat* col
     return desc;
 }
 
-PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment)
+PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
-    PLayoutDesc desc = {
-        .push_size   = sizeof(PStdGizmoPushConstants),
-        .push_stages = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
+    PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
+    PLayoutDesc desc                     = {
+        .set_layouts      = set_layouts,
+        .set_layout_count = 1,
+        .push_size        = sizeof(PStdGizmoPushConstants),
+        .push_stages      = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     };
 
     return pigment_create_layout(pigment, &desc);
 }
 
-PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
 {
     PPipelineDesc desc = {0};
 
-    desc.layout = default_light_gizmo_pipeline_layout(pigment);
+    desc.layout = default_light_gizmo_pipeline_layout(pigment, bindless);
 
     desc.vertex_spv        = (const uint32_t*) light_gizmo_vertex_spv;
     desc.vertex_spv_size   = (uint32_t) sizeof(light_gizmo_vertex_spv);

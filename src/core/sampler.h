@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef TEXTURE_H
-#define TEXTURE_H
+#ifndef PIGMENT_SAMPLER_H
+#define PIGMENT_SAMPLER_H
 
 #include "defines.h"
 
@@ -36,16 +36,13 @@ struct PSamplerDesc {
     FilteringMode min_filter;     // NEAREST or LINEAR
     FilteringMode mipmap_mode;    // NEAREST or LINEAR
     PAddressMode address_mode;    // 0 = REPEAT
+
+    float max_anisotropy;         // 0 = off, otherwise clamped to device max
+    bool compare_enable;          // depth-compare sampler (shadow maps)
+    PCompareOp compare_op;
 };
 
-PImageList* create_images(void);
-uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
-uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
-uint32_t pigment_add_sampler(Pigment* pigment, PSamplerDesc* desc);
-int add_image_from_pixels(Pigment* pigment, PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool);
-int add_default_image(Pigment* pigment, PImageList* image_list, PCommandPool* pool);
-void destroy_images(Pigment* pigment, PImageList* image_list);
-PSamplerList* create_samplers(Pigment* pigment, uint32_t max_samplers);
-void destroy_samplers(Pigment* pigment, PSamplerList* sampler_list);
+PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc);
+void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler);
 
 #endif

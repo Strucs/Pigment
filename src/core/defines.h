@@ -26,8 +26,6 @@
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \
     ((((uint32_t) (major)) << 22U) | (((uint32_t) (minor)) << 12U) | ((uint32_t) (patch)))
 
-#define PIGMENT_DEFAULT_MAX_IMAGES 128
-#define PIGMENT_DEFAULT_MAX_SAMPLERS 16
 #define PIGMENT_DEFAULT_MAX_FRAMES_IN_FLIGHT 2
 
 typedef struct PAppInfo {
@@ -155,15 +153,9 @@ typedef struct PDescriptorPool PDescriptorPool;
 
 typedef struct PDescriptorSet PDescriptorSet;
 
-typedef struct PDescriptor PDescriptor;
-
 typedef struct PImage PImage;
 
-typedef struct PImageList PImageList;
-
 typedef struct PSampler PSampler;
-
-typedef struct PSamplerList PSamplerList;
 
 typedef struct PTrackedImage PTrackedImage;
 
@@ -208,9 +200,18 @@ typedef enum PFormat {
     P_FORMAT_R16G16B16A16_SFLOAT = 97,
 } PFormat;
 
+typedef enum PCompareOp {
+    P_COMPARE_OP_NEVER            = 0,
+    P_COMPARE_OP_LESS             = 1,
+    P_COMPARE_OP_EQUAL            = 2,
+    P_COMPARE_OP_LESS_OR_EQUAL    = 3,
+    P_COMPARE_OP_GREATER          = 4,
+    P_COMPARE_OP_NOT_EQUAL        = 5,
+    P_COMPARE_OP_GREATER_OR_EQUAL = 6,
+    P_COMPARE_OP_ALWAYS           = 7,
+} PCompareOp;
+
 typedef struct PigmentConfig {
-    uint32_t max_images;
-    uint32_t max_samplers;
     uint32_t max_frames_in_flight;
     const PigmentLoggerCreateInfo* loggers;
     uint32_t logger_count;

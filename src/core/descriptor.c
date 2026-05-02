@@ -308,139 +308,16 @@ FREE:
     free(vk_writes);
 }
 
-PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images)
+void pigment_cmd_bind_descriptor_set(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t set_index, PDescriptorSet* set)
 {
-    PDescriptor* descriptor = calloc(1, sizeof(*descriptor));
-    if(descriptor == NULL)
-    {
-        return NULL;
-    }
-
-    PDescriptorBinding bindings[] = {
-        {
-         .binding = 1,
-         .type    = P_DESCRIPTOR_TYPE_SAMPLER,
-         .count   = max_samplers,
-         .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
-         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
-         },
-        {
-         .binding = 2,
-         .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-         .count   = max_images,
-         .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
-         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT,
-         },
-    };
-    PDescriptorSetLayoutDesc layout_desc = {
-        .bindings      = bindings,
-        .binding_count = 2,
-    };
-    descriptor->layout = pigment_create_descriptor_set_layout(pigment, &layout_desc);
-    if(descriptor->layout == NULL)
-    {
-        free(descriptor);
-        return NULL;
-    }
-    return descriptor;
-}
-
-int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
-{
-    PDescriptorPoolSize pool_sizes[] = {
-        {      .type  = P_DESCRIPTOR_TYPE_SAMPLER,
-         .count = descriptor_count * max_samplers},
-        {.type  = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-         .count = descriptor_count * max_images  },
-    };
-
-    PDescriptorPoolDesc pool_desc = {
-        .pool_sizes      = pool_sizes,
-        .pool_size_count = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
-        .max_sets        = descriptor_count,
-    };
-
-    descriptor->pool = pigment_create_descriptor_pool(pigment, &pool_desc);
-    if(descriptor->pool == NULL)
-    {
-        return PIGMENT_ERROR;
-    }
-
-    descriptor->sets = calloc(descriptor_count, sizeof(*descriptor->sets));
-    if(descriptor->sets == NULL)
-    {
-        return PIGMENT_ERROR;
-    }
-
-    descriptor->set_count = descriptor_count;
-
-    for(uint32_t i = 0; i < descriptor_count; i++)
-    {
-        descriptor->sets[i] = pigment_allocate_descriptor_set(pigment, descriptor->pool, descriptor->layout, max_images);
-        if(descriptor->sets[i] == NULL)
-        {
-            return PIGMENT_ERROR;
-        }
-    }
-
-    PDescriptorImageInfo* sampler_infos = calloc(samplers->count, sizeof(*sampler_infos));
-    PDescriptorImageInfo* image_infos   = calloc(images->count, sizeof(*image_infos));
-    if(sampler_infos == NULL || image_infos == NULL)
-    {
-        free(sampler_infos);
-        free(image_infos);
-        return PIGMENT_ERROR;
-    }
-
-    for(uint32_t i = 0; i < samplers->count; i++)
-    {
-        sampler_infos[i].sampler = &samplers->samplers[i];
-    }
-
-    for(uint32_t i = 0; i < images->count; i++)
-    {
-        image_infos[i].image = images->images[i];
-    }
-
-    for(uint32_t i = 0; i < descriptor_count; i++)
-    {
-        PDescriptorWrite writes[2] = {
-            {
-             .set           = descriptor->sets[i],
-             .binding       = 1,
-             .array_element = 0,
-             .type          = P_DESCRIPTOR_TYPE_SAMPLER,
-             .count         = samplers->count,
-             .image_infos   = sampler_infos,
-             },
-            {
-             .set           = descriptor->sets[i],
-             .binding       = 2,
-             .array_element = 0,
-             .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-             .count         = images->count,
-             .image_infos   = image_infos,
-             },
-        };
-
-        pigment_write_descriptors(pigment, writes, sizeof(writes) / sizeof(writes[0]));
-    }
-
-    free(sampler_infos);
-    free(image_infos);
-    return PIGMENT_SUCCESS;
-}
-
-void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor)
-{
-    if(descriptor == NULL)
+    if(pigment == NULL || pipeline == NULL || set == NULL || window_index >= pigment->window_count)
     {
         return;
     }
-    free(descriptor->sets);
-    pigment_destroy_descriptor_pool(pigment, descriptor->pool);
-    pigment_destroy_descriptor_set_layout(pigment, descriptor->layout);
-    free(descriptor);
+
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    VkCommandBuffer cmd       = renderer->command_buffers->buffers[renderer->swapchain->current_frame];
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, set_index, 1, &set->set, 0, NULL);
 }
 
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type)

@@ -21,6 +21,7 @@ int main(void)
     };
 
     Pigment* pigment                 = NULL;
+    PStdBindless* bindless           = NULL;
     PCamera* camera                  = NULL;
     PInstanceRing* ring              = NULL;
     PMaterials* materials            = NULL;
@@ -58,6 +59,13 @@ int main(void)
         goto FREE;
     }
 
+    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS);
+    if(bindless == NULL)
+    {
+        fprintf(stderr, "Failed to create bindless!\n");
+        goto FREE;
+    }
+
     ring = pigment_std_create_instance_ring(pigment, 4096);
     if(ring == NULL)
     {
@@ -82,7 +90,7 @@ int main(void)
     PLightDesc sun = {
         .type      = P_LIGHT_TYPE_DIRECTIONAL,
         .direction = {-0.4f, -1.0f, -0.3f},
-        .color     = {1.0f, 0.95f, 0.85f},
+        .color     = { 1.0f, 0.95f, 0.85f},
         .intensity = 1.0f,
     };
     pigment_std_light_create(pigment, lights, &sun);
@@ -102,8 +110,8 @@ int main(void)
     PFormat color_format      = pigment_get_color_format(renderer);
     PFormat depth_format      = pigment_get_depth_format(renderer);
 
-    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(pigment, &color_format, 1, depth_format);
-    PPipelineDesc desc_additive = default_graphic_pipeline_desc(pigment, &color_format, 1, depth_format);
+    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    PPipelineDesc desc_additive = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
 
     PBlendMode additive_blend      = P_BLEND_MODE_ADDITIVE;
     desc_additive.blend_modes      = &additive_blend;
@@ -133,7 +141,7 @@ int main(void)
         goto FREE;
     }
 
-    if(upload_mesh_textures(pigment, asset, materials) != PIGMENT_SUCCESS)
+    if(upload_mesh_textures(pigment, bindless, asset, materials) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to upload mesh textures/materials!\n");
         goto FREE;
@@ -179,7 +187,7 @@ int main(void)
         goto FREE;
     }
 
-    if(upload_mesh_textures(pigment, asset2, materials) != PIGMENT_SUCCESS)
+    if(upload_mesh_textures(pigment, bindless, asset2, materials) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to upload mesh textures/materials!\n");
         goto FREE;
@@ -241,11 +249,11 @@ int main(void)
         pigment_begin_swapchain_pass(pigment, 0);
 
         pigment_bind_pipeline(pigment, 0, pipelines[0]);
-        pigment_draw(pigment, ring, materials, lights, camera, 0, pipelines[0], draw_calls, draw_count);
+        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, 0, pipelines[1]);
         pigment_cmd_set_depth(pigment, 0, true, false, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, ring, materials, lights, camera, 0, pipelines[1], draw_calls2, draw_count2);
+        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_swapchain_pass(pigment, 0);
 
@@ -277,6 +285,7 @@ FREE:
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
+    pigment_std_destroy_bindless(pigment, bindless);
     destroy_pigment(pigment);
 
     return error_code;

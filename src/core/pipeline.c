@@ -29,6 +29,7 @@ static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_creat
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
 static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
+static bool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count);
 static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline);
 
 #define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
@@ -74,6 +75,7 @@ void destroy_layout_list(Pigment* pigment, PLayoutList* list)
             {
                 vkDestroyPipelineLayout(pigment->device->logical_device, entry->layout, NULL);
             }
+            free(entry->set_layouts);
             free(entry);
         }
     }
@@ -383,7 +385,6 @@ void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* p
     VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, 0, 1, &pigment->descriptor->sets[current_frame]->set, 0, NULL);
 
     // Default dynamic state values. User can override with pigment_cmd_set_*.
     vkCmdSetCullMode(cmd, VK_CULL_MODE_BACK_BIT);
@@ -602,6 +603,22 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
     return dynamic_state_create_info;
 }
 
+static bool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count)
+{
+    if(candidate->set_layout_count != set_layout_count)
+    {
+        return false;
+    }
+    for(uint32_t i = 0; i < set_layout_count; i++)
+    {
+        if(candidate->set_layouts[i] != set_layouts[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
 {
     if(pigment == NULL || desc == NULL)
@@ -615,7 +632,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     for(uint32_t i = 0; i < list->count; i++)
     {
         PLayout* candidate = list->layouts[i];
-        if(candidate->push_size == desc->push_size && candidate->push_stages == vk_stages)
+        if(candidate->push_size == desc->push_size && candidate->push_stages == vk_stages && layout_set_layouts_match(candidate, desc->set_layouts, desc->set_layout_count))
         {
             return candidate;
         }
@@ -641,16 +658,34 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
         .size       = desc->push_size,
     };
 
+    VkDescriptorSetLayout* vk_set_layouts = NULL;
+    if(desc->set_layout_count > 0)
+    {
+        vk_set_layouts = malloc(desc->set_layout_count * sizeof(*vk_set_layouts));
+        if(vk_set_layouts == NULL)
+        {
+            return NULL;
+        }
+
+        for(uint32_t i = 0; i < desc->set_layout_count; i++)
+        {
+            vk_set_layouts[i] = desc->set_layouts[i]->layout;
+        }
+    }
+
     VkPipelineLayoutCreateInfo create_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount         = 1,
-        .pSetLayouts            = &pigment->descriptor->layout->layout,
+        .setLayoutCount         = desc->set_layout_count,
+        .pSetLayouts            = vk_set_layouts,
         .pushConstantRangeCount = (desc->push_size > 0) ? 1 : 0,
         .pPushConstantRanges    = (desc->push_size > 0) ? &range : NULL,
     };
 
     VkPipelineLayout vk_layout = VK_NULL_HANDLE;
     VkResult result            = vkCreatePipelineLayout(pigment->device->logical_device, &create_info, NULL, &vk_layout);
+
+    free(vk_set_layouts);
+
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create pipeline layout! (result: %d)", result);
@@ -667,6 +702,20 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     layout->layout      = vk_layout;
     layout->push_size   = desc->push_size;
     layout->push_stages = vk_stages;
+
+    if(desc->set_layout_count > 0)
+    {
+        layout->set_layouts = malloc(desc->set_layout_count * sizeof(*layout->set_layouts));
+        if(layout->set_layouts == NULL)
+        {
+            vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, NULL);
+            free(layout);
+            return NULL;
+        }
+
+        memcpy(layout->set_layouts, desc->set_layouts, desc->set_layout_count * sizeof(*layout->set_layouts));
+        layout->set_layout_count = desc->set_layout_count;
+    }
 
     list->layouts[list->count++] = layout;
 

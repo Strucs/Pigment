@@ -17,8 +17,10 @@
 #include "draw.h"
 #include "material.h"
 #include "lights.h"
+#include "bindless.h"
 #include "buffers.h"
 #include "camera.h"
+#include "descriptor.h"
 #include "frame.h"
 #include "std_internal.h"
 #include "internal.h"
@@ -80,15 +82,17 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
     free(ring);
 }
 
-void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
+void pigment_draw(Pigment* pigment, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
 {
-    if(pigment == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0 || window_index >= pigment->window_count)
+    if(pigment == NULL || bindless == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0 || window_index >= pigment->window_count)
     {
         return;
     }
 
     PWindowRenderer* renderer = pigment->renderers[window_index];
     uint32_t current_frame    = renderer->swapchain->current_frame;
+
+    pigment_cmd_bind_descriptor_set(pigment, window_index, pipeline, 0, pigment_std_bindless_set(pigment, bindless, window_index));
 
     if(current_frame != ring->last_seen_frame)
     {

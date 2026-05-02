@@ -37,6 +37,8 @@ typedef struct PImageDesc {
     uint32_t mip_levels;     // 0 = single mip, 1 = full mip chain
 } PImageDesc;
 
+uint32_t pigment_format_pixel_size(PFormat format);
+
 PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc);
 void pigment_destroy_image(Pigment* pigment, PImage* image);
 void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);

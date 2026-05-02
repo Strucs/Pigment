@@ -19,6 +19,7 @@
 
 #include <cglm/types.h>
 #include "defines.h"
+#include "bindless.h"
 #include "material.h"
 #include "vertex.h"
 
@@ -64,6 +65,6 @@ typedef struct MeshAsset {
 MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath);
 void free_mesh_asset(MeshAsset* mesh);
 
-int upload_mesh_textures(Pigment* pigment, MeshAsset* asset, PMaterials* materials);
+int upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);
 
 #endif

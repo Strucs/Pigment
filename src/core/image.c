@@ -23,6 +23,27 @@
 
 static VkImageUsageFlags translate_usage(PImageUsage usage);
 static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage);
+
+uint32_t pigment_format_pixel_size(PFormat format)
+{
+    switch(format)
+    {
+        case P_FORMAT_R8_UNORM:
+            return 1;
+        case P_FORMAT_R8G8_UNORM:
+            return 2;
+        case P_FORMAT_R8G8B8A8_UNORM:
+        case P_FORMAT_R8G8B8A8_SRGB:
+        case P_FORMAT_B8G8R8A8_UNORM:
+        case P_FORMAT_B8G8R8A8_SRGB:
+            return 4;
+        case P_FORMAT_R16G16B16A16_SFLOAT:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
 static int allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
 static void free_resources(Pigment* pigment, PImage* image);
 static int tracked_reserve(PTrackedImageList* list, uint32_t additional);

@@ -15,7 +15,6 @@
  */
 
 #include "gltf_loader.h"
-#include "texture.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
@@ -568,7 +567,7 @@ FREE:
     return asset;
 }
 
-int upload_mesh_textures(Pigment* pigment, MeshAsset* asset, PMaterials* materials)
+int upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials)
 {
     if(pigment == NULL || asset == NULL)
     {
@@ -620,7 +619,7 @@ int upload_mesh_textures(Pigment* pigment, MeshAsset* asset, PMaterials* materia
 
         if(valid > 0)
         {
-            uint32_t start_slot = pigment_upload_image_batch(pigment, pixels, widths, heights, formats, valid);
+            uint32_t start_slot = pigment_std_upload_image_batch(pigment, bindless, pixels, widths, heights, formats, valid);
             for(uint32_t i = 0; i < valid; i++)
             {
                 tex_map[src_indices[i]] = start_slot + i;
@@ -637,7 +636,7 @@ int upload_mesh_textures(Pigment* pigment, MeshAsset* asset, PMaterials* materia
         }
         for(uint32_t i = 0; i < asset->sampler_count; i++)
         {
-            samp_map[i] = pigment_add_sampler(pigment, &asset->sampler_descs[i]);
+            samp_map[i] = pigment_std_add_sampler(pigment, bindless, &asset->sampler_descs[i]);
         }
     }
 

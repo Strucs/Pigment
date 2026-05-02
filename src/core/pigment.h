@@ -21,7 +21,7 @@
 #include "log.h"
 #include "window.h"
 #include "frame.h"
-#include "texture.h"
+#include "sampler.h"
 #include "pipeline.h"
 #include "surface.h"
 #include "buffers.h"

@@ -100,4 +100,6 @@ PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPoo
 
 void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count);
 
+void pigment_cmd_bind_descriptor_set(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t set_index, PDescriptorSet* set);
+
 #endif

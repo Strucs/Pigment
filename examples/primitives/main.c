@@ -19,6 +19,7 @@ int main(void)
     };
 
     Pigment* pigment                    = NULL;
+    PStdBindless* bindless              = NULL;
     PCamera* camera                     = NULL;
     PInstanceRing* ring                 = NULL;
     PMaterials* materials               = NULL;
@@ -55,6 +56,13 @@ int main(void)
         goto FREE;
     }
 
+    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS);
+    if(bindless == NULL)
+    {
+        fprintf(stderr, "Failed to create bindless!\n");
+        goto FREE;
+    }
+
     ring = pigment_std_create_instance_ring(pigment, 4096);
     if(ring == NULL)
     {
@@ -79,7 +87,7 @@ int main(void)
     PLightDesc sun = {
         .type      = P_LIGHT_TYPE_DIRECTIONAL,
         .direction = {-0.4f, -1.0f, -0.3f},
-        .color     = {1.0f, 0.95f, 0.85f},
+        .color     = { 1.0f, 0.95f, 0.85f},
         .intensity = 1.0f,
     };
     pigment_std_light_create(pigment, lights, &sun);
@@ -88,13 +96,13 @@ int main(void)
         pigment,
         materials,
         &(PMaterialDesc) {
-            .base_color_factor          = {1.0f, 1.0f, 1.0f, 1.0f},
-            .emissive_factor            = {0.0f, 0.0f, 0.0f, 0.0f},
-            .metallic_factor            = 1.0f,
-            .roughness_factor           = 1.0f,
-            .normal_scale               = 1.0f,
-            .occlusion_scale            = 1.0f,
-        }
+            .base_color_factor = {1.0f, 1.0f, 1.0f, 1.0f},
+            .emissive_factor   = {0.0f, 0.0f, 0.0f, 0.0f},
+            .metallic_factor   = 1.0f,
+            .roughness_factor  = 1.0f,
+            .normal_scale      = 1.0f,
+            .occlusion_scale   = 1.0f,
+    }
     );
     if(mat_default == UINT32_MAX)
     {
@@ -117,7 +125,7 @@ int main(void)
     PFormat color_format      = pigment_get_color_format(renderer);
     PFormat depth_format      = pigment_get_depth_format(renderer);
 
-    PPipelineDesc desc = default_graphic_pipeline_desc(pigment, &color_format, 1, depth_format);
+    PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
     build              = pigment_pipeline_build_from_desc(pigment, &desc);
     if(build == NULL)
     {
@@ -232,7 +240,7 @@ int main(void)
 
         pigment_begin_swapchain_pass(pigment, 0);
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, ring, materials, lights, camera, 0, pipeline, draw_calls, 5);
+        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipeline, draw_calls, 5);
         pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
@@ -265,6 +273,7 @@ FREE:
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
+    pigment_std_destroy_bindless(pigment, bindless);
     destroy_pigment(pigment);
 
     return error_code;

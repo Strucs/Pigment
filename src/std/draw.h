@@ -19,6 +19,7 @@
 
 #include <cglm/types.h>
 #include "defines.h"
+#include "bindless.h"
 #include "pipeline.h"
 #include "mesh.h"
 #include "camera.h"
@@ -43,6 +44,6 @@ typedef struct PDrawCall {
 PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_instances_per_frame);
 void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
 
-void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
+void pigment_draw(Pigment* pigment, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
 
 #endif

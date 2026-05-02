@@ -85,8 +85,6 @@ typedef struct PLogState {
 
 typedef struct PRuntimeConfig {
     uint32_t max_frames_in_flight;
-    uint32_t max_images;
-    uint32_t max_samplers;
     bool validation_enabled;
     bool best_practices_enabled;
     float depth_clear_value;
@@ -103,10 +101,7 @@ struct Pigment {
     PDevice* device;
     PVkAllocator* allocator;
     bool owns_allocator;
-    PDescriptor* descriptor;
     PCommandPoolList* command_pools;
-    PImageList* images;
-    PSamplerList* samplers;
     PPipelineList* pipelines;
     PLayoutList* layouts;
     PTrackedImageList* tracked_images;
@@ -208,6 +203,8 @@ struct PPipelineList {
 
 struct PLayout {
     VkPipelineLayout layout;
+    PDescriptorSetLayout** set_layouts;
+    uint32_t set_layout_count;
     uint32_t push_size;
     VkShaderStageFlags push_stages;
 };
@@ -280,13 +277,6 @@ struct PDescriptorSet {
     VkDescriptorSet set;
 };
 
-struct PDescriptor {
-    PDescriptorSetLayout* layout;
-    PDescriptorPool* pool;
-    PDescriptorSet** sets;
-    uint32_t set_count;
-};
-
 struct PImage {
     VkImage image;
     VkImageView image_view;
@@ -301,21 +291,8 @@ struct PImage {
     VkImageAspectFlags aspect;
 };
 
-struct PImageList {
-    PImage** images;
-    uint32_t count;
-    uint32_t capacity;
-};
-
 struct PSampler {
     VkSampler sampler;
-};
-
-struct PSamplerList {
-    PSampler* samplers;
-    PSamplerDesc* descs;
-    uint32_t count;
-    uint32_t capacity;
 };
 
 struct PTrackedImage {

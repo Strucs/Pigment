@@ -21,6 +21,7 @@ int main(void)
     };
 
     Pigment* pigment                 = NULL;
+    PStdBindless* bindless           = NULL;
     PCamera* camera                  = NULL;
     PInstanceRing* ring              = NULL;
     PMaterials* materials            = NULL;
@@ -57,6 +58,13 @@ int main(void)
     if(pigment == NULL)
     {
         fprintf(stderr, "Failed to initialize Pigment!\n");
+        goto FREE;
+    }
+
+    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS);
+    if(bindless == NULL)
+    {
+        fprintf(stderr, "Failed to create bindless!\n");
         goto FREE;
     }
 
@@ -106,7 +114,7 @@ int main(void)
 
     PWindowRenderer* renderer   = pigment_get_window_renderer(pigment, 0);
     PFormat color_format        = pigment_get_color_format(renderer);
-    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, &color_format, 1, pigment_get_depth_format(renderer));
+    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer));
     PPipelineBuild* build       = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
     if(build == NULL)
     {
@@ -119,7 +127,7 @@ int main(void)
         goto FREE;
     }
 
-    PPipelineDesc gizmo_desc    = default_light_gizmo_pipeline_desc(pigment, &color_format, 1, pigment_get_depth_format(renderer));
+    PPipelineDesc gizmo_desc    = default_light_gizmo_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer));
     PPipelineBuild* gizmo_build = pigment_pipeline_build_from_desc(pigment, &gizmo_desc);
     if(gizmo_build == NULL || pigment_create_graphic_pipelines(pigment, &gizmo_build, 1, &gizmo_pipeline) != PIGMENT_SUCCESS)
     {
@@ -146,7 +154,7 @@ int main(void)
         goto FREE;
     }
 
-    if(upload_mesh_textures(pigment, asset, materials) != PIGMENT_SUCCESS)
+    if(upload_mesh_textures(pigment, bindless, asset, materials) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to upload mesh textures/materials!\n");
         goto FREE;
@@ -189,13 +197,13 @@ int main(void)
         pigment,
         materials,
         &(PMaterialDesc) {
-            .base_color_factor          = {1.0f, 1.0f, 1.0f, 1.0f},
-            .emissive_factor            = {0.0f, 0.0f, 0.0f, 0.0f},
-            .metallic_factor            = 1.0f,
-            .roughness_factor           = 1.0f,
-            .normal_scale               = 1.0f,
-            .occlusion_scale            = 1.0f,
-        }
+            .base_color_factor = {1.0f, 1.0f, 1.0f, 1.0f},
+            .emissive_factor   = {0.0f, 0.0f, 0.0f, 0.0f},
+            .metallic_factor   = 1.0f,
+            .roughness_factor  = 1.0f,
+            .normal_scale      = 1.0f,
+            .occlusion_scale   = 1.0f,
+    }
     );
 
     PMeshData cube_data = pigment_cube_mesh();
@@ -249,8 +257,8 @@ int main(void)
         pigment_begin_swapchain_pass(pigment, 0);
 
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, ring, materials, lights, camera, 0, pipeline, draw_calls, draw_count);
-        pigment_draw(pigment, ring, materials, lights, camera, 0, pipeline, draw_calls2, draw_count2);
+        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipeline, draw_calls, draw_count);
+        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipeline, draw_calls2, draw_count2);
 
         pigment_bind_pipeline(pigment, 0, gizmo_pipeline);
         pigment_std_draw_light_gizmos(pigment, 0, gizmo_pipeline, camera, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
@@ -289,6 +297,7 @@ FREE:
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
+    pigment_std_destroy_bindless(pigment, bindless);
     destroy_pigment(pigment);
 
     return error_code;

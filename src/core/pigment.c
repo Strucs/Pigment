@@ -25,8 +25,6 @@
 #include "commands.h"
 #include "synchronization.h"
 #include "buffers.h"
-#include "descriptor.h"
-#include "texture.h"
 #include "pipeline.h"
 
 #define PIGMENT_DEFAULT_WINDOW_CAPACITY 4
@@ -57,8 +55,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     }
 
     pigment->config.max_frames_in_flight   = (config && config->max_frames_in_flight) ? config->max_frames_in_flight : PIGMENT_DEFAULT_MAX_FRAMES_IN_FLIGHT;
-    pigment->config.max_images             = (config && config->max_images) ? config->max_images : PIGMENT_DEFAULT_MAX_IMAGES;
-    pigment->config.max_samplers           = (config && config->max_samplers) ? config->max_samplers : PIGMENT_DEFAULT_MAX_SAMPLERS;
     pigment->config.validation_enabled     = config && config->enable_validation;
     pigment->config.best_practices_enabled = config && config->enable_best_practices;
     pigment->config.depth_clear_value      = config ? config->depth_clear_value : 0.0f;
@@ -128,25 +124,6 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     {
         goto ERROR;
     }
-    pigment->images = create_images();
-    if(pigment->images == NULL)
-    {
-        goto ERROR;
-    }
-    pigment->samplers = create_samplers(pigment, pigment->config.max_samplers);
-    if(pigment->samplers == NULL)
-    {
-        goto ERROR;
-    }
-
-    add_default_image(pigment, pigment->images, pigment_default_pool(pigment));
-
-    pigment->descriptor = create_descriptor(pigment, pigment->config.max_samplers, pigment->config.max_images);
-    if(pigment->descriptor == NULL)
-    {
-        goto ERROR;
-    }
-    update_descriptor(pigment, pigment->descriptor, pigment->images, pigment->samplers, pigment->config.max_samplers, pigment->config.max_images, pigment->config.max_frames_in_flight);
 
     pigment->layouts = create_layout_list();
     if(pigment->layouts == NULL)
@@ -198,9 +175,6 @@ void destroy_pigment(Pigment* pigment)
     }
     destroy_pipeline_list(pigment, pigment->pipelines);
     destroy_layout_list(pigment, pigment->layouts);
-    destroy_descriptor(pigment, pigment->descriptor);
-    destroy_images(pigment, pigment->images);
-    destroy_samplers(pigment, pigment->samplers);
     destroy_tracked_image_list(pigment->tracked_images);
     destroy_command_pools(pigment, pigment->command_pools);
     if(pigment->owns_allocator)

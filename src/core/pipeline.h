@@ -19,17 +19,6 @@
 
 #include "defines.h"
 
-typedef enum PCompareOp {
-    P_COMPARE_OP_NEVER            = 0,
-    P_COMPARE_OP_LESS             = 1,
-    P_COMPARE_OP_EQUAL            = 2,
-    P_COMPARE_OP_LESS_OR_EQUAL    = 3,
-    P_COMPARE_OP_GREATER          = 4,
-    P_COMPARE_OP_NOT_EQUAL        = 5,
-    P_COMPARE_OP_GREATER_OR_EQUAL = 6,
-    P_COMPARE_OP_ALWAYS           = 7,
-} PCompareOp;
-
 typedef enum PStencilOp {
     P_STENCIL_OP_KEEP                = 0,
     P_STENCIL_OP_ZERO                = 1,
@@ -103,6 +92,8 @@ typedef struct PPipelineDesc {
 } PPipelineDesc;
 
 typedef struct PLayoutDesc {
+    PDescriptorSetLayout** set_layouts;
+    uint32_t set_layout_count;
     uint32_t push_size;
     PShaderStageFlags push_stages;
 } PLayoutDesc;
