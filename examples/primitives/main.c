@@ -1,6 +1,7 @@
 #include <pigment.h>
 #include <pigment_sdl.h>
 #include <std/draw.h>
+#include <std/lights.h>
 #include <std/material.h>
 #include <std/pipeline_loader.h>
 #include <std/primitives.h>
@@ -26,6 +27,7 @@ int main(void)
     PCamera* camera                     = NULL;
     PInstanceRing* ring                 = NULL;
     PMaterials* materials               = NULL;
+    PLights* lights                     = NULL;
     PPipeline* pipeline                 = NULL;
     PPipelineBuild* build               = NULL;
     PMeshBuffers* gpu_cube              = NULL;
@@ -72,20 +74,25 @@ int main(void)
         goto FREE;
     }
 
+    lights = pigment_std_create_lights(pigment, 16);
+    if(lights == NULL)
+    {
+        fprintf(stderr, "Failed to create lights!\n");
+        goto FREE;
+    }
+
+    PLightDesc sun = {
+        .type      = P_LIGHT_TYPE_DIRECTIONAL,
+        .direction = {-0.4f, -1.0f, -0.3f},
+        .color     = {1.0f, 0.95f, 0.85f},
+        .intensity = 1.0f,
+    };
+    pigment_std_light_create(pigment, lights, &sun);
+
     uint32_t mat_default = pigment_std_material_create(
         pigment,
         materials,
         &(PMaterialDesc) {
-            .albedo_image               = -1,
-            .albedo_sampler             = -1,
-            .metallic_roughness_image   = -1,
-            .metallic_roughness_sampler = -1,
-            .normal_image               = -1,
-            .normal_sampler             = -1,
-            .emissive_image             = -1,
-            .emissive_sampler           = -1,
-            .occlusion_image            = -1,
-            .occlusion_sampler          = -1,
             .base_color_factor          = {1.0f, 1.0f, 1.0f, 1.0f},
             .emissive_factor            = {0.0f, 0.0f, 0.0f, 0.0f},
             .metallic_factor            = 1.0f,
@@ -218,7 +225,6 @@ int main(void)
                 float bob    = sinf(t * 2.0f + (float) i * 0.3f) * 0.8f;
                 glm_mat4_identity(sphere_instances[idx].transform);
                 glm_translate(sphere_instances[idx].transform, (vec3) {((float) i - 4.5f) * 2.0f, bob, ((float) j - 4.5f) * 2.0f - 12.0f});
-                glm_rotate(sphere_instances[idx].transform, t, (vec3) {0.0f, 1.0f, 0.0f});
             }
         }
 
@@ -232,7 +238,7 @@ int main(void)
         pigment_begin_swapchain_pass(pigment, 0);
         pigment_bind_camera(pigment, 0, camera);
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, ring, materials, 0, pipeline, draw_calls, 5);
+        pigment_draw(pigment, ring, materials, lights, 0, pipeline, draw_calls, 5);
         pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
@@ -263,6 +269,7 @@ FREE:
     }
     pigment_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     destroy_pigment(pigment);
 

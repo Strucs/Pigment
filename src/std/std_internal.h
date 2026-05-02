@@ -24,6 +24,14 @@ typedef struct PStdPushConstants {
     VkDeviceAddress instance_buffer;
     VkDeviceAddress camera_buffer;
     VkDeviceAddress material_buffer;
+    VkDeviceAddress light_buffer;
 } PStdPushConstants;
+
+typedef struct PStdGizmoPushConstants {
+    VkDeviceAddress vertex_buffer;
+    VkDeviceAddress camera_buffer;
+    VkDeviceAddress light_buffer;
+    float scale;
+} PStdGizmoPushConstants;
 
 #endif

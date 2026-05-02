@@ -2,6 +2,7 @@
 #include <pigment_sdl.h>
 #include <std/draw.h>
 #include <std/gltf_loader.h>
+#include <std/lights.h>
 #include <std/material.h>
 #include <std/pipeline_loader.h>
 
@@ -28,6 +29,7 @@ int main(void)
     PCamera* camera                  = NULL;
     PInstanceRing* ring              = NULL;
     PMaterials* materials            = NULL;
+    PLights* lights                  = NULL;
     PPipeline* pipelines[2]          = {NULL, NULL};
     PMeshBuffers* gpu_mesh           = NULL;
     MeshAsset* asset                 = NULL;
@@ -74,6 +76,21 @@ int main(void)
         fprintf(stderr, "Failed to create materials!\n");
         goto FREE;
     }
+
+    lights = pigment_std_create_lights(pigment, 16);
+    if(lights == NULL)
+    {
+        fprintf(stderr, "Failed to create lights!\n");
+        goto FREE;
+    }
+
+    PLightDesc sun = {
+        .type      = P_LIGHT_TYPE_DIRECTIONAL,
+        .direction = {-0.4f, -1.0f, -0.3f},
+        .color     = {1.0f, 0.95f, 0.85f},
+        .intensity = 1.0f,
+    };
+    pigment_std_light_create(pigment, lights, &sun);
 
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
     camera               = pigment_create_camera(pigment);
@@ -230,11 +247,11 @@ int main(void)
         pigment_bind_camera(pigment, 0, camera);
 
         pigment_bind_pipeline(pigment, 0, pipelines[0]);
-        pigment_draw(pigment, ring, materials, 0, pipelines[0], draw_calls, draw_count);
+        pigment_draw(pigment, ring, materials, lights, 0, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, 0, pipelines[1]);
         pigment_cmd_set_depth(pigment, 0, true, false, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, ring, materials, 0, pipelines[1], draw_calls2, draw_count2);
+        pigment_draw(pigment, ring, materials, lights, 0, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_swapchain_pass(pigment, 0);
 
@@ -264,6 +281,7 @@ FREE:
     free_mesh_asset(asset2);
     pigment_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     destroy_pigment(pigment);
 

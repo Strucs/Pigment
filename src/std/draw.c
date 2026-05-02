@@ -16,6 +16,7 @@
 
 #include "draw.h"
 #include "material.h"
+#include "lights.h"
 #include "frame.h"
 #include "std_internal.h"
 #include "internal.h"
@@ -102,7 +103,7 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
     free(ring);
 }
 
-void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
+void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, PLights* lights, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
 {
     if(pigment == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0 || window_index >= pigment->window_count)
     {
@@ -128,6 +129,7 @@ void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, 
     }
 
     VkDeviceAddress material_buffer_address = (VkDeviceAddress) pigment_std_material_address(materials);
+    VkDeviceAddress light_buffer_address    = (VkDeviceAddress) pigment_std_light_address(lights);
 
     for(uint32_t i = 0; i < draw_count; i++)
     {
@@ -151,6 +153,7 @@ void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, 
             .instance_buffer = ring->address,
             .camera_buffer   = camera_slot_address,
             .material_buffer = material_buffer_address,
+            .light_buffer    = light_buffer_address,
         };
 
         pigment_cmd_push_constants(pigment, window_index, pipeline, 0, sizeof(push), &push);

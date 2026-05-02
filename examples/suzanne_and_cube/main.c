@@ -2,8 +2,10 @@
 #include <pigment_sdl.h>
 #include <std/draw.h>
 #include <std/gltf_loader.h>
+#include <std/lights.h>
 #include <std/material.h>
 #include <std/pipeline_loader.h>
+#include <std/primitives.h>
 
 #include "../common/fps_camera.h"
 
@@ -28,7 +30,11 @@ int main(void)
     PCamera* camera                  = NULL;
     PInstanceRing* ring              = NULL;
     PMaterials* materials            = NULL;
+    PLights* lights                  = NULL;
     PPipeline* pipeline              = NULL;
+    PPipeline* gizmo_pipeline        = NULL;
+    PMeshBuffers* gizmo_sphere       = NULL;
+    uint32_t gizmo_sphere_indices    = 0;
     PMeshBuffers* gpu_mesh           = NULL;
     MeshAsset* asset                 = NULL;
     PMeshBuffers* gpu_mesh2          = NULL;
@@ -74,6 +80,25 @@ int main(void)
         goto FREE;
     }
 
+    lights = pigment_std_create_lights(pigment, 16);
+    if(lights == NULL)
+    {
+        fprintf(stderr, "Failed to create lights!\n");
+        goto FREE;
+    }
+
+    PLightDesc light_point = {
+        .type      = P_LIGHT_TYPE_POINT,
+        .position  = {0.0f, 0.0f, 2.0f},
+        .color     = {1.0f, 0.2f, 0.2f},
+        .intensity = 20.0f,
+        .range     = 3.0f,
+    };
+    pigment_std_light_create(pigment, lights, &light_point);
+
+    vec3 ambient_color = {0.0f, 0.0f, 0.0f};
+    pigment_std_set_ambient(lights, ambient_color);
+
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
     camera               = pigment_create_camera(pigment);
     if(camera == NULL)
@@ -97,6 +122,24 @@ int main(void)
     if(pigment_create_graphic_pipelines(pigment, &build, 1, &pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
+        goto FREE;
+    }
+
+    PPipelineDesc gizmo_desc    = default_light_gizmo_pipeline_desc(pigment, &color_format, 1, pigment_get_depth_format(renderer));
+    PPipelineBuild* gizmo_build = pigment_pipeline_build_from_desc(pigment, &gizmo_desc);
+    if(gizmo_build == NULL || pigment_create_graphic_pipelines(pigment, &gizmo_build, 1, &gizmo_pipeline) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create gizmo pipeline!\n");
+        goto FREE;
+    }
+
+    PMeshData sphere_data = pigment_sphere_mesh(16, 16);
+    gizmo_sphere_indices  = sphere_data.index_count;
+    gizmo_sphere          = pigment_upload_mesh_data(pigment, &sphere_data);
+    pigment_free_mesh_data(&sphere_data);
+    if(gizmo_sphere == NULL)
+    {
+        fprintf(stderr, "Failed to upload gizmo sphere!\n");
         goto FREE;
     }
 
@@ -148,51 +191,46 @@ int main(void)
 
     // CUBE
 
-    asset2 = load_gltf_mesh(pigment, "examples/" EXAMPLE_NAME "/models/BoxVertexColors.glb");
-    if(asset2 == NULL)
-    {
-        fprintf(stderr, "Failed to load glTF!\n");
-        goto FREE;
-    }
-
-    if(upload_mesh_textures(pigment, asset2, materials) != PIGMENT_SUCCESS)
-    {
-        fprintf(stderr, "Failed to upload mesh textures/materials!\n");
-        goto FREE;
-    }
-
-    gpu_mesh2 = pigment_upload_mesh(
+    uint32_t mat_white = pigment_std_material_create(
         pigment,
-        asset2->vertices,
-        asset2->vertex_count * sizeof(PVertex),
-        asset2->indices,
-        asset2->index_count
+        materials,
+        &(PMaterialDesc) {
+            .base_color_factor          = {1.0f, 1.0f, 1.0f, 1.0f},
+            .emissive_factor            = {0.0f, 0.0f, 0.0f, 0.0f},
+            .metallic_factor            = 1.0f,
+            .roughness_factor           = 1.0f,
+            .normal_scale               = 1.0f,
+            .occlusion_scale            = 1.0f,
+        }
     );
 
-    uint32_t draw_count2 = asset2->surface_count;
-    draw_calls2          = calloc(draw_count2, sizeof(PDrawCall));
-    instance_storage2    = calloc(draw_count2, sizeof(PInstanceData));
+    PMeshData cube_data = pigment_cube_mesh();
+    uint32_t cube_idx   = cube_data.index_count;
+    gpu_mesh2           = pigment_upload_mesh_data(pigment, &cube_data);
+    pigment_free_mesh_data(&cube_data);
+    if(gpu_mesh2 == NULL)
+    {
+        fprintf(stderr, "Failed to upload primitive cube!\n");
+        goto FREE;
+    }
+
+    uint32_t draw_count2 = 1;
+    draw_calls2          = calloc(1, sizeof(PDrawCall));
+    instance_storage2    = calloc(1, sizeof(PInstanceData));
     if(draw_calls2 == NULL || instance_storage2 == NULL)
     {
         fprintf(stderr, "Failed to allocate draw_calls2 or instance_storage2!\n");
         goto FREE;
     }
 
-    for(uint32_t i = 0; i < draw_count2; i++)
-    {
-        PRawSurface* s = &asset2->surfaces[i];
-        glm_mat4_copy(asset2->node_transforms[s->node_index], instance_storage2[i].transform);
-        vec3 translation = {2.f, 0.0f, 0.0f};
-        glm_translate(instance_storage2[i].transform, translation);
-        instance_storage2[i].material_id = s->material_id;
-        draw_calls2[i].mesh              = gpu_mesh2;
-        draw_calls2[i].instances         = &instance_storage2[i];
-        draw_calls2[i].instance_count    = 1;
-        draw_calls2[i].first_index       = s->start_index;
-        draw_calls2[i].index_count       = s->index_count;
-    }
-    free_mesh_asset(asset2);
-    asset2 = NULL;
+    glm_mat4_identity(instance_storage2[0].transform);
+    glm_translate(instance_storage2[0].transform, (vec3) {2.0f, 0.0f, 0.0f});
+    instance_storage2[0].material_id = mat_white;
+    draw_calls2[0].mesh              = gpu_mesh2;
+    draw_calls2[0].instances         = &instance_storage2[0];
+    draw_calls2[0].instance_count    = 1;
+    draw_calls2[0].first_index       = 0;
+    draw_calls2[0].index_count       = cube_idx;
 
     pigment_show_window(pigment, 0);
 
@@ -218,8 +256,11 @@ int main(void)
         pigment_bind_camera(pigment, 0, camera);
 
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, ring, materials, 0, pipeline, draw_calls, draw_count);
-        pigment_draw(pigment, ring, materials, 0, pipeline, draw_calls2, draw_count2);
+        pigment_draw(pigment, ring, materials, lights, 0, pipeline, draw_calls, draw_count);
+        pigment_draw(pigment, ring, materials, lights, 0, pipeline, draw_calls2, draw_count2);
+
+        pigment_bind_pipeline(pigment, 0, gizmo_pipeline);
+        pigment_std_draw_light_gizmos(pigment, 0, gizmo_pipeline, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
 
         pigment_end_swapchain_pass(pigment, 0);
 
@@ -240,6 +281,10 @@ FREE:
         {
             pigment_destroy_mesh(pigment, gpu_mesh2);
         }
+        if(gizmo_sphere != NULL)
+        {
+            pigment_destroy_mesh(pigment, gizmo_sphere);
+        }
     }
     free(draw_calls);
     free(draw_calls2);
@@ -249,6 +294,7 @@ FREE:
     free_mesh_asset(asset2);
     pigment_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     destroy_pigment(pigment);
 
