@@ -63,6 +63,11 @@ VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool comm
 void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
+// descriptor.c
+PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images);
+int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
+void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor);
+
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels);
 int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);

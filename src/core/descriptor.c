@@ -15,90 +15,420 @@
  */
 
 #include "descriptor.h"
-
-#include "structs.h"
+#include "internal.h"
 #include "log_internal.h"
 
-static int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
-static int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count);
+#define PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY 4
 
-PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images)
+static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
+static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
+static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
+static int pool_append_set(PDescriptorPool* pool, PDescriptorSet* set);
+static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override);
+
+PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc)
 {
-    PDevice* device         = pigment->device;
-    PDescriptor* descriptor = malloc(sizeof(*descriptor));
-    if(descriptor == NULL)
+    if(pigment == NULL || desc == NULL || desc->binding_count == 0)
+    {
+        return NULL;
+    }
+
+    PDescriptorSetLayout* layout            = calloc(1, sizeof(*layout));
+    VkDescriptorSetLayoutBinding* bindings  = calloc(desc->binding_count, sizeof(*bindings));
+    VkDescriptorBindingFlags* binding_flags = calloc(desc->binding_count, sizeof(*binding_flags));
+
+    if(layout == NULL || bindings == NULL || binding_flags == NULL)
     {
         goto ERROR;
     }
 
-    VkDescriptorSetLayoutBinding sampler_set_layout_binding = {
-        .binding            = 1,
-        .descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLER,
-        .descriptorCount    = max_samplers,
-        .pImmutableSamplers = NULL,
-        .stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT,
-    };
+    bool needs_update_after_bind = false;
+    for(uint32_t i = 0; i < desc->binding_count; i++)
+    {
+        const PDescriptorBinding* b = &desc->bindings[i];
 
-    VkDescriptorSetLayoutBinding image_set_layout_binding = {
-        .binding            = 2,
-        .descriptorType     = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-        .descriptorCount    = max_images,
-        .pImmutableSamplers = NULL,
-        .stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
+        bindings[i] = (VkDescriptorSetLayoutBinding) {
+            .binding         = b->binding,
+            .descriptorType  = to_vk_descriptor_type(b->type),
+            .descriptorCount = b->count,
+            .stageFlags      = to_vk_shader_stages(b->stages),
+        };
 
-    VkDescriptorSetLayoutBinding descriptor_set_layout_binding[] = {
-        sampler_set_layout_binding,
-        image_set_layout_binding
-    };
+        binding_flags[i] = to_vk_binding_flags(b->flags);
+        if(b->flags & P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
+        {
+            needs_update_after_bind = true;
+        }
+    }
 
-    VkDescriptorBindingFlagsEXT descriptor_binding_flags[] = {
-        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
-        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
-    };
-
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT descriptor_set_layout_binding_flags = {
-        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
-        .bindingCount  = sizeof(descriptor_binding_flags) / sizeof(descriptor_binding_flags[0]),
-        .pBindingFlags = descriptor_binding_flags,
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info = {
+        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .bindingCount  = desc->binding_count,
+        .pBindingFlags = binding_flags,
     };
 
     VkDescriptorSetLayoutCreateInfo layout_info = {
         .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = sizeof(descriptor_set_layout_binding) / sizeof(descriptor_set_layout_binding[0]),
-        .pBindings    = descriptor_set_layout_binding,
-        .pNext        = &descriptor_set_layout_binding_flags
+        .bindingCount = desc->binding_count,
+        .pBindings    = bindings,
+        .flags        = needs_update_after_bind ? VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
+        .pNext        = &flags_info,
     };
 
-    VkResult result;
-    if((result = vkCreateDescriptorSetLayout(device->logical_device, &layout_info, NULL, &descriptor->descriptor_set_layout)) != VK_SUCCESS)
+    VkResult result = vkCreateDescriptorSetLayout(pigment->device->logical_device, &layout_info, NULL, &layout->layout);
+    if(result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create descriptor set layout! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create descriptor set layout (result: %d)", result);
         goto ERROR;
     }
 
-    return descriptor;
+    free(bindings);
+    free(binding_flags);
+    return layout;
 
 ERROR:
-    free(descriptor);
+    free(bindings);
+    free(binding_flags);
+    free(layout);
     return NULL;
+}
+
+void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayout* layout)
+{
+    if(pigment == NULL || layout == NULL)
+    {
+        return;
+    }
+    vkDestroyDescriptorSetLayout(pigment->device->logical_device, layout->layout, NULL);
+    free(layout);
+}
+
+PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc)
+{
+    if(pigment == NULL || desc == NULL || desc->pool_size_count == 0 || desc->max_sets == 0)
+    {
+        return NULL;
+    }
+
+    PDescriptorPool* pool       = calloc(1, sizeof(*pool));
+    VkDescriptorPoolSize* sizes = calloc(desc->pool_size_count, sizeof(*sizes));
+    if(pool == NULL || sizes == NULL)
+    {
+        goto ERROR;
+    }
+
+    for(uint32_t i = 0; i < desc->pool_size_count; i++)
+    {
+        sizes[i] = (VkDescriptorPoolSize) {
+            .type            = to_vk_descriptor_type(desc->pool_sizes[i].type),
+            .descriptorCount = desc->pool_sizes[i].count,
+        };
+    }
+
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = desc->pool_size_count,
+        .pPoolSizes    = sizes,
+        .maxSets       = desc->max_sets,
+        .flags         = desc->allow_update_after_bind ? VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT : 0,
+    };
+
+    VkResult result = vkCreateDescriptorPool(pigment->device->logical_device, &pool_info, NULL, &pool->pool);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to create descriptor pool (result: %d)", result);
+        goto ERROR;
+    }
+
+    free(sizes);
+    return pool;
+
+ERROR:
+    free(sizes);
+    free(pool);
+    return NULL;
+}
+
+void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
+{
+    if(pigment == NULL || pool == NULL)
+    {
+        return;
+    }
+    vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, NULL);
+    for(uint32_t i = 0; i < pool->set_count; i++)
+    {
+        free(pool->sets[i]);
+    }
+    free(pool->sets);
+    free(pool);
+}
+
+PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count)
+{
+    if(pigment == NULL || pool == NULL || layout == NULL)
+    {
+        return NULL;
+    }
+
+    PDescriptorSet* set = calloc(1, sizeof(*set));
+    if(set == NULL)
+    {
+        return NULL;
+    }
+
+    VkDescriptorSetVariableDescriptorCountAllocateInfo variable_desciptor_counts_alloc_info = {
+        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+        .descriptorSetCount = 1,
+        .pDescriptorCounts  = &variable_count,
+    };
+
+    VkDescriptorSetAllocateInfo alloc_info = {
+        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool     = pool->pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts        = &layout->layout,
+        .pNext              = (variable_count > 0) ? &variable_desciptor_counts_alloc_info : NULL,
+    };
+
+    VkResult result = vkAllocateDescriptorSets(pigment->device->logical_device, &alloc_info, &set->set);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to allocate descriptor set (result: %d)", result);
+        free(set);
+        return NULL;
+    }
+
+    if(pool_append_set(pool, set) != PIGMENT_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to append descriptor set to pool");
+        free(set);
+        return NULL;
+    }
+
+    return set;
+}
+
+void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count)
+{
+    if(pigment == NULL || writes == NULL || write_count == 0)
+    {
+        return;
+    }
+
+    VkWriteDescriptorSet* vk_writes       = calloc(write_count, sizeof(*vk_writes));
+    VkDescriptorImageInfo** image_infos   = calloc(write_count, sizeof(*image_infos));
+    VkDescriptorBufferInfo** buffer_infos = calloc(write_count, sizeof(*buffer_infos));
+    if(vk_writes == NULL || image_infos == NULL || buffer_infos == NULL)
+    {
+        goto FREE;
+    }
+
+    for(uint32_t i = 0; i < write_count; i++)
+    {
+        const PDescriptorWrite* write = &writes[i];
+
+        vk_writes[i] = (VkWriteDescriptorSet) {
+            .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet          = write->set->set,
+            .dstBinding      = write->binding,
+            .dstArrayElement = write->array_element,
+            .descriptorType  = to_vk_descriptor_type(write->type),
+            .descriptorCount = write->count,
+        };
+
+        switch(write->type)
+        {
+            case P_DESCRIPTOR_TYPE_SAMPLER:
+            case P_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case P_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+                {
+                    image_infos[i] = calloc(write->count, sizeof(VkDescriptorImageInfo));
+                    if(image_infos[i] == NULL)
+                    {
+                        goto FREE;
+                    }
+
+                    for(uint32_t j = 0; j < write->count; j++)
+                    {
+                        const PDescriptorImageInfo* info = &write->image_infos[j];
+                        image_infos[i][j].sampler        = (info->sampler != NULL) ? info->sampler->sampler : VK_NULL_HANDLE;
+                        image_infos[i][j].imageView      = (info->image != NULL) ? info->image->image_view : VK_NULL_HANDLE;
+                        image_infos[i][j].imageLayout    = resolve_image_layout(write->type, info->layout);
+                    }
+
+                    vk_writes[i].pImageInfo = image_infos[i];
+
+                    break;
+                }
+            case P_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case P_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                {
+                    buffer_infos[i] = calloc(write->count, sizeof(VkDescriptorBufferInfo));
+                    if(buffer_infos[i] == NULL)
+                    {
+                        goto FREE;
+                    }
+
+                    for(uint32_t j = 0; j < write->count; j++)
+                    {
+                        const PDescriptorBufferInfo* info = &write->buffer_infos[j];
+                        buffer_infos[i][j].buffer         = info->buffer->buffer;
+                        buffer_infos[i][j].offset         = info->offset;
+                        buffer_infos[i][j].range          = (info->range == 0) ? VK_WHOLE_SIZE : info->range;
+                    }
+
+                    vk_writes[i].pBufferInfo = buffer_infos[i];
+
+                    break;
+                }
+        }
+    }
+
+    vkUpdateDescriptorSets(pigment->device->logical_device, write_count, vk_writes, 0, NULL);
+
+FREE:
+    if(image_infos != NULL)
+    {
+        for(uint32_t i = 0; i < write_count; i++)
+        {
+            free(image_infos[i]);
+        }
+        free(image_infos);
+    }
+
+    if(buffer_infos != NULL)
+    {
+        for(uint32_t i = 0; i < write_count; i++)
+        {
+            free(buffer_infos[i]);
+        }
+        free(buffer_infos);
+    }
+    free(vk_writes);
+}
+
+PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images)
+{
+    PDescriptor* descriptor = calloc(1, sizeof(*descriptor));
+    if(descriptor == NULL)
+    {
+        return NULL;
+    }
+
+    PDescriptorBinding bindings[] = {
+        {
+         .binding = 1,
+         .type    = P_DESCRIPTOR_TYPE_SAMPLER,
+         .count   = max_samplers,
+         .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+         },
+        {
+         .binding = 2,
+         .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+         .count   = max_images,
+         .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT,
+         },
+    };
+    PDescriptorSetLayoutDesc layout_desc = {
+        .bindings      = bindings,
+        .binding_count = 2,
+    };
+    descriptor->layout = pigment_create_descriptor_set_layout(pigment, &layout_desc);
+    if(descriptor->layout == NULL)
+    {
+        free(descriptor);
+        return NULL;
+    }
+    return descriptor;
 }
 
 int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
 {
-    if(create_descriptor_pool(pigment, descriptor, max_samplers, max_images, descriptor_count))
+    PDescriptorPoolSize pool_sizes[] = {
+        {      .type  = P_DESCRIPTOR_TYPE_SAMPLER,
+         .count = descriptor_count * max_samplers},
+        {.type  = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+         .count = descriptor_count * max_images  },
+    };
+
+    PDescriptorPoolDesc pool_desc = {
+        .pool_sizes      = pool_sizes,
+        .pool_size_count = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
+        .max_sets        = descriptor_count,
+    };
+
+    descriptor->pool = pigment_create_descriptor_pool(pigment, &pool_desc);
+    if(descriptor->pool == NULL)
     {
-        goto ERROR;
-    }
-    if(create_descriptor_sets(pigment, descriptor, images, samplers, max_images, descriptor_count))
-    {
-        goto ERROR;
+        return PIGMENT_ERROR;
     }
 
+    descriptor->sets = calloc(descriptor_count, sizeof(*descriptor->sets));
+    if(descriptor->sets == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    descriptor->set_count = descriptor_count;
+
+    for(uint32_t i = 0; i < descriptor_count; i++)
+    {
+        descriptor->sets[i] = pigment_allocate_descriptor_set(pigment, descriptor->pool, descriptor->layout, max_images);
+        if(descriptor->sets[i] == NULL)
+        {
+            return PIGMENT_ERROR;
+        }
+    }
+
+    PDescriptorImageInfo* sampler_infos = calloc(samplers->count, sizeof(*sampler_infos));
+    PDescriptorImageInfo* image_infos   = calloc(images->count, sizeof(*image_infos));
+    if(sampler_infos == NULL || image_infos == NULL)
+    {
+        free(sampler_infos);
+        free(image_infos);
+        return PIGMENT_ERROR;
+    }
+
+    for(uint32_t i = 0; i < samplers->count; i++)
+    {
+        sampler_infos[i].sampler = &samplers->samplers[i];
+    }
+
+    for(uint32_t i = 0; i < images->count; i++)
+    {
+        image_infos[i].image = images->images[i];
+    }
+
+    for(uint32_t i = 0; i < descriptor_count; i++)
+    {
+        PDescriptorWrite writes[2] = {
+            {
+             .set           = descriptor->sets[i],
+             .binding       = 1,
+             .array_element = 0,
+             .type          = P_DESCRIPTOR_TYPE_SAMPLER,
+             .count         = samplers->count,
+             .image_infos   = sampler_infos,
+             },
+            {
+             .set           = descriptor->sets[i],
+             .binding       = 2,
+             .array_element = 0,
+             .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+             .count         = images->count,
+             .image_infos   = image_infos,
+             },
+        };
+
+        pigment_write_descriptors(pigment, writes, sizeof(writes) / sizeof(writes[0]));
+    }
+
+    free(sampler_infos);
+    free(image_infos);
     return PIGMENT_SUCCESS;
-
-ERROR:
-    return PIGMENT_ERROR;
 }
 
 void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor)
@@ -107,160 +437,100 @@ void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor)
     {
         return;
     }
-    PDevice* device = pigment->device;
-    vkDestroyDescriptorPool(device->logical_device, descriptor->descriptor_pool, NULL);
-    vkDestroyDescriptorSetLayout(device->logical_device, descriptor->descriptor_set_layout, NULL);
+    free(descriptor->sets);
+    pigment_destroy_descriptor_pool(pigment, descriptor->pool);
+    pigment_destroy_descriptor_set_layout(pigment, descriptor->layout);
+    free(descriptor);
 }
 
-VkDescriptorPoolSize create_descriptor_pool_size(VkDescriptorType type, uint32_t descriptor_count)
+static VkDescriptorType to_vk_descriptor_type(PDescriptorType type)
 {
-    VkDescriptorPoolSize pool_size = {
-        .type            = type,
-        .descriptorCount = descriptor_count
-    };
-    return pool_size;
-}
-
-int create_descriptor_pool(Pigment* pigment, PDescriptor* descriptor, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count)
-{
-    PDevice* device                   = pigment->device;
-    VkDescriptorPoolSize pool_sizes[] = {
-        create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_SAMPLER, descriptor_count * max_samplers),
-        create_descriptor_pool_size(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, descriptor_count * max_images),
-    };
-
-    VkDescriptorPoolCreateInfo pool_info = {
-        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
-        .pPoolSizes    = pool_sizes,
-        .maxSets       = descriptor_count
-    };
-
-    VkResult result;
-    if((result = vkCreateDescriptorPool(device->logical_device, &pool_info, NULL, &(descriptor->descriptor_pool))) != VK_SUCCESS)
+    switch(type)
     {
-        PLOG_ERROR(pigment, "Failed to create descriptor pool! (result: %d)", result);
-        return PIGMENT_ERROR;
+        case P_DESCRIPTOR_TYPE_SAMPLER:
+            return VK_DESCRIPTOR_TYPE_SAMPLER;
+        case P_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        case P_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        case P_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        case P_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     }
+    return VK_DESCRIPTOR_TYPE_MAX_ENUM;
+}
+
+static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages)
+{
+    VkShaderStageFlags out = 0;
+    if(stages & P_SHADER_STAGE_VERTEX_BIT)
+    {
+        out |= VK_SHADER_STAGE_VERTEX_BIT;
+    }
+    if(stages & P_SHADER_STAGE_FRAGMENT_BIT)
+    {
+        out |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
+    if(stages & P_SHADER_STAGE_COMPUTE_BIT)
+    {
+        out |= VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+    return out;
+}
+
+static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags)
+{
+    VkDescriptorBindingFlags out = 0;
+    if(flags & P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT)
+    {
+        out |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    }
+    if(flags & P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT)
+    {
+        out |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+    }
+    if(flags & P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
+    {
+        out |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+    }
+    return out;
+}
+
+static int pool_append_set(PDescriptorPool* pool, PDescriptorSet* set)
+{
+    if(pool->set_count >= pool->set_capacity)
+    {
+        uint32_t new_capacity    = (pool->set_capacity == 0) ? PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY : pool->set_capacity * 2;
+        PDescriptorSet** new_ptr = realloc(pool->sets, new_capacity * sizeof(*new_ptr));
+        if(new_ptr == NULL)
+        {
+            return PIGMENT_ERROR;
+        }
+
+        pool->sets         = new_ptr;
+        pool->set_capacity = new_capacity;
+    }
+    pool->sets[pool->set_count++] = set;
 
     return PIGMENT_SUCCESS;
 }
 
-int create_descriptor_sets(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_images, uint32_t descriptor_count)
+static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override)
 {
-    PDevice* device                      = pigment->device;
-    VkDescriptorSetLayout* layouts       = NULL;
-    uint32_t* variable_desciptor_counts  = NULL;
-    VkDescriptorImageInfo* image_infos   = NULL;
-    VkDescriptorImageInfo* sampler_infos = NULL;
-
-    layouts = malloc(descriptor_count * sizeof(*layouts));
-    if(layouts == NULL)
+    switch(override)
     {
-        goto ERROR;
+        case P_IMAGE_DESCRIPTOR_LAYOUT_SHADER_READ_ONLY:
+            return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        case P_IMAGE_DESCRIPTOR_LAYOUT_GENERAL:
+            return VK_IMAGE_LAYOUT_GENERAL;
+        case P_IMAGE_DESCRIPTOR_LAYOUT_DEPTH_READ_ONLY:
+            return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+        case P_IMAGE_DESCRIPTOR_LAYOUT_DEPTH_STENCIL_READ_ONLY:
+            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        case P_IMAGE_DESCRIPTOR_LAYOUT_AUTO:
+        default:
+            return (type == P_DESCRIPTOR_TYPE_STORAGE_IMAGE) ? VK_IMAGE_LAYOUT_GENERAL
+                                                             : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
-
-    variable_desciptor_counts = malloc(descriptor_count * sizeof(*variable_desciptor_counts));
-    if(variable_desciptor_counts == NULL)
-    {
-        goto ERROR;
-    }
-
-    for(size_t i = 0; i < descriptor_count; i++)
-    {
-        layouts[i]                   = descriptor->descriptor_set_layout;
-        variable_desciptor_counts[i] = max_images;
-    }
-
-    VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variable_desciptor_counts_alloc_info = {
-        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
-        .descriptorSetCount = descriptor_count,
-        .pDescriptorCounts  = variable_desciptor_counts
-    };
-
-    VkDescriptorSetAllocateInfo alloc_info = {
-        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool     = descriptor->descriptor_pool,
-        .descriptorSetCount = descriptor_count,
-        .pSetLayouts        = layouts,
-        .pNext              = &variable_desciptor_counts_alloc_info
-    };
-
-    descriptor->descriptor_sets = malloc(descriptor_count * sizeof(*descriptor->descriptor_sets));
-    if(descriptor->descriptor_sets == NULL)
-    {
-        goto ERROR;
-    }
-
-    image_infos = malloc(images->count * sizeof(*image_infos));
-    if(image_infos == NULL)
-    {
-        goto ERROR;
-    }
-
-    sampler_infos = malloc(samplers->count * sizeof(*sampler_infos));
-    if(sampler_infos == NULL)
-    {
-        goto ERROR;
-    }
-
-    VkResult result;
-    if((result = vkAllocateDescriptorSets(device->logical_device, &alloc_info, descriptor->descriptor_sets)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to allocate descriptor sets! (result: %d)", result);
-        goto ERROR;
-    }
-
-    for(size_t i = 0; i < descriptor_count; i++)
-    {
-        VkWriteDescriptorSet descriptor_set_writes[2] = {0};
-
-        uint32_t descriptor_set_write_number = sizeof(descriptor_set_writes) / sizeof(descriptor_set_writes[0]);
-
-        for(size_t s = 0; s < samplers->count; s++)
-        {
-            sampler_infos[s].sampler     = samplers->samplers[s].sampler;
-            sampler_infos[s].imageView   = NULL;
-            sampler_infos[s].imageLayout = 0;
-        }
-
-        descriptor_set_writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[0].dstSet          = descriptor->descriptor_sets[i];
-        descriptor_set_writes[0].dstBinding      = 1;
-        descriptor_set_writes[0].dstArrayElement = 0;
-        descriptor_set_writes[0].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER;
-        descriptor_set_writes[0].descriptorCount = samplers->count;
-        descriptor_set_writes[0].pImageInfo      = sampler_infos;
-
-        for(size_t j = 0; j < images->count; j++)
-        {
-            image_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            image_infos[j].imageView   = images->images[j]->image_view;
-        }
-
-        descriptor_set_writes[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set_writes[1].dstSet          = descriptor->descriptor_sets[i];
-        descriptor_set_writes[1].dstBinding      = 2;
-        descriptor_set_writes[1].dstArrayElement = 0;
-        descriptor_set_writes[1].descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        descriptor_set_writes[1].descriptorCount = images->count;
-        descriptor_set_writes[1].pImageInfo      = image_infos;
-
-        vkUpdateDescriptorSets(device->logical_device, descriptor_set_write_number, descriptor_set_writes, 0, NULL);
-    }
-
-    free(sampler_infos);
-    free(image_infos);
-    free(variable_desciptor_counts);
-    free(layouts);
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    free(sampler_infos);
-    free(image_infos);
-    free(descriptor->descriptor_sets);
-    free(variable_desciptor_counts);
-    free(layouts);
-
-    return PIGMENT_ERROR;
 }

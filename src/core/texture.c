@@ -148,7 +148,7 @@ uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uin
     {
         VkWriteDescriptorSet write = {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet          = pigment->descriptor->descriptor_sets[i],
+            .dstSet          = pigment->descriptor->sets[i]->set,
             .dstBinding      = 2,
             .dstArrayElement = slot,
             .descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -334,7 +334,7 @@ uint32_t pigment_add_sampler(Pigment* pigment, PSamplerDesc* desc)
     {
         VkWriteDescriptorSet write = {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet          = pigment->descriptor->descriptor_sets[i],
+            .dstSet          = pigment->descriptor->sets[i]->set,
             .dstBinding      = 1,
             .dstArrayElement = slot,
             .descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER,
@@ -646,7 +646,7 @@ static void batch_write_descriptors(Pigment* pigment, uint32_t start_slot, uint3
     {
         VkWriteDescriptorSet write = {
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet          = pigment->descriptor->descriptor_sets[f],
+            .dstSet          = pigment->descriptor->sets[f]->set,
             .dstBinding      = 2,
             .dstArrayElement = start_slot,
             .descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,

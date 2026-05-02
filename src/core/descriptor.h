@@ -14,14 +14,90 @@
  * limitations under the License.
  */
 
-#ifndef DESCRIPTOR_H
-#define DESCRIPTOR_H
+#ifndef PIGMENT_DESCRIPTOR_H
+#define PIGMENT_DESCRIPTOR_H
 
 #include "defines.h"
+#include "pipeline.h"
 
-PDescriptor* create_descriptor(Pigment* pigment, uint32_t max_samplers, uint32_t max_images);
-int update_descriptor(Pigment* pigment, PDescriptor* descriptor, PImageList* images, PSamplerList* samplers, uint32_t max_samplers, uint32_t max_images, uint32_t descriptor_count);
+typedef enum PDescriptorType {
+    P_DESCRIPTOR_TYPE_SAMPLER        = 0,
+    P_DESCRIPTOR_TYPE_SAMPLED_IMAGE  = 1,
+    P_DESCRIPTOR_TYPE_STORAGE_IMAGE  = 2,
+    P_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 3,
+    P_DESCRIPTOR_TYPE_STORAGE_BUFFER = 4,
+} PDescriptorType;
 
-void destroy_descriptor(Pigment* pigment, PDescriptor* descriptor);
+typedef enum PDescriptorBindingFlags {
+    P_DESCRIPTOR_BINDING_NONE_BIT              = 0,
+    P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT   = 1 << 0,
+    P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT    = 1 << 1,
+    P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT = 1 << 2,
+} PDescriptorBindingFlags;
+
+typedef enum PImageDescriptorLayout {
+    P_IMAGE_DESCRIPTOR_LAYOUT_AUTO                    = 0,
+    P_IMAGE_DESCRIPTOR_LAYOUT_SHADER_READ_ONLY        = 1,
+    P_IMAGE_DESCRIPTOR_LAYOUT_GENERAL                 = 2,
+    P_IMAGE_DESCRIPTOR_LAYOUT_DEPTH_READ_ONLY         = 3,
+    P_IMAGE_DESCRIPTOR_LAYOUT_DEPTH_STENCIL_READ_ONLY = 4,
+} PImageDescriptorLayout;
+
+typedef struct PDescriptorBinding {
+    uint32_t binding;
+    PDescriptorType type;
+    uint32_t count;
+    PShaderStageFlags stages;
+    PDescriptorBindingFlags flags;
+} PDescriptorBinding;
+
+typedef struct PDescriptorSetLayoutDesc {
+    const PDescriptorBinding* bindings;
+    uint32_t binding_count;
+} PDescriptorSetLayoutDesc;
+
+typedef struct PDescriptorPoolSize {
+    PDescriptorType type;
+    uint32_t count;
+} PDescriptorPoolSize;
+
+typedef struct PDescriptorPoolDesc {
+    const PDescriptorPoolSize* pool_sizes;
+    uint32_t pool_size_count;
+    uint32_t max_sets;
+    bool allow_update_after_bind;
+} PDescriptorPoolDesc;
+
+typedef struct PDescriptorImageInfo {
+    PSampler* sampler;
+    PImage* image;
+    PImageDescriptorLayout layout;    // 0 = auto (SHADER_READ_ONLY for sampled, GENERAL for storage)
+} PDescriptorImageInfo;
+
+typedef struct PDescriptorBufferInfo {
+    PBuffer* buffer;
+    uint64_t offset;
+    uint64_t range;    // 0 = whole size
+} PDescriptorBufferInfo;
+
+typedef struct PDescriptorWrite {
+    PDescriptorSet* set;
+    uint32_t binding;
+    uint32_t array_element;
+    uint32_t count;
+    PDescriptorType type;
+    const PDescriptorImageInfo* image_infos;
+    const PDescriptorBufferInfo* buffer_infos;
+} PDescriptorWrite;
+
+PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
+void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayout* layout);
+
+PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc);
+void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
+
+PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count);
+
+void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count);
 
 #endif

@@ -261,9 +261,6 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
     };
     vkCmdBeginRendering(cmd, &rendering_info);
 
-    free(barriers);
-    free(color);
-
     VkViewport viewport = {
         .x        = 0.0f,
         .y        = 0.0f,

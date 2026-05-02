@@ -149,6 +149,12 @@ typedef struct PCommandBuffers PCommandBuffers;
 
 typedef struct PSync PSync;
 
+typedef struct PDescriptorSetLayout PDescriptorSetLayout;
+
+typedef struct PDescriptorPool PDescriptorPool;
+
+typedef struct PDescriptorSet PDescriptorSet;
+
 typedef struct PDescriptor PDescriptor;
 
 typedef struct PImage PImage;
@@ -177,6 +183,8 @@ typedef enum PShaderStageFlags {
     P_SHADER_STAGE_VERTEX_BIT   = 1 << 0,
     P_SHADER_STAGE_FRAGMENT_BIT = 1 << 4,
     P_SHADER_STAGE_COMPUTE_BIT  = 1 << 5,
+    P_SHADER_STAGE_ALL_GRAPHICS = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
+    P_SHADER_STAGE_ALL          = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT | P_SHADER_STAGE_COMPUTE_BIT,
 } PShaderStageFlags;
 
 typedef enum PSampleCount {

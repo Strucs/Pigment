@@ -383,7 +383,7 @@ void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* p
     VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, 0, 1, &pigment->descriptor->descriptor_sets[current_frame], 0, NULL);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, 0, 1, &pigment->descriptor->sets[current_frame]->set, 0, NULL);
 
     // Default dynamic state values. User can override with pigment_cmd_set_*.
     vkCmdSetCullMode(cmd, VK_CULL_MODE_BACK_BIT);
@@ -644,7 +644,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     VkPipelineLayoutCreateInfo create_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount         = 1,
-        .pSetLayouts            = &pigment->descriptor->descriptor_set_layout,
+        .pSetLayouts            = &pigment->descriptor->layout->layout,
         .pushConstantRangeCount = (desc->push_size > 0) ? 1 : 0,
         .pPushConstantRanges    = (desc->push_size > 0) ? &range : NULL,
     };

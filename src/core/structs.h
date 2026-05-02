@@ -265,10 +265,26 @@ struct PSync {
     VkFence* in_flight_fences;
 };
 
+struct PDescriptorSetLayout {
+    VkDescriptorSetLayout layout;
+};
+
+struct PDescriptorPool {
+    VkDescriptorPool pool;
+    PDescriptorSet** sets;
+    uint32_t set_count;
+    uint32_t set_capacity;
+};
+
+struct PDescriptorSet {
+    VkDescriptorSet set;
+};
+
 struct PDescriptor {
-    VkDescriptorSetLayout descriptor_set_layout;
-    VkDescriptorPool descriptor_pool;
-    VkDescriptorSet* descriptor_sets;
+    PDescriptorSetLayout* layout;
+    PDescriptorPool* pool;
+    PDescriptorSet** sets;
+    uint32_t set_count;
 };
 
 struct PImage {
