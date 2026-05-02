@@ -190,13 +190,7 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffers* command_buffers,
 
 void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent)
 {
-    VkImageAspectFlags depth_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-    if(swapchain->depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT
-        || swapchain->depth_format == VK_FORMAT_D24_UNORM_S8_UINT
-        || swapchain->depth_format == VK_FORMAT_D16_UNORM_S8_UINT)
-    {
-        depth_aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
-    }
+    VkImageAspectFlags depth_aspect = swapchain->depth->aspect;
 
     VkImageMemoryBarrier2 barriers_to_render[2] = {
         {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -219,7 +213,7 @@ void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwap
          .newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-         .image               = swapchain->depth_image,
+         .image               = swapchain->depth->image,
          .subresourceRange    = {depth_aspect, 0, 1, 0, 1}}
     };
 
@@ -236,7 +230,7 @@ void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwap
     };
     VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
 
-    VkRenderingAttachmentInfoKHR color_attachment = {
+    VkRenderingAttachmentInfo color_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
         .imageView   = swapchain->image_views[image_index],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -245,9 +239,9 @@ void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwap
         .clearValue  = {.color = clear_color_value}
     };
 
-    VkRenderingAttachmentInfoKHR depth_attachment = {
+    VkRenderingAttachmentInfo depth_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView   = swapchain->depth_image_view,
+        .imageView   = swapchain->depth->image_view,
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,

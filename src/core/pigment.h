@@ -24,6 +24,8 @@
 #include "texture.h"
 #include "pipeline.h"
 #include "surface.h"
+#include "buffers.h"
+#include "image.h"
 
 Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);

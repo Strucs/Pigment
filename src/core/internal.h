@@ -63,11 +63,12 @@ VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool comm
 void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
-// texture.c
+// image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels);
 int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
 
-// depth.c
-void destroy_depth_resources(Pigment* pigment, PSwapchain* swapchain);
+PTrackedImageList* create_tracked_image_list(void);
+void destroy_tracked_image_list(PTrackedImageList* list);
+void pigment_image_resize_tracked(Pigment* pigment, uint32_t window_index);
 
 #endif

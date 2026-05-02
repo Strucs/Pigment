@@ -16,20 +16,20 @@
 
 #include "texture.h"
 #include "buffers.h"
+#include "image.h"
 #include "internal.h"
 #include "log_internal.h"
 
 #include <math.h>
 
-static int image_list_append(PImageList* image_list, PImage image);
-static int create_image(Pigment* pigment, PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool);
+static int image_list_append(PImageList* image_list, PImage* image);
 static int create_sampler(Pigment* pigment, PSampler* sampler, PSamplerDesc* desc);
 static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels);
 static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels);
-static int prepare_image_upload(Pigment* pigment, PImage* image, PBuffer** out_staging, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
-static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
-static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage* images, const PFormat* formats, uint32_t count);
+static int prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
+static uint32_t batch_append_images(PImageList* list, PImage** images, uint32_t count);
 static void batch_write_descriptors(Pigment* pigment, uint32_t start_slot, uint32_t count);
 
 static uint32_t pformat_pixel_size(PFormat format)
@@ -57,12 +57,12 @@ static inline int imax(int a, int b)
     return a > b ? a : b;
 }
 
-static int image_list_append(PImageList* image_list, PImage image)
+static int image_list_append(PImageList* image_list, PImage* image)
 {
     if(image_list->count >= image_list->capacity)
     {
         uint32_t new_capacity = image_list->capacity * 2;
-        PImage* new_ptr       = realloc(image_list->images, new_capacity * sizeof(*new_ptr));
+        PImage** new_ptr      = realloc(image_list->images, new_capacity * sizeof(*new_ptr));
 
         if(new_ptr == NULL)
         {
@@ -109,12 +109,9 @@ void destroy_images(Pigment* pigment, PImageList* image_list)
         return;
     }
 
-    PVkAllocator* alloc = pigment->allocator;
-
     for(size_t i = 0; i < image_list->count; i++)
     {
-        vkDestroyImageView(pigment->device->logical_device, image_list->images[i].image_view, NULL);
-        alloc->destroy_image(alloc->user_data, image_list->images[i].image, image_list->images[i].image_allocation);
+        pigment_destroy_image(pigment, image_list->images[i]);
     }
 
     free(image_list->images);
@@ -144,7 +141,7 @@ uint32_t pigment_upload_image(Pigment* pigment, const unsigned char* pixels, uin
 
     VkDescriptorImageInfo image_info = {
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .imageView   = images->images[slot].image_view,
+        .imageView   = images->images[slot]->image_view,
     };
 
     for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
@@ -178,7 +175,7 @@ uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixe
     }
 
     PBuffer** stagings  = calloc(count, sizeof(*stagings));
-    PImage* new_images  = calloc(count, sizeof(*new_images));
+    PImage** new_images = calloc(count, sizeof(*new_images));
     uint32_t start_slot = 0;
 
     if(stagings == NULL || new_images == NULL)
@@ -193,8 +190,15 @@ uint32_t pigment_upload_image_batch(Pigment* pigment, const unsigned char** pixe
 
     if(result == PIGMENT_SUCCESS)
     {
-        start_slot = batch_append_images(pigment, pigment->images, new_images, formats, count);
+        start_slot = batch_append_images(pigment->images, new_images, count);
         batch_write_descriptors(pigment, start_slot, count);
+    }
+    else
+    {
+        for(uint32_t i = 0; i < count; i++)
+        {
+            pigment_destroy_image(pigment, new_images[i]);
+        }
     }
 
 FREE:
@@ -212,24 +216,26 @@ FREE:
 
 int add_image_from_pixels(Pigment* pigment, PImageList* image_list, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool)
 {
-    PVkAllocator* alloc = pigment->allocator;
-    PImage image        = {0};
+    PBuffer* staging = NULL;
+    PImage* image    = NULL;
 
     if(pool == NULL)
     {
         goto ERROR;
     }
 
-    if(create_image(pigment, &image, pixels, width, height, format, pool->pool) != PIGMENT_SUCCESS)
+    if(prepare_image_upload(pigment, &image, &staging, pixels, width, height, format) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
-    image.image_view = create_image_view(pigment, image.image, (VkFormat) format, VK_IMAGE_ASPECT_COLOR_BIT, image.mip_levels);
-    if(image.image_view == NULL)
-    {
-        goto ERROR;
-    }
+    VkCommandBuffer cmd = start_single_usage_commands(pigment, pool->pool);
+    cmd_transition_image_layout(pigment, cmd, image->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image->mip_levels);
+    cmd_copy_buffer_to_image(cmd, staging->buffer, image->image, width, height);
+    cmd_generate_mipmaps(cmd, image->image, (int32_t) width, (int32_t) height, image->mip_levels);
+    end_single_usage_commands(pigment, &cmd, pool->pool);
+
+    pigment_destroy_buffer(pigment, staging);
 
     if(image_list_append(image_list, image) != PIGMENT_SUCCESS)
     {
@@ -239,8 +245,8 @@ int add_image_from_pixels(Pigment* pigment, PImageList* image_list, const unsign
     return PIGMENT_SUCCESS;
 
 ERROR:
-    vkDestroyImageView(pigment->device->logical_device, image.image_view, NULL);
-    alloc->destroy_image(alloc->user_data, image.image, image.image_allocation);
+    pigment_destroy_buffer(pigment, staging);
+    pigment_destroy_image(pigment, image);
     PLOG_ERROR(pigment, "Failed to add image from pixels.");
     return PIGMENT_ERROR;
 }
@@ -249,31 +255,6 @@ int add_default_image(Pigment* pigment, PImageList* image_list, PCommandPool* po
 {
     unsigned char white[] = {255, 255, 255, 255};
     return add_image_from_pixels(pigment, image_list, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM, pool);
-}
-
-static int create_image(Pigment* pigment, PImage* image, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, VkCommandPool command_pool)
-{
-    PBuffer* staging = NULL;
-
-    if(prepare_image_upload(pigment, image, &staging, pixels, width, height, format) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-
-    VkCommandBuffer cmd = start_single_usage_commands(pigment, command_pool);
-    cmd_transition_image_layout(pigment, cmd, image->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image->mip_levels);
-    cmd_copy_buffer_to_image(cmd, staging->buffer, image->image, width, height);
-    cmd_generate_mipmaps(cmd, image->image, (int32_t) width, (int32_t) height, image->mip_levels);
-    end_single_usage_commands(pigment, &cmd, command_pool);
-
-    pigment_destroy_buffer(pigment, staging);
-
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    pigment_destroy_buffer(pigment, staging);
-    PLOG_ERROR(pigment, "Failed to create image image!");
-    return PIGMENT_ERROR;
 }
 
 static int create_sampler(Pigment* pigment, PSampler* sampler, PSamplerDesc* desc)
@@ -419,35 +400,6 @@ void destroy_samplers(Pigment* pigment, PSamplerList* sampler_list)
         free(sampler_list->descs);
         free(sampler_list);
     }
-}
-
-int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties)
-{
-    VkImageCreateInfo image_create_info = {
-        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType     = VK_IMAGE_TYPE_2D,
-        .extent.width  = width,
-        .extent.height = height,
-        .extent.depth  = 1,
-        .mipLevels     = mip_levels,
-        .arrayLayers   = 1,
-        .format        = format,
-        .tiling        = tiling,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage         = usage,
-        .samples       = VK_SAMPLE_COUNT_1_BIT,
-        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE
-    };
-
-    PVkAllocator* alloc = pigment->allocator;
-    VkResult result     = alloc->create_image(alloc->user_data, &image_create_info, properties, image, allocation);
-    if(result != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to create image (result: %d)", result);
-        return PIGMENT_ERROR;
-    }
-
-    return PIGMENT_SUCCESS;
 }
 
 // Record into an existing command buffer
@@ -598,7 +550,7 @@ static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t ima
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-static int prepare_image_upload(Pigment* pigment, PImage* image, PBuffer** out_staging, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
+static int prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
     PDevice* device     = pigment->device;
     uint32_t pixel_size = pformat_pixel_size(format);
@@ -617,7 +569,7 @@ static int prepare_image_upload(Pigment* pigment, PImage* image, PBuffer** out_s
     }
 
     VkDeviceSize image_size = (uint64_t) (width * height * pixel_size);
-    image->mip_levels       = (uint32_t) (floor(log2(imax(width, height)))) + 1;
+    uint32_t mip_levels     = (uint32_t) (floor(log2(imax(width, height)))) + 1;
 
     PBufferDesc staging_desc = {
         .size   = (uint64_t) image_size,
@@ -633,7 +585,16 @@ static int prepare_image_upload(Pigment* pigment, PImage* image, PBuffer** out_s
 
     memcpy((*out_staging)->mapped, pixels, (size_t) image_size);
 
-    if(create_vk_image(pigment, &image->image, &image->image_allocation, width, height, image->mip_levels, (VkFormat) format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    PImageDesc image_desc = {
+        .width      = width,
+        .height     = height,
+        .format     = format,
+        .usage      = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
+        .mip_levels = mip_levels
+    };
+
+    *out_image = pigment_create_image(pigment, &image_desc);
+    if(*out_image == NULL)
     {
         return PIGMENT_ERROR;
     }
@@ -641,7 +602,7 @@ static int prepare_image_upload(Pigment* pigment, PImage* image, PBuffer** out_s
     return PIGMENT_SUCCESS;
 }
 
-static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
+static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
 {
     for(uint32_t i = 0; i < count; i++)
     {
@@ -649,19 +610,18 @@ static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage* o
         {
             return PIGMENT_ERROR;
         }
-        cmd_transition_image_layout(pigment, cmd, out_images[i].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, out_images[i].mip_levels);
-        cmd_copy_buffer_to_image(cmd, stagings[i]->buffer, out_images[i].image, widths[i], heights[i]);
-        cmd_generate_mipmaps(cmd, out_images[i].image, (int32_t) widths[i], (int32_t) heights[i], out_images[i].mip_levels);
+        cmd_transition_image_layout(pigment, cmd, out_images[i]->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, out_images[i]->mip_levels);
+        cmd_copy_buffer_to_image(cmd, stagings[i]->buffer, out_images[i]->image, widths[i], heights[i]);
+        cmd_generate_mipmaps(cmd, out_images[i]->image, (int32_t) widths[i], (int32_t) heights[i], out_images[i]->mip_levels);
     }
     return PIGMENT_SUCCESS;
 }
 
-static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage* images, const PFormat* formats, uint32_t count)
+static uint32_t batch_append_images(PImageList* list, PImage** images, uint32_t count)
 {
     uint32_t start_slot = list->count;
     for(uint32_t i = 0; i < count; i++)
     {
-        images[i].image_view = create_image_view(pigment, images[i].image, (VkFormat) formats[i], VK_IMAGE_ASPECT_COLOR_BIT, images[i].mip_levels);
         image_list_append(list, images[i]);
     }
     return start_slot;
@@ -678,7 +638,7 @@ static void batch_write_descriptors(Pigment* pigment, uint32_t start_slot, uint3
     for(uint32_t i = 0; i < count; i++)
     {
         infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        infos[i].imageView   = pigment->images->images[start_slot + i].image_view;
+        infos[i].imageView   = pigment->images->images[start_slot + i]->image_view;
         infos[i].sampler     = VK_NULL_HANDLE;
     }
 

@@ -109,6 +109,7 @@ struct Pigment {
     PSamplerList* samplers;
     PPipelineList* pipelines;
     PLayoutList* layouts;
+    PTrackedImageList* tracked_images;
 
     PRuntimeConfig config;
     PLogState* log;
@@ -191,10 +192,7 @@ struct PSwapchain {
     VkFormat image_format;
     VkExtent2D extent;
     uint32_t current_frame;
-    VkImage depth_image;
-    PVkAllocation* depth_image_allocation;
-    VkImageView depth_image_view;
-    VkFormat depth_format;
+    PImage* depth;
 };
 
 struct PPipeline {
@@ -278,10 +276,17 @@ struct PImage {
     VkImageView image_view;
     PVkAllocation* image_allocation;
     uint32_t mip_levels;
+
+    uint32_t width;
+    uint32_t height;
+    VkFormat vk_format;
+    VkImageUsageFlags vk_usage;
+    VkSampleCountFlagBits vk_samples;
+    VkImageAspectFlags aspect;
 };
 
 struct PImageList {
-    PImage* images;
+    PImage** images;
     uint32_t count;
     uint32_t capacity;
 };
@@ -293,6 +298,18 @@ struct PSampler {
 struct PSamplerList {
     PSampler* samplers;
     PSamplerDesc* descs;
+    uint32_t count;
+    uint32_t capacity;
+};
+
+struct PTrackedImage {
+    PImage* image;
+    uint32_t window_index;
+    float scale;
+};
+
+struct PTrackedImageList {
+    PTrackedImage* tracked_images;
     uint32_t count;
     uint32_t capacity;
 };

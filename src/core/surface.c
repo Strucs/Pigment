@@ -15,6 +15,7 @@
  */
 
 #include "surface.h"
+#include "image.h"
 #include "internal.h"
 #include "log_internal.h"
 
@@ -23,6 +24,9 @@ static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_fo
 static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
 static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
 static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, bool transparent);
+static PFormat find_supported_depth_format(Pigment* pigment);
+static int create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
+static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
 {
@@ -290,6 +294,15 @@ PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint3
     swapchain->extent        = extent;
     swapchain->current_frame = 0;
 
+    if(create_image_views(pigment, swapchain) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+    if(create_swapchain_depth(pigment, swapchain) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
     destroy_support_details(support_details);
     free(indices);
 
@@ -311,38 +324,55 @@ void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
     if(swapchain != NULL)
     {
         PDevice* device = pigment->device;
-        destroy_depth_resources(pigment, swapchain);
+        destroy_swapchain_depth(pigment, swapchain);
         destroy_image_views(swapchain, device);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
         free(swapchain);
     }
 }
 
-VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels)
+static PFormat find_supported_depth_format(Pigment* pigment)
 {
-    VkDevice device = pigment->device->logical_device;
-    VkImageView image_view;
+    VkPhysicalDevice physical_device = pigment->device->physical_device;
 
-    VkImageViewCreateInfo view_create_info = {
-        .sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image                           = image,
-        .viewType                        = VK_IMAGE_VIEW_TYPE_2D,
-        .format                          = format,
-        .subresourceRange.aspectMask     = aspect_flags,
-        .subresourceRange.baseMipLevel   = 0,
-        .subresourceRange.levelCount     = mip_levels,
-        .subresourceRange.baseArrayLayer = 0,
-        .subresourceRange.layerCount     = 1
-    };
-
-    VkResult result;
-    if((result = vkCreateImageView(device, &view_create_info, NULL, &image_view)) != VK_SUCCESS)
+    VkFormat candidates[] = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT};
+    for(uint32_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++)
     {
-        PLOG_ERROR(pigment, "Failed to create image view! (result: %d)", result);
-        return NULL;
+        VkFormatProperties props;
+        vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &props);
+        if(props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+        {
+            return (PFormat) candidates[i];
+        }
     }
 
-    return image_view;
+    PLOG_ERROR(pigment, "No supported depth format!");
+    return P_FORMAT_UNDEFINED;
+}
+
+static int create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
+{
+    PImageDesc desc = {
+        .width      = swapchain->extent.width,
+        .height     = swapchain->extent.height,
+        .format     = find_supported_depth_format(pigment),
+        .usage      = P_IMAGE_USAGE_RENDER_DEPTH,
+        .samples    = P_SAMPLE_COUNT_1,
+        .mip_levels = 1,
+    };
+
+    swapchain->depth = pigment_create_image(pigment, &desc);
+
+    return (swapchain->depth != NULL) ? PIGMENT_SUCCESS : PIGMENT_ERROR;
+}
+
+static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
+{
+    if(swapchain->depth != NULL)
+    {
+        pigment_destroy_image(pigment, swapchain->depth);
+        swapchain->depth = NULL;
+    }
 }
 
 int create_image_views(Pigment* pigment, PSwapchain* swapchain)
@@ -390,14 +420,6 @@ int recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t fra
     {
         goto ERROR;
     }
-    if(create_image_views(pigment, new_swapchain) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-    if(create_depth_resources(pigment, new_swapchain) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
 
     renderer->swapchain = new_swapchain;
     return PIGMENT_SUCCESS;
@@ -425,5 +447,5 @@ PFormat pigment_get_depth_format(PWindowRenderer* renderer)
         return P_FORMAT_UNDEFINED;
     }
 
-    return (PFormat) renderer->swapchain->depth_format;
+    return (PFormat) renderer->swapchain->depth->vk_format;
 }

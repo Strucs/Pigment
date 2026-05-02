@@ -21,10 +21,20 @@
 #include "pipeline.h"
 #include "buffers.h"
 
+struct PRenderPassDesc {
+    PImage** color_attachments;
+    uint32_t color_count;
+    PImage* depth_attachment;
+    float clear_color[4];
+};
+
 bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index);
 void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index, uint32_t max_frame);
 void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index);
 void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);
+
+void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PRenderPassDesc* desc);
+void pigment_end_render_pass(Pigment* pigment, uint32_t window_index, const PRenderPassDesc* desc);
 
 void pigment_cmd_push_constants(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data);
 void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);

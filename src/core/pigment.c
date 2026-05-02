@@ -160,6 +160,12 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
 
+    pigment->tracked_images = create_tracked_image_list();
+    if(pigment->tracked_images == NULL)
+    {
+        goto ERROR;
+    }
+
     if(init_window_renderer_resources(pigment, 0) != PIGMENT_SUCCESS)
     {
         goto ERROR;
@@ -195,6 +201,7 @@ void destroy_pigment(Pigment* pigment)
     destroy_descriptor(pigment, pigment->descriptor);
     destroy_images(pigment, pigment->images);
     destroy_samplers(pigment, pigment->samplers);
+    destroy_tracked_image_list(pigment->tracked_images);
     destroy_command_pools(pigment, pigment->command_pools);
     if(pigment->owns_allocator)
     {
@@ -405,9 +412,6 @@ static int init_window_renderer_resources(Pigment* pigment, uint32_t window_inde
     {
         return PIGMENT_ERROR;
     }
-
-    create_image_views(pigment, renderer->swapchain);
-    create_depth_resources(pigment, renderer->swapchain);
 
     renderer->command_buffers = create_command_buffers(pigment, pigment_default_pool(pigment), pigment->config.max_frames_in_flight);
     if(renderer->command_buffers == NULL)

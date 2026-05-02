@@ -75,16 +75,6 @@ typedef enum PBlendMode {
     P_BLEND_MODE_ADDITIVE            = 3,
 } PBlendMode;
 
-typedef enum PSampleCount {
-    P_SAMPLE_COUNT_1  = 1,
-    P_SAMPLE_COUNT_2  = 2,
-    P_SAMPLE_COUNT_4  = 4,
-    P_SAMPLE_COUNT_8  = 8,
-    P_SAMPLE_COUNT_16 = 16,
-    P_SAMPLE_COUNT_32 = 32,
-    P_SAMPLE_COUNT_64 = 64,
-} PSampleCount;
-
 typedef struct PPipelineDesc {
     PLayout* layout;
 

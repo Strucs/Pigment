@@ -159,11 +159,15 @@ typedef struct PSampler PSampler;
 
 typedef struct PSamplerList PSamplerList;
 
-typedef struct PDepthResources PDepthResources;
+typedef struct PTrackedImage PTrackedImage;
+
+typedef struct PTrackedImageList PTrackedImageList;
 
 typedef struct PBuffer PBuffer;
 
 typedef struct PSamplerDesc PSamplerDesc;
+
+typedef struct PRenderPassDesc PRenderPassDesc;
 
 typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
 
@@ -174,6 +178,16 @@ typedef enum PShaderStageFlags {
     P_SHADER_STAGE_FRAGMENT_BIT = 1 << 4,
     P_SHADER_STAGE_COMPUTE_BIT  = 1 << 5,
 } PShaderStageFlags;
+
+typedef enum PSampleCount {
+    P_SAMPLE_COUNT_1  = 1,
+    P_SAMPLE_COUNT_2  = 2,
+    P_SAMPLE_COUNT_4  = 4,
+    P_SAMPLE_COUNT_8  = 8,
+    P_SAMPLE_COUNT_16 = 16,
+    P_SAMPLE_COUNT_32 = 32,
+    P_SAMPLE_COUNT_64 = 64,
+} PSampleCount;
 
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,

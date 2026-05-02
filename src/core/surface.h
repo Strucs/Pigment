@@ -18,7 +18,6 @@
 #define SURFACE_H
 
 #include "defines.h"
-#include "depth.h"
 
 PSurface* create_surface(Pigment* pigment, PWindow* window);
 void destroy_surface(Pigment* pigment, PSurface* surface);
