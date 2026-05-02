@@ -79,7 +79,7 @@ static VkFormat find_supported_format(Pigment* pigment, VkFormat* candidates, ui
 
 static VkFormat find_depth_format(Pigment* pigment)
 {
-    VkFormat candidates[]    = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
+    VkFormat candidates[]    = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT};
     uint32_t candidates_size = sizeof(candidates) / sizeof(candidates[0]);
 
     return find_supported_format(

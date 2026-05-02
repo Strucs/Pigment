@@ -19,6 +19,7 @@
 
 #include "defines.h"
 #include "vertex.h"
+#include "mesh.h"
 
 typedef struct PMeshData {
     PVertex* vertices;

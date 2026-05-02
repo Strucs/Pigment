@@ -17,10 +17,12 @@
 #ifndef STD_LIGHTS_H
 #define STD_LIGHTS_H
 
+#include <cglm/types.h>
 #include "defines.h"
+#include "mesh.h"
+#include "camera.h"
 
 typedef struct PLights PLights;
-typedef struct PCamera PCamera;
 
 typedef enum PLightType {
     P_LIGHT_TYPE_INVALID     = 0,
@@ -54,6 +56,6 @@ void pigment_std_light_destroy(PLights* lights, uint32_t id);
 
 uint64_t pigment_std_light_address(PLights* lights);
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
 
 #endif

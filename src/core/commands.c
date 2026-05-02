@@ -188,8 +188,16 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffers* command_buffers,
     free(command_buffers);
 }
 
-void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent)
+void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent)
 {
+    VkImageAspectFlags depth_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+    if(swapchain->depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT
+        || swapchain->depth_format == VK_FORMAT_D24_UNORM_S8_UINT
+        || swapchain->depth_format == VK_FORMAT_D16_UNORM_S8_UINT)
+    {
+        depth_aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
+
     VkImageMemoryBarrier2 barriers_to_render[2] = {
         {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
          .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
@@ -212,7 +220,7 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .image               = swapchain->depth_image,
-         .subresourceRange    = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}}
+         .subresourceRange    = {depth_aspect, 0, 1, 0, 1}}
     };
 
     VkDependencyInfo dep_to_render = {
@@ -226,7 +234,7 @@ void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, 
     VkClearColorValue clear_color_value = {
         {0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f}
     };
-    VkClearDepthStencilValue clear_depth_stencil_value = {0.0f, 0};
+    VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
 
     VkRenderingAttachmentInfoKHR color_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,

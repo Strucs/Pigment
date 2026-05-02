@@ -1,10 +1,5 @@
-#include <pigment.h>
+#include <pigment_std.h>
 #include <pigment_sdl.h>
-#include <std/draw.h>
-#include <std/lights.h>
-#include <std/material.h>
-#include <std/pipeline_loader.h>
-#include <std/primitives.h>
 
 #include "../common/fps_camera.h"
 
@@ -108,7 +103,7 @@ int main(void)
     }
 
     vec3 camera_position = {0.0f, 1.5f, 6.0f};
-    camera               = pigment_create_camera(pigment);
+    camera               = pigment_std_create_camera(pigment);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
@@ -236,9 +231,8 @@ int main(void)
         }
 
         pigment_begin_swapchain_pass(pigment, 0);
-        pigment_bind_camera(pigment, 0, camera);
         pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, ring, materials, lights, 0, pipeline, draw_calls, 5);
+        pigment_draw(pigment, ring, materials, lights, camera, 0, pipeline, draw_calls, 5);
         pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);
@@ -252,22 +246,22 @@ FREE:
         pigment_wait_idle(pigment);
         if(gpu_cube != NULL)
         {
-            pigment_destroy_mesh(pigment, gpu_cube);
+            pigment_std_destroy_mesh(pigment, gpu_cube);
         }
         if(gpu_sphere != NULL)
         {
-            pigment_destroy_mesh(pigment, gpu_sphere);
+            pigment_std_destroy_mesh(pigment, gpu_sphere);
         }
         if(gpu_plane != NULL)
         {
-            pigment_destroy_mesh(pigment, gpu_plane);
+            pigment_std_destroy_mesh(pigment, gpu_plane);
         }
         if(gpu_quad != NULL)
         {
-            pigment_destroy_mesh(pigment, gpu_quad);
+            pigment_std_destroy_mesh(pigment, gpu_quad);
         }
     }
-    pigment_destroy_camera(pigment, camera);
+    pigment_std_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);

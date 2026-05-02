@@ -48,6 +48,8 @@ def build_static_lib(config: powermake.Config):
         rest_parts = parts[2:-1]
         if module == "core" or module == "external":
             new_dir = os.path.join(include_dir, *rest_parts)
+        elif module == "std" and parts[-1] == "pigment_std.h":
+            new_dir = include_dir
         else:
             new_dir = os.path.join(include_dir, module, *rest_parts)
         powermake.utils.makedirs(new_dir)

@@ -17,6 +17,7 @@
 #ifndef CAMERA_MATH_H
 #define CAMERA_MATH_H
 
+#include <cglm/types.h>
 #include "defines.h"
 
 void pigment_perspective(float fov_rad, float aspect, float near, mat4 out);

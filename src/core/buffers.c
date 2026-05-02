@@ -18,118 +18,143 @@
 #include "internal.h"
 #include "log_internal.h"
 
-static void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool);
+#include <stdlib.h>
 
-int create_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
+static void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize src_offset, VkDeviceSize dst_offset, VkDeviceSize size, VkCommandPool command_pool);
+static VkBufferUsageFlags translate_usage(PBufferUsage usage);
+
+PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
 {
+    if(pigment == NULL || desc == NULL || desc->size == 0)
+    {
+        return NULL;
+    }
+
+    PBuffer* buffer = calloc(1, sizeof(*buffer));
+    if(buffer == NULL)
+    {
+        return NULL;
+    }
+
+    VkBufferUsageFlags vk_usage    = translate_usage(desc->usage);
+    VkMemoryPropertyFlags vk_props = (desc->memory == P_MEMORY_HOST_VISIBLE) ? (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+                                                                             : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
     VkBufferCreateInfo buffer_create_info = {
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size        = size,
-        .usage       = usage,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+        .size        = (VkDeviceSize) desc->size,
+        .usage       = vk_usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
-    VkResult result = pigment->allocator->create_buffer(pigment->allocator->user_data, &buffer_create_info, properties, buffer, allocation);
+    PVkAllocator* alloc = pigment->allocator;
+    VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, vk_props, &buffer->buffer, &buffer->allocation);
     if(result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) size, result);
-        return PIGMENT_ERROR;
+        PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);
+        free(buffer);
+        return NULL;
     }
-    return PIGMENT_SUCCESS;
+
+    buffer->size = desc->size;
+
+    if(desc->memory == P_MEMORY_HOST_VISIBLE)
+    {
+        result = alloc->map(alloc->user_data, buffer->allocation, &buffer->mapped);
+        if(result != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Failed to map buffer (result: %d)", result);
+            alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
+            free(buffer);
+            return NULL;
+        }
+    }
+
+    if(desc->usage & P_BUFFER_USAGE_SHADER_ADDRESS)
+    {
+        VkBufferDeviceAddressInfo addr_info = {
+            .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .buffer = buffer->buffer,
+        };
+        buffer->address = vkGetBufferDeviceAddress(pigment->device->logical_device, &addr_info);
+    }
+
+    return buffer;
 }
 
-int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool)
+void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer)
 {
-    PVkAllocator* alloc               = pigment->allocator;
-    VkBuffer staging_buffer           = VK_NULL_HANDLE;
-    PVkAllocation* staging_allocation = NULL;
-
-    if(create_buffer(pigment, &staging_buffer, &staging_allocation, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
+    if(pigment == NULL || buffer == NULL)
     {
-        goto ERROR;
+        return;
     }
 
-    void* mapped = NULL;
-    VkResult result;
-    if((result = alloc->map(alloc->user_data, staging_allocation, &mapped)) != VK_SUCCESS)
+    PVkAllocator* alloc = pigment->allocator;
+    if(buffer->mapped != NULL)
     {
-        PLOG_ERROR(pigment, "Failed to map vertex staging buffer memory! (result: %d)", result);
-        goto ERROR;
+        alloc->unmap(alloc->user_data, buffer->allocation);
+    }
+    alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
+    free(buffer);
+}
+
+void* pigment_buffer_mapped(PBuffer* buffer)
+{
+    return (buffer != NULL) ? buffer->mapped : NULL;
+}
+
+uint64_t pigment_buffer_address(PBuffer* buffer)
+{
+    return (buffer != NULL) ? (uint64_t) buffer->address : 0;
+}
+
+VkBuffer pigment_vk_buffer(PBuffer* buffer)
+{
+    return (buffer != NULL) ? buffer->buffer : VK_NULL_HANDLE;
+}
+
+void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset)
+{
+    if(pigment == NULL || dst == NULL || data == NULL || size == 0)
+    {
+        return;
     }
 
-    memcpy(mapped, data, (size_t) size);
-    alloc->unmap(alloc->user_data, staging_allocation);
-
-    if(create_buffer(pigment, buffer, allocation, size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    if(offset + size > dst->size)
     {
-        goto ERROR;
+        PLOG_ERROR(pigment, "Buffer upload out of range (offset=%llu, size=%llu, buffer size=%llu)", (unsigned long long) offset, (unsigned long long) size, (unsigned long long) dst->size);
+        return;
     }
 
-    copy_buffer(pigment, staging_buffer, *buffer, size, command_pool);
+    if(dst->mapped != NULL)
+    {
+        memcpy((unsigned char*) dst->mapped + offset, data, (size_t) size);
+        return;
+    }
 
-    alloc->destroy_buffer(alloc->user_data, staging_buffer, staging_allocation);
+    PCommandPool* pool = pigment_default_pool(pigment);
+    if(pool == NULL)
+    {
+        return;
+    }
 
-    VkBufferDeviceAddressInfo addr_info = {
-        .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = *buffer
+    PBufferDesc staging_desc = {
+        .size   = size,
+        .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
+        .memory = P_MEMORY_HOST_VISIBLE,
     };
 
-    *address = vkGetBufferDeviceAddress(pigment->device->logical_device, &addr_info);
-
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    alloc->destroy_buffer(alloc->user_data, staging_buffer, staging_allocation);
-    return PIGMENT_ERROR;
-}
-
-int create_index_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool)
-{
-    PVkAllocator* alloc               = pigment->allocator;
-    VkDeviceSize buffer_size          = sizeof(*indices) * index_count;
-    VkBuffer staging_buffer           = VK_NULL_HANDLE;
-    PVkAllocation* staging_allocation = NULL;
-
-    if(create_buffer(pigment, &staging_buffer, &staging_allocation, buffer_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != PIGMENT_SUCCESS)
+    PBuffer* staging = pigment_create_buffer(pigment, &staging_desc);
+    if(staging == NULL)
     {
-        goto ERROR;
+        return;
     }
 
-    void* mapped = NULL;
-    VkResult result;
-    if((result = alloc->map(alloc->user_data, staging_allocation, &mapped)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to map index staging buffer memory! (result: %d)", result);
-        goto ERROR;
-    }
+    memcpy(staging->mapped, data, (size_t) size);
 
-    memcpy(mapped, indices, (size_t) buffer_size);
-    alloc->unmap(alloc->user_data, staging_allocation);
+    copy_buffer(pigment, staging->buffer, dst->buffer, 0, (VkDeviceSize) offset, (VkDeviceSize) size, pool->pool);
 
-    if(create_buffer(pigment, buffer, allocation, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-
-    copy_buffer(pigment, staging_buffer, *buffer, buffer_size, command_pool);
-
-    alloc->destroy_buffer(alloc->user_data, staging_buffer, staging_allocation);
-
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    alloc->destroy_buffer(alloc->user_data, staging_buffer, staging_allocation);
-    return PIGMENT_ERROR;
-}
-
-static void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize size, VkCommandPool command_pool)
-{
-    VkCommandBuffer command_buffer = start_single_usage_commands(pigment, command_pool);
-
-    VkBufferCopy copy_region = {.size = size};
-    vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
-
-    end_single_usage_commands(pigment, &command_buffer, command_pool);
+    pigment_destroy_buffer(pigment, staging);
 }
 
 VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool)
@@ -189,4 +214,48 @@ void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer
     vkQueueWaitIdle(device->graphics_queue);
 
     vkFreeCommandBuffers(device->logical_device, command_pool, 1, command_buffer);
+}
+
+static void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize src_offset, VkDeviceSize dst_offset, VkDeviceSize size, VkCommandPool command_pool)
+{
+    VkCommandBuffer command_buffer = start_single_usage_commands(pigment, command_pool);
+
+    VkBufferCopy copy_region = {.srcOffset = src_offset, .dstOffset = dst_offset, .size = size};
+    vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
+
+    end_single_usage_commands(pigment, &command_buffer, command_pool);
+}
+
+static VkBufferUsageFlags translate_usage(PBufferUsage usage)
+{
+    VkBufferUsageFlags out = 0;
+    if(usage & P_BUFFER_USAGE_VERTEX)
+    {
+        out |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    }
+    if(usage & P_BUFFER_USAGE_INDEX)
+    {
+        out |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    }
+    if(usage & P_BUFFER_USAGE_STORAGE)
+    {
+        out |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    }
+    if(usage & P_BUFFER_USAGE_UNIFORM)
+    {
+        out |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    }
+    if(usage & P_BUFFER_USAGE_SHADER_ADDRESS)
+    {
+        out |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    }
+    if(usage & P_BUFFER_USAGE_TRANSFER_SRC)
+    {
+        out |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    }
+    if(usage & P_BUFFER_USAGE_TRANSFER_DST)
+    {
+        out |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    }
+    return out;
 }

@@ -14,12 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef MESH_H
-#define MESH_H
+#ifndef STD_CAMERA_H
+#define STD_CAMERA_H
 
+#include <cglm/types.h>
 #include "defines.h"
 
-PMeshBuffers* pigment_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count);
-void pigment_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
+typedef struct PCamera PCamera;
+
+PCamera* pigment_std_create_camera(Pigment* pigment);
+void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
+
+void pigment_std_camera_set_view(PCamera* camera, mat4 view);
+void pigment_std_camera_set_projection(PCamera* camera, mat4 projection);
+
+uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
+void pigment_std_camera_upload(PCamera* camera, uint32_t current_frame);
 
 #endif

@@ -17,6 +17,7 @@
 #ifndef STD_VERTEX_H
 #define STD_VERTEX_H
 
+#include <cglm/types.h>
 #include "defines.h"
 
 typedef struct PVertex {

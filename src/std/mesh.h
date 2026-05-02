@@ -14,27 +14,24 @@
  * limitations under the License.
  */
 
-#ifndef STD_INTERNAL_H
-#define STD_INTERNAL_H
+#ifndef STD_MESH_H
+#define STD_MESH_H
 
 #include "defines.h"
+#include "buffers.h"
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
+#include <stdlib.h>
 
-typedef struct PStdPushConstants {
-    uint64_t vertex_buffer;
-    uint64_t instance_buffer;
-    uint64_t camera_buffer;
-    uint64_t material_buffer;
-    uint64_t light_buffer;
-} PStdPushConstants;
+typedef struct PMeshBuffers {
+    PBuffer* vertex_buffer;
+    PBuffer* index_buffer;
+    uint32_t index_count;
+    PIndexType index_type;
+} PMeshBuffers;
 
-typedef struct PStdGizmoPushConstants {
-    uint64_t vertex_buffer;
-    uint64_t camera_buffer;
-    uint64_t light_buffer;
-    float scale;
-} PStdGizmoPushConstants;
+PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count);
+void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
+
+uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
 
 #endif

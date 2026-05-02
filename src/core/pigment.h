@@ -19,10 +19,8 @@
 
 #include "defines.h"
 #include "log.h"
-#include "camera.h"
 #include "window.h"
 #include "frame.h"
-#include "mesh.h"
 #include "texture.h"
 #include "pipeline.h"
 #include "surface.h"
@@ -39,8 +37,6 @@ void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentM
 void pigment_wait_frame_ready(Pigment* pigment, uint32_t window_index);
 bool pigment_begin_frame(Pigment* pigment, uint32_t window_index);
 void pigment_end_frame(Pigment* pigment, uint32_t window_index);
-
-void pigment_bind_camera(Pigment* pigment, uint32_t window_index, PCamera* camera);
 
 void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index);
 void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index);

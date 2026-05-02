@@ -17,6 +17,7 @@
 #ifndef STD_MATERIAL_H
 #define STD_MATERIAL_H
 
+#include <cglm/types.h>
 #include "defines.h"
 
 typedef struct PMaterials PMaterials;

@@ -17,6 +17,8 @@
 #include "draw.h"
 #include "material.h"
 #include "lights.h"
+#include "buffers.h"
+#include "camera.h"
 #include "frame.h"
 #include "std_internal.h"
 #include "internal.h"
@@ -26,10 +28,7 @@
 #include <string.h>
 
 struct PInstanceRing {
-    VkBuffer buffer;
-    PVkAllocation* allocation;
-    VkDeviceAddress address;
-    void* mapped;
+    PBuffer* buffer;
 
     uint32_t per_frame_capacity;
     uint32_t cursor;
@@ -49,41 +48,25 @@ PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_i
         return NULL;
     }
 
-    uint32_t frame_count        = pigment->config.max_frames_in_flight;
-    VkDeviceSize size           = (VkDeviceSize) max_instances_per_frame * frame_count * sizeof(PInstanceData);
-    VkBufferUsageFlags usage    = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    VkMemoryPropertyFlags props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    if(create_buffer(pigment, &ring->buffer, &ring->allocation, size, usage, props) != PIGMENT_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to create instance ring buffer (size=%llu)", (unsigned long long) size);
-        goto ERROR;
-    }
-
-    PVkAllocator* alloc = pigment->allocator;
-    VkResult result     = alloc->map(alloc->user_data, ring->allocation, &ring->mapped);
-    if(result != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to map instance ring buffer (result: %d)", result);
-        goto ERROR;
-    }
-
-    VkBufferDeviceAddressInfo addr_info = {
-        .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = ring->buffer,
+    uint32_t frame_count = pigment->config.max_frames_in_flight;
+    PBufferDesc desc     = {
+        .size   = (uint64_t) max_instances_per_frame * frame_count * sizeof(PInstanceData),
+        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
+        .memory = P_MEMORY_HOST_VISIBLE,
     };
-    ring->address = vkGetBufferDeviceAddress(pigment->device->logical_device, &addr_info);
+    ring->buffer = pigment_create_buffer(pigment, &desc);
+    if(ring->buffer == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to create instance ring buffer (size=%llu)", (unsigned long long) desc.size);
+        free(ring);
+        return NULL;
+    }
 
     ring->per_frame_capacity = max_instances_per_frame;
     ring->cursor             = 0;
     ring->last_seen_frame    = UINT32_MAX;
 
     return ring;
-
-ERROR:
-    pigment->allocator->destroy_buffer(pigment->allocator->user_data, ring->buffer, ring->allocation);
-    free(ring);
-    return NULL;
 }
 
 void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
@@ -93,17 +76,11 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
         return;
     }
 
-    PVkAllocator* alloc = pigment->allocator;
-    if(ring->mapped != NULL)
-    {
-        alloc->unmap(alloc->user_data, ring->allocation);
-    }
-    alloc->destroy_buffer(alloc->user_data, ring->buffer, ring->allocation);
-
+    pigment_destroy_buffer(pigment, ring->buffer);
     free(ring);
 }
 
-void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, PLights* lights, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
+void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
 {
     if(pigment == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0 || window_index >= pigment->window_count)
     {
@@ -120,16 +97,17 @@ void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, 
     }
 
     uint32_t slot_base              = current_frame * ring->per_frame_capacity;
-    PInstanceData* instances_mapped = (PInstanceData*) ring->mapped;
+    PInstanceData* instances_mapped = (PInstanceData*) pigment_buffer_mapped(ring->buffer);
 
-    VkDeviceAddress camera_slot_address = 0;
-    if(renderer->current_camera != NULL)
+    uint64_t camera_slot_address = 0;
+    if(camera != NULL)
     {
-        camera_slot_address = renderer->current_camera->address + (VkDeviceSize) current_frame * 2 * sizeof(mat4);
+        pigment_std_camera_upload(camera, current_frame);
+        camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, current_frame);
     }
 
-    VkDeviceAddress material_buffer_address = (VkDeviceAddress) pigment_std_material_address(materials);
-    VkDeviceAddress light_buffer_address    = (VkDeviceAddress) pigment_std_light_address(lights);
+    uint64_t material_buffer_address = (uint64_t) pigment_std_material_address(materials);
+    uint64_t light_buffer_address    = (uint64_t) pigment_std_light_address(lights);
 
     for(uint32_t i = 0; i < draw_count; i++)
     {
@@ -149,14 +127,14 @@ void pigment_draw(Pigment* pigment, PInstanceRing* ring, PMaterials* materials, 
         ring->cursor += draw_call->instance_count;
 
         PStdPushConstants push = {
-            .vertex_buffer   = draw_call->mesh->vertex_buffer_address,
-            .instance_buffer = ring->address,
+            .vertex_buffer   = pigment_buffer_address(draw_call->mesh->vertex_buffer),
+            .instance_buffer = pigment_buffer_address(ring->buffer),
             .camera_buffer   = camera_slot_address,
             .material_buffer = material_buffer_address,
             .light_buffer    = light_buffer_address,
         };
 
         pigment_cmd_push_constants(pigment, window_index, pipeline, 0, sizeof(push), &push);
-        pigment_cmd_draw_indexed(pigment, window_index, draw_call->mesh, 0, draw_call->first_index, draw_call->index_count, 0, draw_call->instance_count, first_instance);
+        pigment_cmd_draw_indexed(pigment, window_index, draw_call->mesh->index_buffer, draw_call->mesh->index_type, 0, draw_call->first_index, draw_call->index_count, 0, draw_call->instance_count, first_instance);
     }
 }

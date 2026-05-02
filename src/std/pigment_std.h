@@ -1,5 +1,5 @@
 /**
- * Copyright 2025-2026 Angel-Leduc TA
+ * Copyright 2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef CAMERA_H
-#define CAMERA_H
+#ifndef PIGMENT_STD_H
+#define PIGMENT_STD_H
 
-#include "defines.h"
+#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <cglm/cglm.h>
 
-PCamera* pigment_create_camera(Pigment* pigment);
-void pigment_destroy_camera(Pigment* pigment, PCamera* camera);
+#include <pigment.h>
 
-void pigment_camera_set_view(PCamera* camera, mat4 view);
-void pigment_camera_set_projection(PCamera* camera, mat4 projection);
+#include <std/camera.h>
+#include <std/camera_math.h>
+#include <std/draw.h>
+#include <std/gltf_loader.h>
+#include <std/lights.h>
+#include <std/material.h>
+#include <std/mesh.h>
+#include <std/pipeline_loader.h>
+#include <std/primitives.h>
+#include <std/vertex.h>
 
 #endif

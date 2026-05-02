@@ -89,6 +89,7 @@ typedef struct PRuntimeConfig {
     uint32_t max_samplers;
     bool validation_enabled;
     bool best_practices_enabled;
+    float depth_clear_value;
     const void* extra;
 } PRuntimeConfig;
 
@@ -130,7 +131,6 @@ struct PWindowRenderer {
     uint32_t pending_height;
     PPresentMode requested_present_mode;
     bool transparent_framebuffer;
-    PCamera* current_camera;
 };
 
 struct PInstance {
@@ -220,20 +220,6 @@ struct PLayoutList {
     uint32_t capacity;
 };
 
-typedef struct PCameraData {
-    mat4 view;
-    mat4 projection;
-} PCameraData;
-
-struct PCamera {
-    PCameraData data;
-
-    VkBuffer buffer;
-    PVkAllocation* allocation;
-    VkDeviceAddress address;
-    void* mapped;
-};
-
 struct PPipelineBuild {
     VkShaderModule vertex_module;
     VkShaderModule fragment_module;
@@ -311,12 +297,12 @@ struct PSamplerList {
     uint32_t capacity;
 };
 
-struct PMeshBuffers {
-    VkBuffer vertex_buffer;
-    PVkAllocation* vertex_buffer_allocation;
-    VkDeviceAddress vertex_buffer_address;
-    VkBuffer index_buffer;
-    PVkAllocation* index_buffer_allocation;
+struct PBuffer {
+    VkBuffer buffer;
+    PVkAllocation* allocation;
+    VkDeviceAddress address;
+    void* mapped;
+    uint64_t size;
 };
 
 #endif

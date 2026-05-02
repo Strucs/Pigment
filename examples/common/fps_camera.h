@@ -2,6 +2,7 @@
 #define EXAMPLES_COMMON_FPS_CAMERA_H
 
 #include <pigment.h>
+#include <std/camera.h>
 #include <std/camera_math.h>
 #include <SDL3/SDL.h>
 
@@ -31,7 +32,7 @@ void fps_camera_apply_size(PCamera* camera, FPSCameraState* state, int w, int h)
 {
     mat4 projection;
     pigment_perspective(state->fov_rad, (float) w / (float) h, state->near, projection);
-    pigment_camera_set_projection(camera, projection);
+    pigment_std_camera_set_projection(camera, projection);
 }
 
 FPSCameraState fps_camera_state_init(PCamera* camera, SDL_Window* window, vec3 position)
@@ -154,7 +155,7 @@ void fps_camera_update(PCamera* camera, FPSCameraState* state)
     mat4 view;
     glm_lookat(state->position, target, state->up, view);
 
-    pigment_camera_set_view(camera, view);
+    pigment_std_camera_set_view(camera, view);
 }
 
 #endif

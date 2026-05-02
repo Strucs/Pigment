@@ -98,12 +98,12 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
     return true;
 }
 
-void begin_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index)
+void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index)
 {
     uint32_t current_frame = renderer->swapchain->current_frame;
     VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
 
-    cmd_begin_rendering(cmd, renderer->swapchain, image_index, renderer->transparent_framebuffer);
+    cmd_begin_rendering(pigment, cmd, renderer->swapchain, image_index, renderer->transparent_framebuffer);
 
     VkViewport viewport = {
         .x        = 0.0f,
@@ -303,13 +303,14 @@ void pigment_cmd_push_constants(Pigment* pigment, uint32_t window_index, PPipeli
     vkCmdPushConstants(cmd, layout->layout, layout->push_stages, offset, size, data);
 }
 
-void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PMeshBuffers* mesh, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
+void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
 {
     VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE || mesh == NULL)
+    if(cmd == VK_NULL_HANDLE || index_buffer == NULL)
     {
         return;
     }
-    vkCmdBindIndexBuffer(cmd, mesh->index_buffer, (VkDeviceSize) index_buffer_offset, VK_INDEX_TYPE_UINT32);
+    VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    vkCmdBindIndexBuffer(cmd, index_buffer->buffer, (VkDeviceSize) index_buffer_offset, vk_index_type);
     vkCmdDrawIndexed(cmd, index_count, instance_count, first_index, vertex_offset, first_instance);
 }

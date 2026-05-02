@@ -61,6 +61,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     pigment->config.max_samplers           = (config && config->max_samplers) ? config->max_samplers : PIGMENT_DEFAULT_MAX_SAMPLERS;
     pigment->config.validation_enabled     = config && config->enable_validation;
     pigment->config.best_practices_enabled = config && config->enable_best_practices;
+    pigment->config.depth_clear_value      = config ? config->depth_clear_value : 0.0f;
     pigment->config.extra                  = config ? config->extra : NULL;
 
     pigment->window_capacity = PIGMENT_DEFAULT_WINDOW_CAPACITY;
@@ -308,22 +309,6 @@ void pigment_end_frame(Pigment* pigment, uint32_t window_index)
     end_frame(pigment, pigment->renderers[window_index], pigment->renderers[window_index]->current_image_index, pigment->config.max_frames_in_flight);
 }
 
-void pigment_bind_camera(Pigment* pigment, uint32_t window_index, PCamera* camera)
-{
-    if(pigment == NULL || camera == NULL || window_index >= pigment->window_count)
-    {
-        return;
-    }
-
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    uint32_t current_frame    = renderer->swapchain->current_frame;
-
-    PCameraData* slot = (PCameraData*) camera->mapped + current_frame;
-    *slot             = camera->data;
-
-    renderer->current_camera = camera;
-}
-
 void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index)
 {
     if(pigment == NULL || window_index >= pigment->window_count)
@@ -332,7 +317,7 @@ void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index)
     }
 
     PWindowRenderer* renderer = pigment->renderers[window_index];
-    begin_swapchain_pass(renderer, renderer->current_image_index);
+    begin_swapchain_pass(pigment, renderer, renderer->current_image_index);
 }
 
 void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index)

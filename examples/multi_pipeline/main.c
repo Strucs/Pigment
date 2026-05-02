@@ -1,10 +1,5 @@
-#include <pigment.h>
+#include <pigment_std.h>
 #include <pigment_sdl.h>
-#include <std/draw.h>
-#include <std/gltf_loader.h>
-#include <std/lights.h>
-#include <std/material.h>
-#include <std/pipeline_loader.h>
 
 #include "../common/fps_camera.h"
 
@@ -93,7 +88,7 @@ int main(void)
     pigment_std_light_create(pigment, lights, &sun);
 
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
-    camera               = pigment_create_camera(pigment);
+    camera               = pigment_std_create_camera(pigment);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
@@ -144,7 +139,7 @@ int main(void)
         goto FREE;
     }
 
-    gpu_mesh = pigment_upload_mesh(
+    gpu_mesh = pigment_std_upload_mesh(
         pigment,
         asset->vertices,
         asset->vertex_count * sizeof(PVertex),
@@ -190,7 +185,7 @@ int main(void)
         goto FREE;
     }
 
-    gpu_mesh2 = pigment_upload_mesh(
+    gpu_mesh2 = pigment_std_upload_mesh(
         pigment,
         asset2->vertices,
         asset2->vertex_count * sizeof(PVertex),
@@ -244,14 +239,13 @@ int main(void)
         }
 
         pigment_begin_swapchain_pass(pigment, 0);
-        pigment_bind_camera(pigment, 0, camera);
 
         pigment_bind_pipeline(pigment, 0, pipelines[0]);
-        pigment_draw(pigment, ring, materials, lights, 0, pipelines[0], draw_calls, draw_count);
+        pigment_draw(pigment, ring, materials, lights, camera, 0, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, 0, pipelines[1]);
         pigment_cmd_set_depth(pigment, 0, true, false, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, ring, materials, lights, 0, pipelines[1], draw_calls2, draw_count2);
+        pigment_draw(pigment, ring, materials, lights, camera, 0, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_swapchain_pass(pigment, 0);
 
@@ -266,11 +260,11 @@ FREE:
         pigment_wait_idle(pigment);
         if(gpu_mesh != NULL)
         {
-            pigment_destroy_mesh(pigment, gpu_mesh);
+            pigment_std_destroy_mesh(pigment, gpu_mesh);
         }
         if(gpu_mesh2 != NULL)
         {
-            pigment_destroy_mesh(pigment, gpu_mesh2);
+            pigment_std_destroy_mesh(pigment, gpu_mesh2);
         }
     }
     free(draw_calls);
@@ -279,7 +273,7 @@ FREE:
     free(instance_storage2);
     free_mesh_asset(asset);
     free_mesh_asset(asset2);
-    pigment_destroy_camera(pigment, camera);
+    pigment_std_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);

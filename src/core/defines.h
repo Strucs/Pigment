@@ -161,9 +161,7 @@ typedef struct PSamplerList PSamplerList;
 
 typedef struct PDepthResources PDepthResources;
 
-typedef struct PCamera PCamera;
-
-typedef struct PMeshBuffers PMeshBuffers;
+typedef struct PBuffer PBuffer;
 
 typedef struct PSamplerDesc PSamplerDesc;
 
@@ -188,12 +186,6 @@ typedef enum PFormat {
     P_FORMAT_R16G16B16A16_SFLOAT = 97,
 } PFormat;
 
-typedef float vec3[3];
-typedef float vec4[4];
-typedef float mat4[4][4];
-
-#define MAT4_IDENTITY {{1.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f}}
-
 typedef struct PigmentConfig {
     uint32_t max_images;
     uint32_t max_samplers;
@@ -202,6 +194,7 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     bool enable_validation;
     bool enable_best_practices;
+    float depth_clear_value;    // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
     const void* extra;
 } PigmentConfig;
 

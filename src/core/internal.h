@@ -57,16 +57,11 @@ SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceK
 void destroy_support_details(SwapChainSupportDetails* details);
 
 // commands.c
-void cmd_begin_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
+void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
 void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
 VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
 void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 PCommandPool* pigment_default_pool(Pigment* pigment);
-
-// buffers.c
-int create_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
-int create_vertex_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, VkDeviceAddress* address, const void* data, VkDeviceSize size, VkCommandPool command_pool);
-int create_index_buffer(Pigment* pigment, VkBuffer* buffer, PVkAllocation** allocation, const uint32_t* indices, uint32_t index_count, VkCommandPool command_pool);
 
 // texture.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels);

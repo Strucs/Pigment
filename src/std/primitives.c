@@ -271,5 +271,5 @@ PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, const PMeshData* data)
     {
         return NULL;
     }
-    return pigment_upload_mesh(pigment, data->vertices, data->vertex_count * sizeof(PVertex), data->indices, data->index_count);
+    return pigment_std_upload_mesh(pigment, data->vertices, data->vertex_count * sizeof(PVertex), data->indices, data->index_count);
 }

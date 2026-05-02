@@ -94,6 +94,8 @@ typedef struct PVkDefaultAllocatorCreateInfo {
 PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info);
 void pigment_vk_destroy_allocator(PVkAllocator* allocator);
 
+VkBuffer pigment_vk_buffer(PBuffer* buffer);
+
 static inline void pigment_vk_append_pnext(void* head, void* tail)
 {
     if(head == NULL || tail == NULL)

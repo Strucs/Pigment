@@ -15,9 +15,7 @@
  */
 
 #include "camera_math.h"
-
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
+#include "std_internal.h"
 
 void pigment_perspective(float fov_rad, float aspect, float near, mat4 out)
 {

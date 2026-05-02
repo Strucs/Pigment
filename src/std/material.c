@@ -15,17 +15,14 @@
  */
 
 #include "material.h"
-#include "internal.h"
+#include "buffers.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 struct PMaterials {
-    VkBuffer buffer;
-    PVkAllocation* allocation;
-    VkDeviceAddress address;
-    void* mapped;
+    PBuffer* buffer;
 
     uint32_t capacity;
     uint32_t count;
@@ -53,29 +50,17 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
         goto ERROR;
     }
 
-    VkDeviceSize size           = (VkDeviceSize) max_materials * sizeof(PMaterialDesc);
-    VkBufferUsageFlags usage    = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    VkMemoryPropertyFlags props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    if(create_buffer(pigment, &materials->buffer, &materials->allocation, size, usage, props) != PIGMENT_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to create material buffer (size=%llu)", (unsigned long long) size);
-        goto ERROR;
-    }
-
-    PVkAllocator* alloc = pigment->allocator;
-    VkResult result     = alloc->map(alloc->user_data, materials->allocation, &materials->mapped);
-    if(result != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to map material buffer (result: %d)", result);
-        goto ERROR;
-    }
-
-    VkBufferDeviceAddressInfo addr_info = {
-        .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = materials->buffer,
+    PBufferDesc desc = {
+        .size   = (uint64_t) max_materials * sizeof(PMaterialDesc),
+        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
+        .memory = P_MEMORY_HOST_VISIBLE,
     };
-    materials->address = vkGetBufferDeviceAddress(pigment->device->logical_device, &addr_info);
+    materials->buffer = pigment_create_buffer(pigment, &desc);
+    if(materials->buffer == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to create material buffer (size=%llu)", (unsigned long long) desc.size);
+        goto ERROR;
+    }
 
     materials->capacity   = max_materials;
     materials->count      = 0;
@@ -84,7 +69,7 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
     return materials;
 
 ERROR:
-    pigment->allocator->destroy_buffer(pigment->allocator->user_data, materials->buffer, materials->allocation);
+    pigment_destroy_buffer(pigment, materials->buffer);
     free(materials->free_slots);
     free(materials);
     return NULL;
@@ -97,13 +82,7 @@ void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials)
         return;
     }
 
-    PVkAllocator* alloc = pigment->allocator;
-    if(materials->mapped != NULL)
-    {
-        alloc->unmap(alloc->user_data, materials->allocation);
-    }
-    alloc->destroy_buffer(alloc->user_data, materials->buffer, materials->allocation);
-
+    pigment_destroy_buffer(pigment, materials->buffer);
     free(materials->free_slots);
     free(materials);
 }
@@ -130,7 +109,7 @@ uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, co
         return UINT32_MAX;
     }
 
-    PMaterialDesc* slot = (PMaterialDesc*) materials->mapped + id;
+    PMaterialDesc* slot = (PMaterialDesc*) pigment_buffer_mapped(materials->buffer) + id;
     *slot               = *desc;
 
     return id;
@@ -143,7 +122,7 @@ void pigment_std_material_update(PMaterials* materials, uint32_t id, const PMate
         return;
     }
 
-    PMaterialDesc* slot = (PMaterialDesc*) materials->mapped + id;
+    PMaterialDesc* slot = (PMaterialDesc*) pigment_buffer_mapped(materials->buffer) + id;
     *slot               = *desc;
 }
 
@@ -163,5 +142,5 @@ uint64_t pigment_std_material_address(PMaterials* materials)
     {
         return 0;
     }
-    return (uint64_t) materials->address;
+    return (uint64_t) pigment_buffer_address(materials->buffer);
 }

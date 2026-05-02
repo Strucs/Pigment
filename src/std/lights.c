@@ -15,6 +15,8 @@
  */
 
 #include "lights.h"
+#include "buffers.h"
+#include "camera.h"
 #include "frame.h"
 #include "std_internal.h"
 #include "internal.h"
@@ -29,10 +31,7 @@ typedef struct PLightsHeader {
 } __attribute__((aligned(16))) PLightsHeader;
 
 struct PLights {
-    VkBuffer buffer;
-    PVkAllocation* allocation;
-    VkDeviceAddress address;
-    void* mapped;
+    PBuffer* buffer;
 
     uint32_t capacity;
     uint32_t count;
@@ -43,12 +42,12 @@ struct PLights {
 
 static PLightsHeader* lights_header(PLights* lights)
 {
-    return (PLightsHeader*) lights->mapped;
+    return (PLightsHeader*) pigment_buffer_mapped(lights->buffer);
 }
 
 static PLightDesc* lights_data(PLights* lights)
 {
-    return (PLightDesc*) ((unsigned char*) lights->mapped + sizeof(PLightsHeader));
+    return (PLightDesc*) ((unsigned char*) pigment_buffer_mapped(lights->buffer) + sizeof(PLightsHeader));
 }
 
 PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
@@ -70,29 +69,17 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
         goto ERROR;
     }
 
-    VkDeviceSize size           = (VkDeviceSize) sizeof(PLightsHeader) + (VkDeviceSize) max_lights * sizeof(PLightDesc);
-    VkBufferUsageFlags usage    = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-    VkMemoryPropertyFlags props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    if(create_buffer(pigment, &lights->buffer, &lights->allocation, size, usage, props) != PIGMENT_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to create light buffer (size=%llu)", (unsigned long long) size);
-        goto ERROR;
-    }
-
-    PVkAllocator* alloc = pigment->allocator;
-    VkResult result     = alloc->map(alloc->user_data, lights->allocation, &lights->mapped);
-    if(result != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to map light buffer (result: %d)", result);
-        goto ERROR;
-    }
-
-    VkBufferDeviceAddressInfo addr_info = {
-        .sType  = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .buffer = lights->buffer,
+    PBufferDesc desc = {
+        .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) max_lights * sizeof(PLightDesc),
+        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
+        .memory = P_MEMORY_HOST_VISIBLE,
     };
-    lights->address = vkGetBufferDeviceAddress(pigment->device->logical_device, &addr_info);
+    lights->buffer = pigment_create_buffer(pigment, &desc);
+    if(lights->buffer == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to create light buffer (size=%llu)", (unsigned long long) desc.size);
+        goto ERROR;
+    }
 
     lights->capacity   = max_lights;
     lights->count      = 0;
@@ -107,7 +94,7 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
     return lights;
 
 ERROR:
-    pigment->allocator->destroy_buffer(pigment->allocator->user_data, lights->buffer, lights->allocation);
+    pigment_destroy_buffer(pigment, lights->buffer);
     free(lights->free_slots);
     free(lights);
     return NULL;
@@ -133,13 +120,7 @@ void pigment_std_destroy_lights(Pigment* pigment, PLights* lights)
         return;
     }
 
-    PVkAllocator* alloc = pigment->allocator;
-    if(lights->mapped != NULL)
-    {
-        alloc->unmap(alloc->user_data, lights->allocation);
-    }
-    alloc->destroy_buffer(alloc->user_data, lights->buffer, lights->allocation);
-
+    pigment_destroy_buffer(pigment, lights->buffer);
     free(lights->free_slots);
     free(lights);
 }
@@ -199,10 +180,10 @@ uint64_t pigment_std_light_address(PLights* lights)
     {
         return 0;
     }
-    return (uint64_t) lights->address;
+    return (uint64_t) pigment_buffer_address(lights->buffer);
 }
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
+void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
 {
     if(pigment == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0 || window_index >= pigment->window_count)
     {
@@ -212,19 +193,20 @@ void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPip
     PWindowRenderer* renderer = pigment->renderers[window_index];
     uint32_t current_frame    = renderer->swapchain->current_frame;
 
-    VkDeviceAddress camera_slot_address = 0;
-    if(renderer->current_camera != NULL)
+    uint64_t camera_slot_address = 0;
+    if(camera != NULL)
     {
-        camera_slot_address = renderer->current_camera->address + (VkDeviceSize) current_frame * 2 * sizeof(mat4);
+        pigment_std_camera_upload(camera, current_frame);
+        camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, current_frame);
     }
 
     PStdGizmoPushConstants push = {
-        .vertex_buffer = sphere_mesh->vertex_buffer_address,
+        .vertex_buffer = pigment_buffer_address(sphere_mesh->vertex_buffer),
         .camera_buffer = camera_slot_address,
-        .light_buffer  = lights->address,
+        .light_buffer  = pigment_buffer_address(lights->buffer),
         .scale         = scale,
     };
 
     pigment_cmd_push_constants(pigment, window_index, pipeline, 0, sizeof(push), &push);
-    pigment_cmd_draw_indexed(pigment, window_index, sphere_mesh, 0, 0, sphere_index_count, 0, lights->count, 0);
+    pigment_cmd_draw_indexed(pigment, window_index, sphere_mesh->index_buffer, sphere_mesh->index_type, 0, 0, sphere_index_count, 0, lights->count, 0);
 }

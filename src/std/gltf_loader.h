@@ -17,6 +17,7 @@
 #ifndef GLTF_LOADER_H
 #define GLTF_LOADER_H
 
+#include <cglm/types.h>
 #include "defines.h"
 #include "material.h"
 #include "vertex.h"

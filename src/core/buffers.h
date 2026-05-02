@@ -19,4 +19,38 @@
 
 #include "defines.h"
 
+typedef enum PBufferUsage {
+    P_BUFFER_USAGE_VERTEX         = 1 << 0,
+    P_BUFFER_USAGE_INDEX          = 1 << 1,
+    P_BUFFER_USAGE_STORAGE        = 1 << 2,
+    P_BUFFER_USAGE_UNIFORM        = 1 << 3,
+    P_BUFFER_USAGE_SHADER_ADDRESS = 1 << 4,
+    P_BUFFER_USAGE_TRANSFER_SRC   = 1 << 5,
+    P_BUFFER_USAGE_TRANSFER_DST   = 1 << 6,
+} PBufferUsage;
+
+typedef enum PMemoryType {
+    P_MEMORY_GPU_ONLY     = 0,
+    P_MEMORY_HOST_VISIBLE = 1,
+} PMemoryType;
+
+typedef enum PIndexType {
+    P_INDEX_TYPE_UINT16 = 0,
+    P_INDEX_TYPE_UINT32 = 1,
+} PIndexType;
+
+typedef struct PBufferDesc {
+    uint64_t size;
+    PBufferUsage usage;
+    PMemoryType memory;
+} PBufferDesc;
+
+PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc);
+void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
+
+void* pigment_buffer_mapped(PBuffer* buffer);
+uint64_t pigment_buffer_address(PBuffer* buffer);
+
+void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset);
+
 #endif
