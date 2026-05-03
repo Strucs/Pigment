@@ -25,7 +25,10 @@ int main(void)
     PMaterials* materials               = NULL;
     PLights* lights                     = NULL;
     PPipeline* pipeline                 = NULL;
+    PPipeline* skybox_pipeline          = NULL;
     PPipelineBuild* build               = NULL;
+    PPipelineBuild* skybox_build        = NULL;
+    uint32_t cubemap_slot               = 0;
     PMeshBuffers* gpu_cube              = NULL;
     PMeshBuffers* gpu_sphere            = NULL;
     PMeshBuffers* gpu_plane             = NULL;
@@ -56,7 +59,7 @@ int main(void)
         goto FREE;
     }
 
-    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS);
+    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS, PIGMENT_DEFAULT_MAX_CUBEMAPS);
     if(bindless == NULL)
     {
         fprintf(stderr, "Failed to create bindless!\n");
@@ -125,6 +128,43 @@ int main(void)
     PFormat color_format      = pigment_get_color_format(renderer);
     PFormat depth_format      = pigment_get_depth_format(renderer);
 
+    {
+        const uint32_t face_size              = 64;
+        const uint32_t face_pixels            = face_size * face_size;
+        const unsigned char face_colors[6][4] = {
+            {255,   0,   0, 255},
+            {  0, 255, 255, 255},
+            {  0, 255,   0, 255},
+            {255,   0, 255, 255},
+            {  0,   0, 255, 255},
+            {255, 255,   0, 255},
+        };
+        unsigned char* face_data[6] = {0};
+        bool ok                     = true;
+        for(uint32_t f = 0; f < 6 && ok; f++)
+        {
+            face_data[f] = malloc(face_pixels * 4);
+            if(face_data[f] == NULL)
+            {
+                ok = false;
+                break;
+            }
+            for(uint32_t i = 0; i < face_pixels; i++)
+            {
+                memcpy(&face_data[f][i * 4], face_colors[f], 4);
+            }
+        }
+        if(ok)
+        {
+            cubemap_slot = pigment_std_upload_cubemap(pigment, bindless, (const unsigned char**) face_data, face_size, face_size, P_FORMAT_R8G8B8A8_UNORM);
+            printf("Uploaded test cubemap at slot %u\n", cubemap_slot);
+        }
+        for(uint32_t f = 0; f < 6; f++)
+        {
+            free(face_data[f]);
+        }
+    }
+
     PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
     build              = pigment_pipeline_build_from_desc(pigment, &desc);
     if(build == NULL)
@@ -135,6 +175,14 @@ int main(void)
     if(pigment_create_graphic_pipelines(pigment, &build, 1, &pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipeline!\n");
+        goto FREE;
+    }
+
+    PPipelineDesc skybox_desc = default_skybox_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    skybox_build              = pigment_pipeline_build_from_desc(pigment, &skybox_desc);
+    if(skybox_build == NULL || pigment_create_graphic_pipelines(pigment, &skybox_build, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create skybox pipeline!\n");
         goto FREE;
     }
 
@@ -241,6 +289,10 @@ int main(void)
         pigment_begin_swapchain_pass(pigment, 0);
         pigment_bind_pipeline(pigment, 0, pipeline);
         pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipeline, draw_calls, 5);
+
+        pigment_bind_pipeline(pigment, 0, skybox_pipeline);
+        pigment_std_draw_skybox(pigment, bindless, 0, skybox_pipeline, camera, cubemap_slot, 0);
+
         pigment_end_swapchain_pass(pigment, 0);
 
         pigment_end_frame(pigment, 0);

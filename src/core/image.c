@@ -49,6 +49,36 @@ static void free_resources(Pigment* pigment, PImage* image);
 static int tracked_reserve(PTrackedImageList* list, uint32_t additional);
 static int find_tracked(PTrackedImageList* list, PImage* image);
 
+static void translate_image_type(PImageType type, VkImageType* out_image_type, VkImageViewType* out_view_type, VkImageCreateFlags* out_flags)
+{
+    *out_flags = 0;
+    switch(type)
+    {
+        case P_IMAGE_TYPE_2D:
+            *out_image_type = VK_IMAGE_TYPE_2D;
+            *out_view_type  = VK_IMAGE_VIEW_TYPE_2D;
+            break;
+        case P_IMAGE_TYPE_2D_ARRAY:
+            *out_image_type = VK_IMAGE_TYPE_2D;
+            *out_view_type  = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+            break;
+        case P_IMAGE_TYPE_CUBE:
+            *out_image_type = VK_IMAGE_TYPE_2D;
+            *out_view_type  = VK_IMAGE_VIEW_TYPE_CUBE;
+            *out_flags      = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+            break;
+        case P_IMAGE_TYPE_CUBE_ARRAY:
+            *out_image_type = VK_IMAGE_TYPE_2D;
+            *out_view_type  = VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+            *out_flags      = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+            break;
+        case P_IMAGE_TYPE_3D:
+            *out_image_type = VK_IMAGE_TYPE_3D;
+            *out_view_type  = VK_IMAGE_VIEW_TYPE_3D;
+            break;
+    }
+}
+
 PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
 {
     if(pigment == NULL || desc == NULL || desc->width == 0 || desc->height == 0)
@@ -62,11 +92,14 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
-    image->vk_format  = (VkFormat) desc->format;
-    image->vk_usage   = translate_usage(desc->usage);
-    image->vk_samples = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
-    image->mip_levels = (desc->mip_levels == 0) ? 1 : desc->mip_levels;
-    image->aspect     = compute_aspect(image->vk_format, desc->usage);
+    image->vk_format    = (VkFormat) desc->format;
+    image->vk_usage     = translate_usage(desc->usage);
+    image->vk_samples   = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
+    image->mip_levels   = (desc->mip_levels == 0) ? 1 : desc->mip_levels;
+    image->aspect       = compute_aspect(image->vk_format, desc->usage);
+    image->depth        = (desc->depth == 0) ? 1 : desc->depth;
+    image->array_layers = (desc->array_layers == 0) ? 1 : desc->array_layers;
+    translate_image_type(desc->type, &image->vk_image_type, &image->vk_view_type, &image->vk_create_flags);
 
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
     {
@@ -211,22 +244,23 @@ void pigment_image_resize_tracked(Pigment* pigment, uint32_t window_index)
     }
 }
 
-int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties)
+int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties)
 {
     VkImageCreateInfo image_create_info = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType     = VK_IMAGE_TYPE_2D,
+        .imageType     = image_type,
         .extent.width  = width,
         .extent.height = height,
-        .extent.depth  = 1,
+        .extent.depth  = depth,
         .mipLevels     = mip_levels,
-        .arrayLayers   = 1,
+        .arrayLayers   = array_layers,
         .format        = format,
         .tiling        = tiling,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .usage         = usage,
         .samples       = VK_SAMPLE_COUNT_1_BIT,
         .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+        .flags         = flags,
     };
 
     PVkAllocator* alloc = pigment->allocator;
@@ -241,7 +275,7 @@ int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation
     return PIGMENT_SUCCESS;
 }
 
-VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels)
+VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, uint32_t array_layers)
 {
     VkDevice device = pigment->device->logical_device;
     VkImageView image_view;
@@ -249,13 +283,13 @@ VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, 
     VkImageViewCreateInfo view_create_info = {
         .sType                           = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image                           = image,
-        .viewType                        = VK_IMAGE_VIEW_TYPE_2D,
+        .viewType                        = view_type,
         .format                          = format,
         .subresourceRange.aspectMask     = aspect_flags,
         .subresourceRange.baseMipLevel   = 0,
         .subresourceRange.levelCount     = mip_levels,
         .subresourceRange.baseArrayLayer = 0,
-        .subresourceRange.layerCount     = 1,
+        .subresourceRange.layerCount     = array_layers,
     };
 
     VkResult result;
@@ -319,14 +353,14 @@ static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage)
 
 static int allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
 {
-    if(create_vk_image(pigment, &image->image, &image->image_allocation, width, height, image->mip_levels, image->vk_format, VK_IMAGE_TILING_OPTIMAL, image->vk_usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    if(create_vk_image(pigment, &image->image, &image->image_allocation, image->vk_image_type, width, height, image->depth, image->mip_levels, image->array_layers, image->vk_format, VK_IMAGE_TILING_OPTIMAL, image->vk_usage, image->vk_create_flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR;
     }
 
     VkImageAspectFlags view_aspect = (image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
-    image->image_view = create_image_view(pigment, image->image, image->vk_format, view_aspect, image->mip_levels);
+    image->image_view = create_image_view(pigment, image->image, image->vk_view_type, image->vk_format, view_aspect, image->mip_levels, image->array_layers);
     if(image->image_view == NULL)
     {
         pigment->allocator->destroy_image(pigment->allocator->user_data, image->image, image->image_allocation);

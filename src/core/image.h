@@ -28,13 +28,24 @@ typedef enum PImageUsage {
     P_IMAGE_USAGE_TRANSFER_DST = 1 << 5,
 } PImageUsage;
 
+typedef enum PImageType {
+    P_IMAGE_TYPE_2D         = 0,    // default; depth=1, array_layers=1
+    P_IMAGE_TYPE_2D_ARRAY   = 1,    // array_layers = N
+    P_IMAGE_TYPE_CUBE       = 2,    // array_layers must be 6
+    P_IMAGE_TYPE_CUBE_ARRAY = 3,    // array_layers must be 6 * N
+    P_IMAGE_TYPE_3D         = 4,    // depth = D
+} PImageType;
+
 typedef struct PImageDesc {
     uint32_t width;
     uint32_t height;
+    uint32_t depth;           // for P_IMAGE_TYPE_3D, otherwise 0/1
+    uint32_t array_layers;    // for arrays/cubes, otherwise 0/1
     PFormat format;
     PImageUsage usage;
     PSampleCount samples;    // 0 or P_SAMPLE_COUNT_1 for no MSAA
-    uint32_t mip_levels;     // 0 = single mip, 1 = full mip chain
+    uint32_t mip_levels;     // 0 = single mip, otherwise full chain
+    PImageType type;         // 0 = 2D
 } PImageDesc;
 
 uint32_t pigment_format_pixel_size(PFormat format);

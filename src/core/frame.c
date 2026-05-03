@@ -539,6 +539,16 @@ void pigment_cmd_push_constants(Pigment* pigment, uint32_t window_index, PPipeli
     vkCmdPushConstants(cmd, layout->layout, layout->push_stages, offset, size, data);
 }
 
+void pigment_cmd_draw(Pigment* pigment, uint32_t window_index, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+{
+    VkCommandBuffer cmd = current_cmd(pigment, window_index);
+    if(cmd == VK_NULL_HANDLE)
+    {
+        return;
+    }
+    vkCmdDraw(cmd, vertex_count, instance_count, first_vertex, first_instance);
+}
+
 void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
 {
     VkCommandBuffer cmd = current_cmd(pigment, window_index);

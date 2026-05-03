@@ -285,8 +285,13 @@ struct PImage {
 
     uint32_t width;
     uint32_t height;
+    uint32_t depth;
+    uint32_t array_layers;
     VkFormat vk_format;
     VkImageUsageFlags vk_usage;
+    VkImageType vk_image_type;
+    VkImageViewType vk_view_type;
+    VkImageCreateFlags vk_create_flags;
     VkSampleCountFlagBits vk_samples;
     VkImageAspectFlags aspect;
 };

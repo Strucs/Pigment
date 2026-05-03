@@ -385,7 +385,7 @@ int create_image_views(Pigment* pigment, PSwapchain* swapchain)
 
     for(size_t i = 0; i < swapchain->image_count; i++)
     {
-        swapchain->image_views[i] = create_image_view(pigment, swapchain->images[i], swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        swapchain->image_views[i] = create_image_view(pigment, swapchain->images[i], VK_IMAGE_VIEW_TYPE_2D, swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
     }
 
     return PIGMENT_SUCCESS;

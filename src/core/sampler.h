@@ -19,10 +19,10 @@
 
 #include "defines.h"
 
-typedef enum FilteringMode {
-    NEAREST = 0,
-    LINEAR  = 1,
-} FilteringMode;
+typedef enum PFilteringMode {
+    P_FILTERING_MODE_NEAREST = 0,
+    P_FILTERING_MODE_LINEAR  = 1,
+} PFilteringMode;
 
 typedef enum PAddressMode {
     P_ADDRESS_MODE_REPEAT          = 0,
@@ -32,13 +32,13 @@ typedef enum PAddressMode {
 } PAddressMode;
 
 struct PSamplerDesc {
-    FilteringMode mag_filter;     // NEAREST or LINEAR
-    FilteringMode min_filter;     // NEAREST or LINEAR
-    FilteringMode mipmap_mode;    // NEAREST or LINEAR
-    PAddressMode address_mode;    // 0 = REPEAT
+    PFilteringMode mag_filter;     // P_FILTERING_MODE_NEAREST or P_FILTERING_MODE_LINEAR
+    PFilteringMode min_filter;     // P_FILTERING_MODE_NEAREST or P_FILTERING_MODE_LINEAR
+    PFilteringMode mipmap_mode;    // P_FILTERING_MODE_NEAREST or P_FILTERING_MODE_LINEAR
+    PAddressMode address_mode;     // 0 = REPEAT
 
-    float max_anisotropy;         // 0 = off, otherwise clamped to device max
-    bool compare_enable;          // depth-compare sampler (shadow maps)
+    float max_anisotropy;    // 0 = off, otherwise clamped to device max
+    bool compare_enable;     // depth-compare sampler (shadow maps)
     PCompareOp compare_op;
 };
 

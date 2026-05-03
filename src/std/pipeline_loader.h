@@ -20,6 +20,7 @@
 #include "defines.h"
 #include "descriptor.h"
 #include "bindless.h"
+#include "camera.h"
 #include "pipeline.h"
 
 typedef enum PShaderType {
@@ -32,8 +33,10 @@ uint32_t* compile_glsl_to_spv(Pigment* pigment, const char* source_code, uint32_
 
 PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
 PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
+PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
 
 PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format);
 PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format);
+PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format);
 
 #endif

@@ -12,7 +12,7 @@ layout(push_constant) uniform constants {
     LightBuffer light_buffer;
 } push;
 
-layout(binding = 1) uniform sampler _sampler[];
+layout(binding = 0) uniform sampler _sampler[];
 layout(binding = 2) uniform texture2D _image[];
 
 layout(location = 0) in vec4 fragColor;

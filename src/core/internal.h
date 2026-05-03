@@ -64,8 +64,8 @@ void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // image.c
-VkImageView create_image_view(Pigment* pigment, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels);
-int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, uint32_t width, uint32_t height, uint32_t mip_levels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties);
+VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, uint32_t array_layers);
+int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties);
 
 PTrackedImageList* create_tracked_image_list(void);
 void destroy_tracked_image_list(PTrackedImageList* list);

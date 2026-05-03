@@ -71,17 +71,17 @@ static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s)
 {
     PSamplerDesc desc = {0};
 
-    desc.mag_filter = (s->mag_filter == cgltf_filter_type_nearest) ? NEAREST : LINEAR;
+    desc.mag_filter = (s->mag_filter == cgltf_filter_type_nearest) ? P_FILTERING_MODE_NEAREST : P_FILTERING_MODE_LINEAR;
 
     switch(s->min_filter)
     {
         case cgltf_filter_type_nearest:
         case cgltf_filter_type_nearest_mipmap_nearest:
         case cgltf_filter_type_nearest_mipmap_linear:
-            desc.min_filter = NEAREST;
+            desc.min_filter = P_FILTERING_MODE_NEAREST;
             break;
         default:
-            desc.min_filter = LINEAR;
+            desc.min_filter = P_FILTERING_MODE_LINEAR;
             break;
     }
 
@@ -89,10 +89,10 @@ static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s)
     {
         case cgltf_filter_type_nearest_mipmap_nearest:
         case cgltf_filter_type_linear_mipmap_nearest:
-            desc.mipmap_mode = NEAREST;
+            desc.mipmap_mode = P_FILTERING_MODE_NEAREST;
             break;
         default:
-            desc.mipmap_mode = LINEAR;
+            desc.mipmap_mode = P_FILTERING_MODE_LINEAR;
             break;
     }
 

@@ -59,7 +59,7 @@ int main(void)
         goto FREE;
     }
 
-    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS);
+    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS, PIGMENT_DEFAULT_MAX_CUBEMAPS);
     if(bindless == NULL)
     {
         fprintf(stderr, "Failed to create bindless!\n");

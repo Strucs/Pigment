@@ -44,14 +44,15 @@ struct PStdBindless {
     uint32_t set_count;
 
     PImageList images;
+    PImageList cubemaps;
     PSamplerList samplers;
 };
 
 static int image_list_append(PImageList* image_list, PImage* image);
-static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels);
-static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
-static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels);
-static int prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels, uint32_t layer_count);
+static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t layer_count, uint64_t layer_size_bytes);
+static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels, uint32_t layer_count);
+static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type);
 static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 static uint32_t batch_append_images(PImageList* list, PImage** images, uint32_t count);
 static int add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format, PCommandPool* pool);
@@ -61,6 +62,7 @@ static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list);
 static int image_list_init(PImageList* image_list);
 static void image_list_destroy(Pigment* pigment, PImageList* image_list);
 static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PSampler* sampler);
+static void write_cubemap_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, uint32_t start_slot, uint32_t count);
 
@@ -69,7 +71,7 @@ static inline int imax(int a, int b)
     return a > b ? a : b;
 }
 
-PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers)
+PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps)
 {
     if(pigment == NULL || max_images == 0 || max_samplers == 0)
     {
@@ -84,9 +86,16 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     PDescriptorBinding bindings[] = {
         {
-         .binding = 1,
+         .binding = 0,
          .type    = P_DESCRIPTOR_TYPE_SAMPLER,
          .count   = max_samplers,
+         .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+         },
+        {
+         .binding = 1,
+         .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+         .count   = (max_cubemaps == 0) ? 1 : max_cubemaps,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
          .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
          },
@@ -114,9 +123,9 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     PDescriptorPoolSize pool_sizes[] = {
         {      .type  = P_DESCRIPTOR_TYPE_SAMPLER,
-         .count = frames * max_samplers},
+         .count = frames * max_samplers               },
         {.type  = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-         .count = frames * max_images  },
+         .count = frames * (max_images + max_cubemaps)},
     };
 
     PDescriptorPoolDesc pool_desc = {
@@ -149,6 +158,11 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
     }
 
     if(image_list_init(&bindless->images) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    if(image_list_init(&bindless->cubemaps) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -189,7 +203,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
         PDescriptorWrite writes[2] = {
             {
              .set           = bindless->sets[f],
-             .binding       = 1,
+             .binding       = 0,
              .array_element = 0,
              .type          = P_DESCRIPTOR_TYPE_SAMPLER,
              .count         = bindless->samplers.count,
@@ -222,6 +236,7 @@ void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless)
         return;
     }
     image_list_destroy(pigment, &bindless->images);
+    image_list_destroy(pigment, &bindless->cubemaps);
     sampler_list_destroy(pigment, &bindless->samplers);
     free(bindless->sets);
     pigment_destroy_descriptor_pool(pigment, bindless->pool);
@@ -343,6 +358,49 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
     return slot;
 }
 
+uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format)
+{
+    if(pigment == NULL || bindless == NULL || faces == NULL || face_width == 0 || face_height == 0)
+    {
+        return 0;
+    }
+    PCommandPool* pool = pigment_default_pool(pigment);
+    if(pool == NULL)
+    {
+        return 0;
+    }
+
+    PBuffer* staging = NULL;
+    PImage* image    = NULL;
+    if(prepare_layered_image_upload(pigment, &image, &staging, faces, face_width, face_height, 6, format, P_IMAGE_TYPE_CUBE) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    uint64_t face_size = (uint64_t) face_width * face_height * pigment_format_pixel_size(format);
+
+    VkCommandBuffer cmd = start_single_usage_commands(pigment, pool->pool);
+    cmd_transition_image_layout(pigment, cmd, image->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image->mip_levels, 6);
+    cmd_copy_buffer_to_image(cmd, staging->buffer, image->image, face_width, face_height, 6, face_size);
+    cmd_generate_mipmaps(cmd, image->image, (int32_t) face_width, (int32_t) face_height, image->mip_levels, 6);
+    end_single_usage_commands(pigment, &cmd, pool->pool);
+    pigment_destroy_buffer(pigment, staging);
+
+    uint32_t slot = bindless->cubemaps.count;
+    if(image_list_append(&bindless->cubemaps, image) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    write_cubemap_descriptor(pigment, bindless, slot, image);
+    return slot;
+
+ERROR:
+    pigment_destroy_buffer(pigment, staging);
+    pigment_destroy_image(pigment, image);
+    return 0;
+}
+
 PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless)
 {
     return (bindless != NULL) ? bindless->layout : NULL;
@@ -422,9 +480,9 @@ static int sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint3
     }
 
     PSamplerDesc nearest_desc = {
-        .mag_filter     = NEAREST,
-        .min_filter     = NEAREST,
-        .mipmap_mode    = NEAREST,
+        .mag_filter     = P_FILTERING_MODE_NEAREST,
+        .min_filter     = P_FILTERING_MODE_NEAREST,
+        .mipmap_mode    = P_FILTERING_MODE_NEAREST,
         .address_mode   = P_ADDRESS_MODE_REPEAT,
         .max_anisotropy = 16.0f,
     };
@@ -433,9 +491,9 @@ static int sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint3
     sampler_list->count++;
 
     PSamplerDesc linear_desc = {
-        .mag_filter     = LINEAR,
-        .min_filter     = LINEAR,
-        .mipmap_mode    = LINEAR,
+        .mag_filter     = P_FILTERING_MODE_LINEAR,
+        .min_filter     = P_FILTERING_MODE_LINEAR,
+        .mipmap_mode    = P_FILTERING_MODE_LINEAR,
         .address_mode   = P_ADDRESS_MODE_REPEAT,
         .max_anisotropy = 16.0f,
     };
@@ -467,15 +525,15 @@ static int add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const
         goto ERROR;
     }
 
-    if(prepare_image_upload(pigment, &image, &staging, pixels, width, height, format) != PIGMENT_SUCCESS)
+    if(prepare_layered_image_upload(pigment, &image, &staging, &pixels, width, height, 1, format, P_IMAGE_TYPE_2D) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
 
     VkCommandBuffer cmd = start_single_usage_commands(pigment, pool->pool);
-    cmd_transition_image_layout(pigment, cmd, image->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image->mip_levels);
-    cmd_copy_buffer_to_image(cmd, staging->buffer, image->image, width, height);
-    cmd_generate_mipmaps(cmd, image->image, (int32_t) width, (int32_t) height, image->mip_levels);
+    cmd_transition_image_layout(pigment, cmd, image->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, image->mip_levels, 1);
+    cmd_copy_buffer_to_image(cmd, staging->buffer, image->image, width, height, 1, 0);
+    cmd_generate_mipmaps(cmd, image->image, (int32_t) width, (int32_t) height, image->mip_levels, 1);
     end_single_usage_commands(pigment, &cmd, pool->pool);
 
     pigment_destroy_buffer(pigment, staging);
@@ -500,7 +558,7 @@ static int add_default_image(Pigment* pigment, PStdBindless* bindless, PCommandP
     return add_image_from_pixels(pigment, bindless, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM, pool);
 }
 
-static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels)
+static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout, uint32_t mip_levels, uint32_t layer_count)
 {
     VkImageMemoryBarrier2 barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -509,7 +567,7 @@ static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, V
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image               = image,
-        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mip_levels, 0, 1}
+        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mip_levels, 0, layer_count}
     };
 
     if(old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
@@ -541,31 +599,36 @@ static void cmd_transition_image_layout(Pigment* pigment, VkCommandBuffer cmd, V
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+static void cmd_copy_buffer_to_image(VkCommandBuffer cmd, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height, uint32_t layer_count, uint64_t layer_size_bytes)
 {
-    VkBufferImageCopy region = {
-        .bufferOffset                    = 0,
-        .bufferRowLength                 = 0,
-        .bufferImageHeight               = 0,
-        .imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-        .imageSubresource.mipLevel       = 0,
-        .imageSubresource.baseArrayLayer = 0,
-        .imageSubresource.layerCount     = 1,
-        .imageOffset                     = {    0,      0, 0},
-        .imageExtent                     = {width, height, 1}
-    };
-
-    vkCmdCopyBufferToImage(cmd, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    VkBufferImageCopy* regions = malloc(layer_count * sizeof(*regions));
+    if(regions == NULL)
+    {
+        return;
+    }
+    for(uint32_t i = 0; i < layer_count; i++)
+    {
+        regions[i] = (VkBufferImageCopy) {
+            .bufferOffset                    = (VkDeviceSize) i * layer_size_bytes,
+            .imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+            .imageSubresource.mipLevel       = 0,
+            .imageSubresource.baseArrayLayer = i,
+            .imageSubresource.layerCount     = 1,
+            .imageExtent                     = {width, height, 1},
+        };
+    }
+    vkCmdCopyBufferToImage(cmd, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, layer_count, regions);
+    free(regions);
 }
 
-static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels)
+static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t image_width, int32_t image_height, uint32_t mip_levels, uint32_t layer_count)
 {
     VkImageMemoryBarrier2 barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
         .image               = image,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layer_count}
     };
 
     VkDependencyInfo dep = {
@@ -603,11 +666,11 @@ static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t ima
             .srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
             .srcSubresource.mipLevel       = i - 1,
             .srcSubresource.baseArrayLayer = 0,
-            .srcSubresource.layerCount     = 1,
+            .srcSubresource.layerCount     = layer_count,
             .dstSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
             .dstSubresource.mipLevel       = i,
             .dstSubresource.baseArrayLayer = 0,
-            .dstSubresource.layerCount     = 1
+            .dstSubresource.layerCount     = layer_count
         };
 
         memcpy(blit.srcOffsets, src_offsets, 2 * sizeof(*src_offsets));
@@ -646,7 +709,7 @@ static void cmd_generate_mipmaps(VkCommandBuffer cmd, VkImage image, int32_t ima
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-static int prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
+static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type)
 {
     uint32_t pixel_size = pigment_format_pixel_size(format);
     if(pixel_size == 0)
@@ -663,11 +726,12 @@ static int prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** 
         return PIGMENT_ERROR;
     }
 
-    uint64_t image_size = (uint64_t) width * height * pixel_size;
+    uint64_t layer_size = (uint64_t) width * height * pixel_size;
+    uint64_t total_size = layer_size * layer_count;
     uint32_t mip_levels = (uint32_t) (floor(log2(imax(width, height)))) + 1;
 
     PBufferDesc staging_desc = {
-        .size   = image_size,
+        .size   = total_size,
         .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
         .memory = P_MEMORY_HOST_VISIBLE,
     };
@@ -678,14 +742,20 @@ static int prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** 
         return PIGMENT_ERROR;
     }
 
-    memcpy(pigment_buffer_mapped(*out_staging), pixels, (size_t) image_size);
+    unsigned char* mapped = (unsigned char*) pigment_buffer_mapped(*out_staging);
+    for(uint32_t i = 0; i < layer_count; i++)
+    {
+        memcpy(mapped + i * layer_size, layer_data[i], (size_t) layer_size);
+    }
 
     PImageDesc image_desc = {
-        .width      = width,
-        .height     = height,
-        .format     = format,
-        .usage      = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
-        .mip_levels = mip_levels
+        .width        = width,
+        .height       = height,
+        .array_layers = layer_count,
+        .format       = format,
+        .usage        = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
+        .mip_levels   = mip_levels,
+        .type         = type,
     };
 
     *out_image = pigment_create_image(pigment, &image_desc);
@@ -705,9 +775,9 @@ static int batch_record_uploads(Pigment* pigment, VkCommandBuffer cmd, PImage** 
         {
             return PIGMENT_ERROR;
         }
-        cmd_transition_image_layout(pigment, cmd, out_images[i]->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, out_images[i]->mip_levels);
-        cmd_copy_buffer_to_image(cmd, stagings[i]->buffer, out_images[i]->image, widths[i], heights[i]);
-        cmd_generate_mipmaps(cmd, out_images[i]->image, (int32_t) widths[i], (int32_t) heights[i], out_images[i]->mip_levels);
+        cmd_transition_image_layout(pigment, cmd, out_images[i]->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, out_images[i]->mip_levels, 1);
+        cmd_copy_buffer_to_image(cmd, stagings[i]->buffer, out_images[i]->image, widths[i], heights[i], 1, 0);
+        cmd_generate_mipmaps(cmd, out_images[i]->image, (int32_t) widths[i], (int32_t) heights[i], out_images[i]->mip_levels, 1);
     }
     return PIGMENT_SUCCESS;
 }
@@ -729,7 +799,7 @@ static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, u
     {
         PDescriptorWrite write = {
             .set           = bindless->sets[i],
-            .binding       = 1,
+            .binding       = 0,
             .array_element = slot,
             .type          = P_DESCRIPTOR_TYPE_SAMPLER,
             .count         = 1,
@@ -750,6 +820,23 @@ static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uin
         PDescriptorWrite write = {
             .set           = bindless->sets[i],
             .binding       = 2,
+            .array_element = slot,
+            .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .count         = 1,
+            .image_infos   = &info,
+        };
+        pigment_write_descriptors(pigment, &write, 1);
+    }
+}
+
+static void write_cubemap_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image)
+{
+    PDescriptorImageInfo info = {.image = image};
+    for(uint32_t i = 0; i < bindless->set_count; i++)
+    {
+        PDescriptorWrite write = {
+            .set           = bindless->sets[i],
+            .binding       = 1,
             .array_element = slot,
             .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
             .count         = 1,

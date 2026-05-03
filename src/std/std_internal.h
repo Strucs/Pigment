@@ -37,4 +37,10 @@ typedef struct PStdGizmoPushConstants {
     float scale;
 } PStdGizmoPushConstants;
 
+typedef struct PStdSkyboxPushConstants {
+    uint64_t camera_buffer;
+    uint32_t cubemap_id;
+    uint32_t sampler_id;
+} PStdSkyboxPushConstants;
+
 #endif
