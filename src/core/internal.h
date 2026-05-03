@@ -57,15 +57,12 @@ SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceK
 void destroy_support_details(SwapChainSupportDetails* details);
 
 // commands.c
-void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent);
-void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index);
-VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
-void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, uint32_t array_layers);
 int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties);
+VkImageLayout image_layout_to_vk(PImageLayout layout);
 
 PTrackedImageList* create_tracked_image_list(void);
 void destroy_tracked_image_list(PTrackedImageList* list);

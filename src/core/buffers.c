@@ -15,12 +15,12 @@
  */
 
 #include "buffers.h"
+#include "commands.h"
 #include "internal.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
 
-static void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize src_offset, VkDeviceSize dst_offset, VkDeviceSize size, VkCommandPool command_pool);
 static VkBufferUsageFlags translate_usage(PBufferUsage usage);
 
 PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
@@ -132,12 +132,6 @@ void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uin
         return;
     }
 
-    PCommandPool* pool = pigment_default_pool(pigment);
-    if(pool == NULL)
-    {
-        return;
-    }
-
     PBufferDesc staging_desc = {
         .size   = size,
         .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
@@ -152,78 +146,15 @@ void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uin
 
     memcpy(staging->mapped, data, (size_t) size);
 
-    copy_buffer(pigment, staging->buffer, dst->buffer, 0, (VkDeviceSize) offset, (VkDeviceSize) size, pool->pool);
+    PCommandBuffer* cmd = pigment_begin_single_use_cmd(pigment, NULL);
+    if(cmd != NULL)
+    {
+        VkBufferCopy copy_region = {.srcOffset = 0, .dstOffset = (VkDeviceSize) offset, .size = (VkDeviceSize) size};
+        vkCmdCopyBuffer(cmd->buffer, staging->buffer, dst->buffer, 1, &copy_region);
+        pigment_end_single_use_cmd(pigment, cmd);
+    }
 
     pigment_destroy_buffer(pigment, staging);
-}
-
-VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool)
-{
-    PDevice* device                        = pigment->device;
-    VkCommandBufferAllocateInfo alloc_info = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool        = command_pool,
-        .commandBufferCount = 1
-    };
-
-    VkCommandBuffer command_buffer;
-
-    VkResult result;
-    if((result = vkAllocateCommandBuffers(device->logical_device, &alloc_info, &command_buffer)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to allocate single usage command buffer! (result: %d)", result);
-        return VK_NULL_HANDLE;
-    }
-
-    VkCommandBufferBeginInfo begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-    };
-
-    if((result = vkBeginCommandBuffer(command_buffer, &begin_info)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to begin single usage command buffer! (result: %d)", result);
-        vkFreeCommandBuffers(device->logical_device, command_pool, 1, &command_buffer);
-        return VK_NULL_HANDLE;
-    }
-
-    return command_buffer;
-}
-
-void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool)
-{
-    PDevice* device = pigment->device;
-    VkResult result;
-    if((result = vkEndCommandBuffer(*command_buffer)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to end single usage command buffer! (result: %d)", result);
-    }
-
-    VkSubmitInfo submit_info = {
-        .sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers    = command_buffer
-    };
-
-    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to submit single usage command buffer! (result: %d)", result);
-    }
-
-    vkQueueWaitIdle(device->graphics_queue);
-
-    vkFreeCommandBuffers(device->logical_device, command_pool, 1, command_buffer);
-}
-
-static void copy_buffer(Pigment* pigment, VkBuffer src_buffer, VkBuffer dst_buffer, VkDeviceSize src_offset, VkDeviceSize dst_offset, VkDeviceSize size, VkCommandPool command_pool)
-{
-    VkCommandBuffer command_buffer = start_single_usage_commands(pigment, command_pool);
-
-    VkBufferCopy copy_region = {.srcOffset = src_offset, .dstOffset = dst_offset, .size = size};
-    vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
-
-    end_single_usage_commands(pigment, &command_buffer, command_pool);
 }
 
 static VkBufferUsageFlags translate_usage(PBufferUsage usage)

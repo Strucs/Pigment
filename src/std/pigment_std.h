@@ -20,18 +20,18 @@
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 
-#include <pigment.h>
+#include "pigment.h"
 
-#include <std/bindless.h>
-#include <std/camera.h>
-#include <std/camera_math.h>
-#include <std/draw.h>
-#include <std/gltf_loader.h>
-#include <std/lights.h>
-#include <std/material.h>
-#include <std/mesh.h>
-#include <std/pipeline_loader.h>
-#include <std/primitives.h>
-#include <std/vertex.h>
+#include "std/bindless.h"
+#include "std/camera.h"
+#include "std/camera_math.h"
+#include "std/draw.h"
+#include "std/gltf_loader.h"
+#include "std/lights.h"
+#include "std/material.h"
+#include "std/mesh.h"
+#include "std/pipeline_loader.h"
+#include "std/primitives.h"
+#include "std/vertex.h"
 
 #endif

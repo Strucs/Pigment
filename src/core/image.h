@@ -48,7 +48,27 @@ typedef struct PImageDesc {
     PImageType type;         // 0 = 2D
 } PImageDesc;
 
+typedef struct PBufferImageCopy {
+    uint64_t buffer_offset;
+    uint32_t buffer_row_length;
+    uint32_t buffer_image_height;
+    uint32_t mip_level;
+    uint32_t base_array_layer;
+    uint32_t layer_count;
+    int32_t offset_x;
+    int32_t offset_y;
+    int32_t offset_z;
+    uint32_t extent_w;
+    uint32_t extent_h;
+    uint32_t extent_d;
+} PBufferImageCopy;
+
 uint32_t pigment_format_pixel_size(PFormat format);
+bool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format);
+
+void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PImage* dst, PImageLayout dst_layout, const PBufferImageCopy* regions, uint32_t region_count);
+
+void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage* image, uint32_t base_layer, uint32_t layer_count, PImageLayout final_layout);
 
 PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc);
 void pigment_destroy_image(Pigment* pigment, PImage* image);

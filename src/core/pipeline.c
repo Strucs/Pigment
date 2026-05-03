@@ -373,33 +373,28 @@ void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
     pipeline_list_destroy(pigment, pigment->pipelines, pipeline);
 }
 
-void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* pipeline)
+void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline)
 {
-    if(pigment == NULL || pipeline == NULL || window_index >= pigment->window_count)
+    if(pigment == NULL || cmd == NULL || pipeline == NULL)
     {
         return;
     }
 
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    uint32_t current_frame    = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd       = renderer->command_buffers->buffers[current_frame];
+    vkCmdBindPipeline(cmd->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
-
-    // Default dynamic state values. User can override with pigment_cmd_set_*.
-    vkCmdSetCullMode(cmd, VK_CULL_MODE_BACK_BIT);
-    vkCmdSetFrontFace(cmd, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-    vkCmdSetDepthTestEnable(cmd, VK_TRUE);
-    vkCmdSetDepthWriteEnable(cmd, VK_TRUE);
-    vkCmdSetDepthCompareOp(cmd, VK_COMPARE_OP_GREATER);
-    vkCmdSetStencilTestEnable(cmd, VK_FALSE);
-    vkCmdSetStencilOp(cmd, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
-    vkCmdSetDepthBiasEnable(cmd, VK_FALSE);
-    vkCmdSetRasterizerDiscardEnable(cmd, VK_FALSE);
+    vkCmdSetCullMode(cmd->buffer, VK_CULL_MODE_BACK_BIT);
+    vkCmdSetFrontFace(cmd->buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    vkCmdSetDepthTestEnable(cmd->buffer, VK_TRUE);
+    vkCmdSetDepthWriteEnable(cmd->buffer, VK_TRUE);
+    vkCmdSetDepthCompareOp(cmd->buffer, VK_COMPARE_OP_GREATER);
+    vkCmdSetStencilTestEnable(cmd->buffer, VK_FALSE);
+    vkCmdSetStencilOp(cmd->buffer, VK_STENCIL_FACE_FRONT_AND_BACK, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_STENCIL_OP_KEEP, VK_COMPARE_OP_ALWAYS);
+    vkCmdSetDepthBiasEnable(cmd->buffer, VK_FALSE);
+    vkCmdSetRasterizerDiscardEnable(cmd->buffer, VK_FALSE);
     if(pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST])
     {
-        vkCmdSetDepthBoundsTestEnable(cmd, VK_FALSE);
-        vkCmdSetDepthBounds(cmd, 0.0f, 1.0f);
+        vkCmdSetDepthBoundsTestEnable(cmd->buffer, VK_FALSE);
+        vkCmdSetDepthBounds(cmd->buffer, 0.0f, 1.0f);
     }
 }
 

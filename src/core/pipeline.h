@@ -113,6 +113,6 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
 
 void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
 
-void pigment_bind_pipeline(Pigment* pigment, uint32_t window_index, PPipeline* pipeline);
+void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline);
 
 #endif

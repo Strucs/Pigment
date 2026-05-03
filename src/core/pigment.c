@@ -270,14 +270,20 @@ void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentM
     pigment->windows[window_index]->info->preferred_present_mode = mode;
 }
 
-bool pigment_begin_frame(Pigment* pigment, uint32_t window_index)
+PCommandBuffer* pigment_begin_frame(Pigment* pigment, uint32_t window_index)
 {
     if(pigment == NULL || window_index >= pigment->window_count)
     {
-        return false;
+        return NULL;
     }
 
-    return begin_frame(pigment, pigment->renderers[window_index], &pigment->renderers[window_index]->current_image_index);
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    if(!begin_frame(pigment, renderer, &renderer->current_image_index))
+    {
+        return NULL;
+    }
+
+    return renderer->command_buffers[renderer->swapchain->current_frame];
 }
 
 void pigment_end_frame(Pigment* pigment, uint32_t window_index)
@@ -288,6 +294,26 @@ void pigment_end_frame(Pigment* pigment, uint32_t window_index)
     }
 
     end_frame(pigment, pigment->renderers[window_index], pigment->renderers[window_index]->current_image_index, pigment->config.max_frames_in_flight);
+}
+
+uint32_t pigment_window_current_frame(Pigment* pigment, uint32_t window_index)
+{
+    if(pigment == NULL || window_index >= pigment->window_count)
+    {
+        return 0;
+    }
+
+    return pigment->renderers[window_index]->swapchain->current_frame;
+}
+
+PCommandBuffer* pigment_window_frame_cmd(Pigment* pigment, uint32_t window_index)
+{
+    if(pigment == NULL || window_index >= pigment->window_count)
+    {
+        return NULL;
+    }
+    PWindowRenderer* renderer = pigment->renderers[window_index];
+    return renderer->command_buffers[renderer->swapchain->current_frame];
 }
 
 void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index)

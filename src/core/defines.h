@@ -143,7 +143,7 @@ typedef struct PCommandPool PCommandPool;
 
 typedef struct PCommandPoolList PCommandPoolList;
 
-typedef struct PCommandBuffers PCommandBuffers;
+typedef struct PCommandBuffer PCommandBuffer;
 
 typedef struct PSync PSync;
 
@@ -210,6 +210,54 @@ typedef enum PCompareOp {
     P_COMPARE_OP_GREATER_OR_EQUAL = 6,
     P_COMPARE_OP_ALWAYS           = 7,
 } PCompareOp;
+
+typedef enum PPipelineStage {
+    P_PIPELINE_STAGE_NONE                        = 0,
+    P_PIPELINE_STAGE_DRAW_INDIRECT_BIT           = 1 << 0,
+    P_PIPELINE_STAGE_VERTEX_INPUT_BIT            = 1 << 1,
+    P_PIPELINE_STAGE_INDEX_INPUT_BIT             = 1 << 2,
+    P_PIPELINE_STAGE_VERTEX_SHADER_BIT           = 1 << 3,
+    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT         = 1 << 4,
+    P_PIPELINE_STAGE_COMPUTE_SHADER_BIT          = 1 << 5,
+    P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT    = 1 << 6,
+    P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT     = 1 << 7,
+    P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 1 << 8,
+    P_PIPELINE_STAGE_TRANSFER_BIT                = 1 << 9,
+    P_PIPELINE_STAGE_HOST_BIT                    = 1 << 10,
+    P_PIPELINE_STAGE_ALL_GRAPHICS_BIT            = 1 << 11,
+    P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1 << 12,
+} PPipelineStage;
+
+typedef enum PMemoryAccess {
+    P_MEMORY_ACCESS_NONE                               = 0,
+    P_MEMORY_ACCESS_INDIRECT_COMMAND_READ_BIT          = 1 << 0,
+    P_MEMORY_ACCESS_INDEX_READ_BIT                     = 1 << 1,
+    P_MEMORY_ACCESS_VERTEX_ATTRIBUTE_READ_BIT          = 1 << 2,
+    P_MEMORY_ACCESS_UNIFORM_READ_BIT                   = 1 << 3,
+    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT            = 1 << 4,
+    P_MEMORY_ACCESS_SHADER_STORAGE_READ_BIT            = 1 << 5,
+    P_MEMORY_ACCESS_SHADER_STORAGE_WRITE_BIT           = 1 << 6,
+    P_MEMORY_ACCESS_COLOR_ATTACHMENT_READ_BIT          = 1 << 7,
+    P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT         = 1 << 8,
+    P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT  = 1 << 9,
+    P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT = 1 << 10,
+    P_MEMORY_ACCESS_TRANSFER_READ_BIT                  = 1 << 11,
+    P_MEMORY_ACCESS_TRANSFER_WRITE_BIT                 = 1 << 12,
+    P_MEMORY_ACCESS_HOST_READ_BIT                      = 1 << 13,
+    P_MEMORY_ACCESS_HOST_WRITE_BIT                     = 1 << 14,
+} PMemoryAccess;
+
+typedef enum PImageLayout {
+    P_IMAGE_LAYOUT_UNDEFINED                = 0,
+    P_IMAGE_LAYOUT_GENERAL                  = 1,
+    P_IMAGE_LAYOUT_COLOR_ATTACHMENT         = 2,
+    P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT = 3,
+    P_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY  = 4,
+    P_IMAGE_LAYOUT_SHADER_READ_ONLY         = 5,
+    P_IMAGE_LAYOUT_TRANSFER_SRC             = 6,
+    P_IMAGE_LAYOUT_TRANSFER_DST             = 7,
+    P_IMAGE_LAYOUT_PRESENT                  = 8,
+} PImageLayout;
 
 typedef struct PigmentConfig {
     uint32_t max_frames_in_flight;

@@ -157,7 +157,6 @@ int main(void)
         if(ok)
         {
             cubemap_slot = pigment_std_upload_cubemap(pigment, bindless, (const unsigned char**) face_data, face_size, face_size, P_FORMAT_R8G8B8A8_UNORM);
-            printf("Uploaded test cubemap at slot %u\n", cubemap_slot);
         }
         for(uint32_t f = 0; f < 6; f++)
         {
@@ -281,17 +280,17 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, 0);
 
-        if(!pigment_begin_frame(pigment, 0))
+        PCommandBuffer* cmd = pigment_begin_frame(pigment, 0);
+        if(cmd == NULL)
         {
             continue;
         }
-
         pigment_begin_swapchain_pass(pigment, 0);
-        pigment_bind_pipeline(pigment, 0, pipeline);
-        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipeline, draw_calls, 5);
+        pigment_bind_pipeline(pigment, cmd, pipeline);
+        pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipeline, draw_calls, 5);
 
-        pigment_bind_pipeline(pigment, 0, skybox_pipeline);
-        pigment_std_draw_skybox(pigment, bindless, 0, skybox_pipeline, camera, cubemap_slot, 0);
+        pigment_bind_pipeline(pigment, cmd, skybox_pipeline);
+        pigment_std_draw_skybox(pigment, 0, bindless, skybox_pipeline, camera, cubemap_slot, 0);
 
         pigment_end_swapchain_pass(pigment, 0);
 

@@ -120,7 +120,7 @@ struct PWindowRenderer {
     PSurface* surface;
     PSwapchain* swapchain;
     PSync* sync;
-    PCommandBuffers* command_buffers;
+    PCommandBuffer** command_buffers;
     uint32_t current_image_index;
     bool framebuffer_resized;
     uint32_t pending_width;
@@ -251,8 +251,8 @@ struct PCommandPoolList {
     uint32_t capacity;
 };
 
-struct PCommandBuffers {
-    VkCommandBuffer* buffers;
+struct PCommandBuffer {
+    VkCommandBuffer buffer;
     VkCommandPool source_pool;
 };
 

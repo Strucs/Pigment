@@ -25,6 +25,8 @@ static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
 static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
 static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool);
 static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool command_pool, const uint32_t command_buffers_numbers);
+static VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
+static void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 
 #define PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY 4
 
@@ -148,143 +150,119 @@ PCommandPool* pigment_default_pool(Pigment* pigment)
     return pigment->command_pools->pools[0];
 }
 
-PCommandBuffers* create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count)
+PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count)
 {
-    if(pool == NULL)
+    if(pool == NULL || count == 0)
     {
         return NULL;
     }
 
-    PCommandBuffers* command_buffers = malloc(sizeof(*command_buffers));
+    VkCommandBuffer* vk_buffers      = NULL;
+    PCommandBuffer** command_buffers = calloc(count, sizeof(*command_buffers));
     if(command_buffers == NULL)
     {
         goto ERROR;
     }
 
-    VkCommandBuffer* buffers = allocate_command_buffers(pigment, pool->pool, count);
-    if(buffers == NULL)
+    vk_buffers = allocate_command_buffers(pigment, pool->pool, count);
+    if(vk_buffers == NULL)
     {
         goto ERROR;
     }
 
-    command_buffers->buffers     = buffers;
-    command_buffers->source_pool = pool->pool;
+    for(uint32_t i = 0; i < count; i++)
+    {
+        command_buffers[i] = calloc(1, sizeof(**command_buffers));
+        if(command_buffers[i] == NULL)
+        {
+            goto ERROR;
+        }
+        command_buffers[i]->buffer      = vk_buffers[i];
+        command_buffers[i]->source_pool = pool->pool;
+    }
 
+    free(vk_buffers);
     return command_buffers;
 
 ERROR:
-    free(command_buffers);
+    free(vk_buffers);
+    if(command_buffers != NULL)
+    {
+        for(uint32_t i = 0; i < count; i++)
+        {
+            free(command_buffers[i]);
+        }
+        free(command_buffers);
+    }
     return NULL;
 }
 
-void destroy_command_buffers(Pigment* pigment, PCommandBuffers* command_buffers, uint32_t count)
+void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count)
 {
-    if(command_buffers == NULL)
+    if(command_buffers == NULL || count == 0)
     {
         return;
     }
-    vkFreeCommandBuffers(pigment->device->logical_device, command_buffers->source_pool, count, command_buffers->buffers);
-    free(command_buffers->buffers);
+
+    VkCommandBuffer* vk_cmd_buffer = malloc(count * sizeof(*vk_cmd_buffer));
+    if(vk_cmd_buffer != NULL)
+    {
+        for(uint32_t i = 0; i < count; i++)
+        {
+            vk_cmd_buffer[i] = command_buffers[i]->buffer;
+        }
+        vkFreeCommandBuffers(pigment->device->logical_device, command_buffers[0]->source_pool, count, vk_cmd_buffer);
+        free(vk_cmd_buffer);
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        free(command_buffers[i]);
+    }
     free(command_buffers);
 }
 
-void cmd_begin_rendering(Pigment* pigment, VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index, bool transparent)
+PCommandBuffer* pigment_begin_single_use_cmd(Pigment* pigment, PCommandPool* pool)
 {
-    VkImageAspectFlags depth_aspect = swapchain->depth->aspect;
+    if(pigment == NULL)
+    {
+        return NULL;
+    }
 
-    VkImageMemoryBarrier2 barriers_to_render[2] = {
-        {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-         .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
-         .srcAccessMask       = VK_ACCESS_2_NONE,
-         .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-         .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-         .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-         .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-         .image               = swapchain->images[image_index],
-         .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
-        {.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-         .srcStageMask        = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-         .srcAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-         .dstStageMask        = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-         .dstAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-         .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-         .newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-         .image               = swapchain->depth->image,
-         .subresourceRange    = {depth_aspect, 0, 1, 0, 1}}
-    };
+    if(pool == NULL)
+    {
+        pool = pigment_default_pool(pigment);
+        if(pool == NULL)
+        {
+            return NULL;
+        }
+    }
 
-    VkDependencyInfo dep_to_render = {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 2,
-        .pImageMemoryBarriers    = barriers_to_render
-    };
+    VkCommandBuffer vk_cmd = start_single_usage_commands(pigment, pool->pool);
+    if(vk_cmd == VK_NULL_HANDLE)
+    {
+        return NULL;
+    }
 
-    vkCmdPipelineBarrier2(command_buffer, &dep_to_render);
-
-    VkClearColorValue clear_color_value = {
-        {0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f}
-    };
-    VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
-
-    VkRenderingAttachmentInfo color_attachment = {
-        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView   = swapchain->image_views[image_index],
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue  = {.color = clear_color_value}
-    };
-
-    VkRenderingAttachmentInfo depth_attachment = {
-        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView   = swapchain->depth->image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue  = {.depthStencil = clear_depth_stencil_value}
-    };
-
-    VkRenderingInfoKHR rendering_info = {
-        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
-        .renderArea           = {{0, 0}, swapchain->extent},
-        .layerCount           = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments    = &color_attachment,
-        .pDepthAttachment     = &depth_attachment
-    };
-
-    vkCmdBeginRendering(command_buffer, &rendering_info);
+    PCommandBuffer* cmd = calloc(1, sizeof(*cmd));
+    if(cmd == NULL)
+    {
+        vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, 1, &vk_cmd);
+        return NULL;
+    }
+    cmd->buffer      = vk_cmd;
+    cmd->source_pool = pool->pool;
+    return cmd;
 }
 
-void cmd_end_rendering(VkCommandBuffer command_buffer, PSwapchain* swapchain, uint32_t image_index)
+void pigment_end_single_use_cmd(Pigment* pigment, PCommandBuffer* cmd)
 {
-    vkCmdEndRendering(command_buffer);
-
-    VkImageMemoryBarrier2 barrier_to_present = {
-        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .srcAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstStageMask        = VK_PIPELINE_STAGE_2_NONE,
-        .dstAccessMask       = VK_ACCESS_2_NONE,
-        .oldLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image               = swapchain->images[image_index],
-        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
-    };
-
-    VkDependencyInfo dep_to_present = {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers    = &barrier_to_present
-    };
-
-    vkCmdPipelineBarrier2(command_buffer, &dep_to_present);
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    end_single_usage_commands(pigment, &cmd->buffer, cmd->source_pool);
+    free(cmd);
 }
 
 static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc)
@@ -436,4 +414,63 @@ static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool
 ERROR:
     free(command_buffers);
     return NULL;
+}
+
+static VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool)
+{
+    PDevice* device                        = pigment->device;
+    VkCommandBufferAllocateInfo alloc_info = {
+        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandPool        = command_pool,
+        .commandBufferCount = 1
+    };
+
+    VkCommandBuffer command_buffer;
+
+    VkResult result;
+    if((result = vkAllocateCommandBuffers(device->logical_device, &alloc_info, &command_buffer)) != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to allocate single usage command buffer! (result: %d)", result);
+        return VK_NULL_HANDLE;
+    }
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    };
+
+    if((result = vkBeginCommandBuffer(command_buffer, &begin_info)) != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to begin single usage command buffer! (result: %d)", result);
+        vkFreeCommandBuffers(device->logical_device, command_pool, 1, &command_buffer);
+        return VK_NULL_HANDLE;
+    }
+
+    return command_buffer;
+}
+
+static void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool)
+{
+    PDevice* device = pigment->device;
+    VkResult result;
+    if((result = vkEndCommandBuffer(*command_buffer)) != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to end single usage command buffer! (result: %d)", result);
+    }
+
+    VkSubmitInfo submit_info = {
+        .sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers    = command_buffer
+    };
+
+    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to submit single usage command buffer! (result: %d)", result);
+    }
+
+    vkQueueWaitIdle(device->graphics_queue);
+
+    vkFreeCommandBuffers(device->logical_device, command_pool, 1, command_buffer);
 }

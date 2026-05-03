@@ -185,13 +185,13 @@ uint64_t pigment_std_light_address(PLights* lights)
 
 void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
 {
-    if(pigment == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0 || window_index >= pigment->window_count)
+    if(pigment == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
     {
         return;
     }
 
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    uint32_t current_frame    = renderer->swapchain->current_frame;
+    PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
+    uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
 
     uint64_t camera_slot_address = 0;
     if(camera != NULL)
@@ -207,6 +207,6 @@ void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPip
         .scale         = scale,
     };
 
-    pigment_cmd_push_constants(pigment, window_index, pipeline, 0, sizeof(push), &push);
-    pigment_cmd_draw_indexed(pigment, window_index, sphere_mesh->index_buffer, sphere_mesh->index_type, 0, 0, sphere_index_count, 0, lights->count, 0);
+    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
+    pigment_cmd_draw_indexed(pigment, cmd, sphere_mesh->index_buffer, sphere_mesh->index_type, 0, 0, sphere_index_count, 0, lights->count, 0);
 }

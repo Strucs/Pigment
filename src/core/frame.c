@@ -15,6 +15,7 @@
  */
 
 #include "frame.h"
+#include "cmd_sync.h"
 #include "image.h"
 #include "internal.h"
 #include "surface.h"
@@ -23,8 +24,6 @@
 #include "log_internal.h"
 
 #include <stdlib.h>
-
-static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index);
 
 bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index)
 {
@@ -92,7 +91,7 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
 
     vkResetFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame]);
 
-    VkCommandBuffer cmd = renderer->command_buffers->buffers[current_frame];
+    VkCommandBuffer cmd = renderer->command_buffers[current_frame]->buffer;
 
     if((result = vkResetCommandBuffer(cmd, 0)) != VK_SUCCESS)
     {
@@ -112,49 +111,134 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
 
 void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index)
 {
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
+    uint32_t current_frame_idx = renderer->swapchain->current_frame;
+    PCommandBuffer* cmd        = renderer->command_buffers[current_frame_idx];
+    PSwapchain* swapchain      = renderer->swapchain;
+    bool transparent           = renderer->transparent_framebuffer;
 
-    cmd_begin_rendering(pigment, cmd, renderer->swapchain, image_index, renderer->transparent_framebuffer);
+    VkImageMemoryBarrier2 color_barrier = {
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
+        .srcAccessMask       = VK_ACCESS_2_NONE,
+        .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image               = swapchain->images[image_index],
+        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
+
+    VkDependencyInfo dep_color = {
+        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers    = &color_barrier,
+    };
+
+    vkCmdPipelineBarrier2(cmd->buffer, &dep_color);
+
+    PImageBarrier depth_barrier = {
+        .image       = swapchain->depth,
+        .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
+        .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+        .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+        .dst         = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+        .mip_count   = 1,
+        .layer_count = 1,
+    };
+
+    pigment_cmd_image_barriers(pigment, cmd, &depth_barrier, 1);
+
+    VkClearColorValue clear_color_value = {
+        {0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f},
+    };
+
+    VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
+
+    VkRenderingAttachmentInfo color_attachment = {
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView   = swapchain->image_views[image_index],
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue  = {.color = clear_color_value},
+    };
+
+    VkRenderingAttachmentInfo depth_attachment = {
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView   = swapchain->depth->image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue  = {.depthStencil = clear_depth_stencil_value},
+    };
+
+    VkRenderingInfoKHR rendering_info = {
+        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
+        .renderArea           = {{0, 0}, swapchain->extent},
+        .layerCount           = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments    = &color_attachment,
+        .pDepthAttachment     = &depth_attachment,
+    };
+
+    vkCmdBeginRendering(cmd->buffer, &rendering_info);
 
     VkViewport viewport = {
         .x        = 0.0f,
         .y        = 0.0f,
-        .width    = (float) renderer->swapchain->extent.width,
-        .height   = (float) renderer->swapchain->extent.height,
+        .width    = (float) swapchain->extent.width,
+        .height   = (float) swapchain->extent.height,
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
     VkRect2D scissor = {
         {0, 0},
-        renderer->swapchain->extent
+        swapchain->extent,
     };
 
-    vkCmdSetViewportWithCount(cmd, 1, &viewport);
-    vkCmdSetScissorWithCount(cmd, 1, &scissor);
+    vkCmdSetViewportWithCount(cmd->buffer, 1, &viewport);
+    vkCmdSetScissorWithCount(cmd->buffer, 1, &scissor);
 }
 
 void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index)
 {
     uint32_t current_frame = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
+    VkCommandBuffer cmd    = renderer->command_buffers[current_frame]->buffer;
 
-    cmd_end_rendering(cmd, renderer->swapchain, image_index);
+    vkCmdEndRendering(cmd);
+
+    VkImageMemoryBarrier2 barrier_to_present = {
+        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstStageMask        = VK_PIPELINE_STAGE_2_NONE,
+        .dstAccessMask       = VK_ACCESS_2_NONE,
+        .oldLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image               = renderer->swapchain->images[image_index],
+        .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
+
+    VkDependencyInfo dep = {
+        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers    = &barrier_to_present,
+    };
+
+    vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PRenderPassDesc* desc)
+void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc)
 {
-    if(pigment == NULL || desc == NULL)
+    if(pigment == NULL || cmd == NULL || desc == NULL)
     {
         return;
     }
     if(desc->color_count == 0 && desc->depth_attachment == NULL)
-    {
-        return;
-    }
-
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
     {
         return;
     }
@@ -173,12 +257,11 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
     }
 
     uint32_t barrier_count           = desc->color_count + (desc->depth_attachment != NULL ? 1 : 0);
-    VkImageMemoryBarrier2* barriers  = malloc(barrier_count * sizeof(*barriers));
+    PImageBarrier* barriers          = malloc(barrier_count * sizeof(*barriers));
     VkRenderingAttachmentInfo* color = (desc->color_count > 0) ? malloc(desc->color_count * sizeof(*color)) : NULL;
 
     if(barriers == NULL || (desc->color_count > 0 && color == NULL))
     {
-        PLOG_ERROR(pigment, "Failed to allocate render pass attachments");
         goto FREE;
     }
 
@@ -189,18 +272,13 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
     for(uint32_t i = 0; i < desc->color_count; i++)
     {
         PImage* img = desc->color_attachments[i];
-        barriers[i] = (VkImageMemoryBarrier2) {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask       = VK_ACCESS_2_NONE,
-            .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = img->image,
-            .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, img->mip_levels, 0, 1},
+        barriers[i] = (PImageBarrier) {
+            .image      = img,
+            .old_layout = P_IMAGE_LAYOUT_UNDEFINED,
+            .new_layout = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
+            .src        = {                       P_PIPELINE_STAGE_NONE,                       P_MEMORY_ACCESS_NONE},
+            .dst        = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            .mip_count  = img->mip_levels,
         };
 
         color[i] = (VkRenderingAttachmentInfo) {
@@ -217,21 +295,16 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
     if(desc->depth_attachment != NULL)
     {
         PImage* img                 = desc->depth_attachment;
-        barriers[desc->color_count] = (VkImageMemoryBarrier2) {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-            .srcAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dstStageMask        = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-            .dstAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = img->image,
-            .subresourceRange    = {img->aspect, 0, img->mip_levels, 0, 1},
+        barriers[desc->color_count] = (PImageBarrier) {
+            .image      = img,
+            .old_layout = P_IMAGE_LAYOUT_UNDEFINED,
+            .new_layout = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+            .src        = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .dst        = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .mip_count  = img->mip_levels,
         };
 
-        VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
+        VkClearDepthStencilValue clear_depth_stencil_value = {desc->depth_clear_value, 0};
 
         depth = (VkRenderingAttachmentInfo) {
             .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
@@ -243,13 +316,7 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
         };
     }
 
-    VkDependencyInfo dep = {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = barrier_count,
-        .pImageMemoryBarriers    = barriers,
-    };
-
-    vkCmdPipelineBarrier2(cmd, &dep);
+    pigment_cmd_image_barriers(pigment, cmd, barriers, barrier_count);
 
     VkRenderingInfo rendering_info = {
         .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
@@ -259,7 +326,7 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
         .pColorAttachments    = color,
         .pDepthAttachment     = (desc->depth_attachment != NULL) ? &depth : NULL,
     };
-    vkCmdBeginRendering(cmd, &rendering_info);
+    vkCmdBeginRendering(cmd->buffer, &rendering_info);
 
     VkViewport viewport = {
         .x        = 0.0f,
@@ -275,28 +342,22 @@ void pigment_begin_render_pass(Pigment* pigment, uint32_t window_index, const PR
         {width, height}
     };
 
-    vkCmdSetViewportWithCount(cmd, 1, &viewport);
-    vkCmdSetScissorWithCount(cmd, 1, &scissor);
+    vkCmdSetViewportWithCount(cmd->buffer, 1, &viewport);
+    vkCmdSetScissorWithCount(cmd->buffer, 1, &scissor);
 
 FREE:
     free(barriers);
     free(color);
 }
 
-void pigment_end_render_pass(Pigment* pigment, uint32_t window_index, const PRenderPassDesc* desc)
+void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc)
 {
-    if(pigment == NULL || desc == NULL)
+    if(pigment == NULL || cmd == NULL || desc == NULL)
     {
         return;
     }
 
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
-    {
-        return;
-    }
-
-    vkCmdEndRendering(cmd);
+    vkCmdEndRendering(cmd->buffer);
 
     uint32_t max_barriers = desc->color_count + (desc->depth_attachment != NULL ? 1 : 0);
     if(max_barriers == 0)
@@ -304,7 +365,7 @@ void pigment_end_render_pass(Pigment* pigment, uint32_t window_index, const PRen
         return;
     }
 
-    VkImageMemoryBarrier2* barriers = malloc(max_barriers * sizeof(*barriers));
+    PImageBarrier* barriers = malloc(max_barriers * sizeof(*barriers));
     if(barriers == NULL)
     {
         return;
@@ -319,49 +380,30 @@ void pigment_end_render_pass(Pigment* pigment, uint32_t window_index, const PRen
         {
             continue;
         }
-        barriers[barrier_count++] = (VkImageMemoryBarrier2) {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask        = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            .dstAccessMask       = VK_ACCESS_2_SHADER_READ_BIT,
-            .oldLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = img->image,
-            .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, img->mip_levels, 0, 1},
+        barriers[barrier_count++] = (PImageBarrier) {
+            .image      = img,
+            .old_layout = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
+            .new_layout = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+            .src        = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            .dst        = {        P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+            .mip_count  = img->mip_levels,
         };
     }
 
     if(desc->depth_attachment != NULL && (desc->depth_attachment->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
     {
         PImage* img               = desc->depth_attachment;
-        barriers[barrier_count++] = (VkImageMemoryBarrier2) {
-            .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask        = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-            .srcAccessMask       = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-            .dstStageMask        = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-            .dstAccessMask       = VK_ACCESS_2_SHADER_READ_BIT,
-            .oldLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            .newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image               = img->image,
-            .subresourceRange    = {img->aspect, 0, img->mip_levels, 0, 1},
+        barriers[barrier_count++] = (PImageBarrier) {
+            .image      = img,
+            .old_layout = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+            .new_layout = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+            .src        = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .dst        = {    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,            P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+            .mip_count  = img->mip_levels,
         };
     }
 
-    if(barrier_count > 0)
-    {
-        VkDependencyInfo dep = {
-            .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .imageMemoryBarrierCount = barrier_count,
-            .pImageMemoryBarriers    = barriers,
-        };
-
-        vkCmdPipelineBarrier2(cmd, &dep);
-    }
+    pigment_cmd_image_barriers(pigment, cmd, barriers, barrier_count);
 
     free(barriers);
 }
@@ -370,7 +412,7 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
 {
     PDevice* device        = pigment->device;
     uint32_t current_frame = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd    = renderer->command_buffers->buffers[current_frame];
+    VkCommandBuffer cmd    = renderer->command_buffers[current_frame]->buffer;
 
     VkResult result;
     if((result = vkEndCommandBuffer(cmd)) != VK_SUCCESS)
@@ -421,53 +463,39 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
     renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
-static VkCommandBuffer current_cmd(Pigment* pigment, uint32_t window_index)
+void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, bool test, bool write, PCompareOp op)
 {
-    if(pigment == NULL || window_index >= pigment->window_count)
-    {
-        return VK_NULL_HANDLE;
-    }
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    return renderer->command_buffers->buffers[renderer->swapchain->current_frame];
-}
-
-void pigment_cmd_set_depth(Pigment* pigment, uint32_t window_index, bool test, bool write, PCompareOp op)
-{
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    vkCmdSetDepthTestEnable(cmd, test ? VK_TRUE : VK_FALSE);
-    vkCmdSetDepthWriteEnable(cmd, write ? VK_TRUE : VK_FALSE);
-    vkCmdSetDepthCompareOp(cmd, (VkCompareOp) op);
+    vkCmdSetDepthTestEnable(cmd->buffer, test ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthWriteEnable(cmd->buffer, write ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthCompareOp(cmd->buffer, (VkCompareOp) op);
 }
 
-void pigment_cmd_set_cull(Pigment* pigment, uint32_t window_index, PCullMode mode, PFrontFace face)
+void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    vkCmdSetCullMode(cmd, (VkCullModeFlags) mode);
-    vkCmdSetFrontFace(cmd, (VkFrontFace) face);
+    vkCmdSetCullMode(cmd->buffer, (VkCullModeFlags) mode);
+    vkCmdSetFrontFace(cmd->buffer, (VkFrontFace) face);
 }
 
-void pigment_cmd_set_stencil_test(Pigment* pigment, uint32_t window_index, bool enable)
+void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, bool enable)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    vkCmdSetStencilTestEnable(cmd, enable ? VK_TRUE : VK_FALSE);
+    vkCmdSetStencilTestEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);
 }
 
-void pigment_cmd_set_viewport(Pigment* pigment, uint32_t window_index, float x, float y, float width, float height, float min_depth, float max_depth)
+void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, float x, float y, float width, float height, float min_depth, float max_depth)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
@@ -479,13 +507,12 @@ void pigment_cmd_set_viewport(Pigment* pigment, uint32_t window_index, float x, 
         .minDepth = min_depth,
         .maxDepth = max_depth,
     };
-    vkCmdSetViewportWithCount(cmd, 1, &vp);
+    vkCmdSetViewportWithCount(cmd->buffer, 1, &vp);
 }
 
-void pigment_cmd_set_scissor(Pigment* pigment, uint32_t window_index, int32_t x, int32_t y, uint32_t width, uint32_t height)
+void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
@@ -493,27 +520,25 @@ void pigment_cmd_set_scissor(Pigment* pigment, uint32_t window_index, int32_t x,
         .offset = {    x,      y},
         .extent = {width, height},
     };
-    vkCmdSetScissorWithCount(cmd, 1, &rect);
+    vkCmdSetScissorWithCount(cmd->buffer, 1, &rect);
 }
 
-void pigment_cmd_set_depth_bias(Pigment* pigment, uint32_t window_index, bool enable, float constant, float clamp, float slope)
+void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, bool enable, float constant, float clamp, float slope)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    vkCmdSetDepthBiasEnable(cmd, enable ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthBiasEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);
     if(enable)
     {
-        vkCmdSetDepthBias(cmd, constant, clamp, slope);
+        vkCmdSetDepthBias(cmd->buffer, constant, clamp, slope);
     }
 }
 
-void pigment_cmd_set_depth_bounds(Pigment* pigment, uint32_t window_index, bool enable, float min, float max)
+void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, bool enable, float min, float max)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(cmd == NULL || pigment == NULL)
     {
         return;
     }
@@ -521,42 +546,39 @@ void pigment_cmd_set_depth_bounds(Pigment* pigment, uint32_t window_index, bool 
     {
         return;
     }
-    vkCmdSetDepthBoundsTestEnable(cmd, enable ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthBoundsTestEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);
     if(enable)
     {
-        vkCmdSetDepthBounds(cmd, min, max);
+        vkCmdSetDepthBounds(cmd->buffer, min, max);
     }
 }
 
-void pigment_cmd_push_constants(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data)
+void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE || pipeline == NULL || pipeline->layout == NULL)
+    if(pigment == NULL || cmd == NULL || pipeline == NULL || pipeline->layout == NULL)
     {
         return;
     }
     PLayout* layout = pipeline->layout;
-    vkCmdPushConstants(cmd, layout->layout, layout->push_stages, offset, size, data);
+    vkCmdPushConstants(cmd->buffer, layout->layout, layout->push_stages, offset, size, data);
 }
 
-void pigment_cmd_draw(Pigment* pigment, uint32_t window_index, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
+void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    vkCmdDraw(cmd, vertex_count, instance_count, first_vertex, first_instance);
+    vkCmdDraw(cmd->buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
-void pigment_cmd_draw_indexed(Pigment* pigment, uint32_t window_index, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
+void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
 {
-    VkCommandBuffer cmd = current_cmd(pigment, window_index);
-    if(cmd == VK_NULL_HANDLE || index_buffer == NULL)
+    if(pigment == NULL || cmd == NULL || index_buffer == NULL)
     {
         return;
     }
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-    vkCmdBindIndexBuffer(cmd, index_buffer->buffer, (VkDeviceSize) index_buffer_offset, vk_index_type);
-    vkCmdDrawIndexed(cmd, index_count, instance_count, first_index, vertex_offset, first_instance);
+    vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_buffer_offset, vk_index_type);
+    vkCmdDrawIndexed(cmd->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }

@@ -308,16 +308,13 @@ FREE:
     free(vk_writes);
 }
 
-void pigment_cmd_bind_descriptor_set(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, uint32_t set_index, PDescriptorSet* set)
+void pigment_cmd_bind_descriptor_set(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t set_index, PDescriptorSet* set)
 {
-    if(pigment == NULL || pipeline == NULL || set == NULL || window_index >= pigment->window_count)
+    if(pigment == NULL || cmd == NULL || pipeline == NULL || set == NULL)
     {
         return;
     }
-
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    VkCommandBuffer cmd       = renderer->command_buffers->buffers[renderer->swapchain->current_frame];
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, set_index, 1, &set->set, 0, NULL);
+    vkCmdBindDescriptorSets(cmd->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, set_index, 1, &set->set, 0, NULL);
 }
 
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type)

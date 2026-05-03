@@ -241,19 +241,20 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, 0);
 
-        if(!pigment_begin_frame(pigment, 0))
+        PCommandBuffer* cmd = pigment_begin_frame(pigment, 0);
+        if(cmd == NULL)
         {
             continue;
         }
 
         pigment_begin_swapchain_pass(pigment, 0);
 
-        pigment_bind_pipeline(pigment, 0, pipelines[0]);
-        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipelines[0], draw_calls, draw_count);
+        pigment_bind_pipeline(pigment, cmd, pipelines[0]);
+        pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipelines[0], draw_calls, draw_count);
 
-        pigment_bind_pipeline(pigment, 0, pipelines[1]);
-        pigment_cmd_set_depth(pigment, 0, true, false, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, bindless, ring, materials, lights, camera, 0, pipelines[1], draw_calls2, draw_count2);
+        pigment_bind_pipeline(pigment, cmd, pipelines[1]);
+        pigment_cmd_set_depth(pigment, cmd, true, false, P_COMPARE_OP_GREATER);
+        pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_swapchain_pass(pigment, 0);
 

@@ -82,17 +82,17 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
     free(ring);
 }
 
-void pigment_draw(Pigment* pigment, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, uint32_t window_index, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
+void pigment_draw(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
 {
-    if(pigment == NULL || bindless == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0 || window_index >= pigment->window_count)
+    if(pigment == NULL || bindless == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0)
     {
         return;
     }
 
-    PWindowRenderer* renderer = pigment->renderers[window_index];
-    uint32_t current_frame    = renderer->swapchain->current_frame;
+    PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
+    uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
 
-    pigment_cmd_bind_descriptor_set(pigment, window_index, pipeline, 0, pigment_std_bindless_set(pigment, bindless, window_index));
+    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(bindless, current_frame));
 
     if(current_frame != ring->last_seen_frame)
     {
@@ -122,7 +122,6 @@ void pigment_draw(Pigment* pigment, PStdBindless* bindless, PInstanceRing* ring,
         }
         if(ring->cursor + draw_call->instance_count > ring->per_frame_capacity)
         {
-            PLOG_ERROR(pigment, "Instance ring buffer overflow (cursor=%u + instance_count=%u > capacity=%u)", ring->cursor, draw_call->instance_count, ring->per_frame_capacity);
             continue;
         }
 
@@ -138,21 +137,23 @@ void pigment_draw(Pigment* pigment, PStdBindless* bindless, PInstanceRing* ring,
             .light_buffer    = light_buffer_address,
         };
 
-        pigment_cmd_push_constants(pigment, window_index, pipeline, 0, sizeof(push), &push);
-        pigment_cmd_draw_indexed(pigment, window_index, draw_call->mesh->index_buffer, draw_call->mesh->index_type, 0, draw_call->first_index, draw_call->index_count, 0, draw_call->instance_count, first_instance);
+        pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
+        pigment_cmd_draw_indexed(pigment, cmd, draw_call->mesh->index_buffer, draw_call->mesh->index_type, 0, draw_call->first_index, draw_call->index_count, 0, draw_call->instance_count, first_instance);
     }
 }
 
-void pigment_std_draw_skybox(Pigment* pigment, PStdBindless* bindless, uint32_t window_index, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
+void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
 {
     if(pigment == NULL || bindless == NULL || pipeline == NULL || camera == NULL)
     {
         return;
     }
 
-    pigment_cmd_bind_descriptor_set(pigment, window_index, pipeline, 0, pigment_std_bindless_set(pigment, bindless, window_index));
+    PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
+    uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
 
-    uint32_t current_frame = pigment->renderers[window_index]->swapchain->current_frame;
+    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(bindless, current_frame));
+
     pigment_std_camera_upload(camera, current_frame);
 
     PStdSkyboxPushConstants push = {
@@ -160,9 +161,9 @@ void pigment_std_draw_skybox(Pigment* pigment, PStdBindless* bindless, uint32_t 
         .cubemap_id    = cubemap_slot,
         .sampler_id    = sampler_slot,
     };
-    pigment_cmd_push_constants(pigment, window_index, pipeline, 0, sizeof(push), &push);
+    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
 
-    pigment_cmd_set_cull(pigment, window_index, P_CULL_MODE_FRONT, P_FRONT_FACE_COUNTER_CLOCKWISE);
-    pigment_cmd_set_depth(pigment, window_index, true, false, P_COMPARE_OP_GREATER_OR_EQUAL);
-    pigment_cmd_draw(pigment, window_index, 3, 1, 0, 0);
+    pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_FRONT, P_FRONT_FACE_COUNTER_CLOCKWISE);
+    pigment_cmd_set_depth(pigment, cmd, true, false, P_COMPARE_OP_GREATER_OR_EQUAL);
+    pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 }
