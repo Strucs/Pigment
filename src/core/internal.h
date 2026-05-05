@@ -60,12 +60,15 @@ void destroy_support_details(SwapChainSupportDetails* details);
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // image.c
-VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t mip_levels, uint32_t array_layers);
+VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
 int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties);
 VkImageLayout image_layout_to_vk(PImageLayout layout);
+PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
+void image_destroy_view_cache(Pigment* pigment, PImage* image);
 
-PTrackedImageList* create_tracked_image_list(void);
-void destroy_tracked_image_list(PTrackedImageList* list);
-void pigment_image_resize_tracked(Pigment* pigment, uint32_t window_index);
+// resize.c
+PResizeCallbackList* create_resize_callback_list(void);
+void destroy_resize_callback_list(PResizeCallbackList* list);
+void dispatch_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event);
 
 #endif

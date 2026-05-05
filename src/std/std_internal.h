@@ -43,4 +43,13 @@ typedef struct PStdSkyboxPushConstants {
     uint32_t sampler_id;
 } PStdSkyboxPushConstants;
 
+typedef struct PStdCrtPushConstants {
+    uint32_t texture_id;
+    uint32_t sampler_id;
+    float time;
+    float aspect;
+    float resolution_x;
+    float resolution_y;
+} PStdCrtPushConstants;
+
 #endif

@@ -385,7 +385,7 @@ int create_image_views(Pigment* pigment, PSwapchain* swapchain)
 
     for(size_t i = 0; i < swapchain->image_count; i++)
     {
-        swapchain->image_views[i] = create_image_view(pigment, swapchain->images[i], VK_IMAGE_VIEW_TYPE_2D, swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1, 1);
+        swapchain->image_views[i] = create_image_view(pigment, swapchain->images[i], VK_IMAGE_VIEW_TYPE_2D, swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
     }
 
     return PIGMENT_SUCCESS;
@@ -448,4 +448,30 @@ PFormat pigment_get_depth_format(PWindowRenderer* renderer)
     }
 
     return (PFormat) renderer->swapchain->depth->vk_format;
+}
+
+void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height)
+{
+    if(renderer == NULL || renderer->swapchain == NULL)
+    {
+        if(out_width != NULL)
+        {
+            *out_width = 0;
+        }
+        if(out_height != NULL)
+        {
+            *out_height = 0;
+        }
+        return;
+    }
+
+    if(out_width != NULL)
+    {
+        *out_width = renderer->swapchain->extent.width;
+    }
+
+    if(out_height != NULL)
+    {
+        *out_height = renderer->swapchain->extent.height;
+    }
 }

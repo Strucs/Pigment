@@ -253,8 +253,19 @@ void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes,
                     {
                         const PDescriptorImageInfo* info = &write->image_infos[j];
                         image_infos[i][j].sampler        = (info->sampler != NULL) ? info->sampler->sampler : VK_NULL_HANDLE;
-                        image_infos[i][j].imageView      = (info->image != NULL) ? info->image->image_view : VK_NULL_HANDLE;
-                        image_infos[i][j].imageLayout    = resolve_image_layout(write->type, info->layout);
+
+                        VkImageView vk_view = VK_NULL_HANDLE;
+                        if(info->image != NULL)
+                        {
+                            PImageView* view = image_get_or_create_view(pigment, info->image, &(PImageViewDesc) {0});
+                            if(view != NULL)
+                            {
+                                vk_view = view->view;
+                            }
+                        }
+
+                        image_infos[i][j].imageView   = vk_view;
+                        image_infos[i][j].imageLayout = resolve_image_layout(write->type, info->layout);
                     }
 
                     vk_writes[i].pImageInfo = image_infos[i];

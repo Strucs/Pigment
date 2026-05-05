@@ -20,14 +20,16 @@
 #include "defines.h"
 #include "descriptor.h"
 #include "sampler.h"
+#include "render_targets.h"
 
 #define PIGMENT_DEFAULT_MAX_IMAGES 128
 #define PIGMENT_DEFAULT_MAX_SAMPLERS 16
 #define PIGMENT_DEFAULT_MAX_CUBEMAPS 16
+#define PIGMENT_DEFAULT_MAX_RENDER_TARGETS 16
 
 typedef struct PStdBindless PStdBindless;
 
-PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps);
+PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
 void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless);
 
 uint32_t pigment_std_upload_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
@@ -37,7 +39,9 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
 // 6 face buffers in the order: +X, -X, +Y, -Y, +Z, -Z. All faces must share width/height/format.
 uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
+uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
+
 PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
-PDescriptorSet* pigment_std_bindless_set(PStdBindless* bindless, uint32_t current_frame);
+PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, uint32_t current_frame);
 
 #endif

@@ -14,25 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_STD_H
-#define PIGMENT_STD_H
+#ifndef PIGMENT_RESIZE_H
+#define PIGMENT_RESIZE_H
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
+#include "defines.h"
 
-#include "pigment.h"
-
-#include "std/bindless.h"
-#include "std/camera.h"
-#include "std/camera_math.h"
-#include "std/draw.h"
-#include "std/gltf_loader.h"
-#include "std/lights.h"
-#include "std/material.h"
-#include "std/mesh.h"
-#include "std/pipeline_loader.h"
-#include "std/primitives.h"
-#include "std/render_targets.h"
-#include "std/vertex.h"
+uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn func, void* user_data);
+void pigment_unregister_swapchain_resize(Pigment* pigment, uint32_t handle);
 
 #endif

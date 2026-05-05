@@ -73,22 +73,32 @@ typedef struct PPipelineDesc {
     uint32_t fragment_spv_size;
 
     const PFormat* color_formats;
-    // Render targets (static, baked).
-    // color_format_count = 0 for depth-only (shadow maps).
-    // color_format_count = 1 for forward rendering.
-    // color_format_count > 1 for MRT / G-buffer.
+    /**
+     * Render targets (static, baked).
+     * color_format_count = 0 for depth-only (shadow maps).
+     * color_format_count = 1 for forward rendering.
+     * color_format_count > 1 for MRT / G-buffer.
+     */
     uint32_t color_format_count;
     PFormat depth_format;    // P_FORMAT_UNDEFINED = no depth attachment
 
     PPolygonMode polygon_mode;
     PTopology topology;
 
-    // Per-attachment blend modes. NULL = all attachments OPAQUE.
-    // If non-NULL, count must equal color_format_count.
+    /**
+     * Per-attachment blend modes. NULL = all attachments OPAQUE.
+     * If non-NULL, count must equal color_format_count.
+     */
     const PBlendMode* blend_modes;
     uint32_t blend_mode_count;
 
     PSampleCount sample_count;
+
+    /**
+     * Multiview view mask. Must match the view_mask of the render pass this pipeline is bound in.
+     * 0 = single-view (default). e.g. 0b111111 = 6 views simultaneously (cubemap shadow).
+     */
+    uint32_t view_mask;
 } PPipelineDesc;
 
 typedef struct PLayoutDesc {

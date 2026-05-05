@@ -46,5 +46,6 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
 
 void pigment_draw(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
 void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot);
+void pigment_std_draw_crt(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot);
 
 #endif

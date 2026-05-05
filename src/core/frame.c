@@ -64,7 +64,13 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
         {
             if(pigment->renderers[i] == renderer)
             {
-                pigment_image_resize_tracked(pigment, i);
+                PSwapchainResizeEvent event = {
+                    .window_index = i,
+                    .width        = renderer->swapchain->extent.width,
+                    .height       = renderer->swapchain->extent.height,
+                };
+
+                dispatch_swapchain_resize(pigment, &event);
                 break;
             }
         }
@@ -165,9 +171,11 @@ void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t 
         .clearValue  = {.color = clear_color_value},
     };
 
+    PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth, &(PImageViewDesc) {0});
+
     VkRenderingAttachmentInfo depth_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView   = swapchain->depth->image_view,
+        .imageView   = depth_view->view,
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -238,25 +246,57 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     {
         return;
     }
-    if(desc->color_count == 0 && desc->depth_attachment == NULL)
+    bool has_depth = (desc->depth_attachment.image != NULL);
+    if(desc->color_count == 0 && !has_depth)
     {
         return;
     }
 
-    uint32_t width;
-    uint32_t height;
-    if(desc->color_count > 0)
+    uint32_t width  = UINT32_MAX;
+    uint32_t height = UINT32_MAX;
+    for(uint32_t i = 0; i < desc->color_count; i++)
     {
-        width  = desc->color_attachments[0]->width;
-        height = desc->color_attachments[0]->height;
-    }
-    else
-    {
-        width  = desc->depth_attachment->width;
-        height = desc->depth_attachment->height;
+        const PAttachmentRef* ref = &desc->color_attachments[i];
+
+        uint32_t w = ref->image->width >> ref->mip_level;
+        uint32_t h = ref->image->height >> ref->mip_level;
+        if(w < width)
+        {
+            width = w;
+        }
+        if(h < height)
+        {
+            height = h;
+        }
     }
 
-    uint32_t barrier_count           = desc->color_count + (desc->depth_attachment != NULL ? 1 : 0);
+    if(has_depth)
+    {
+        const PAttachmentRef* ref = &desc->depth_attachment;
+
+        uint32_t w = ref->image->width >> ref->mip_level;
+        uint32_t h = ref->image->height >> ref->mip_level;
+        if(w < width)
+        {
+            width = w;
+        }
+        if(h < height)
+        {
+            height = h;
+        }
+    }
+
+    if(width == 0 || width == UINT32_MAX)
+    {
+        width = 1;
+    }
+
+    if(height == 0 || height == UINT32_MAX)
+    {
+        height = 1;
+    }
+
+    uint32_t barrier_count           = desc->color_count + (has_depth ? 1 : 0);
     PImageBarrier* barriers          = malloc(barrier_count * sizeof(*barriers));
     VkRenderingAttachmentInfo* color = (desc->color_count > 0) ? malloc(desc->color_count * sizeof(*color)) : NULL;
 
@@ -271,19 +311,33 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
 
     for(uint32_t i = 0; i < desc->color_count; i++)
     {
-        PImage* img = desc->color_attachments[i];
+        const PAttachmentRef* ref = &desc->color_attachments[i];
+
+        PImage* img = ref->image;
         barriers[i] = (PImageBarrier) {
-            .image      = img,
-            .old_layout = P_IMAGE_LAYOUT_UNDEFINED,
-            .new_layout = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
-            .src        = {                       P_PIPELINE_STAGE_NONE,                       P_MEMORY_ACCESS_NONE},
-            .dst        = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
-            .mip_count  = img->mip_levels,
+            .image       = img,
+            .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
+            .new_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
+            .src         = {                       P_PIPELINE_STAGE_NONE,                       P_MEMORY_ACCESS_NONE},
+            .dst         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            .base_mip    = ref->mip_level,
+            .mip_count   = 1,
+            .base_layer  = ref->base_layer,
+            .layer_count = ref->layer_count,
         };
+
+        PImageViewDesc view_desc = {
+            .base_layer  = ref->base_layer,
+            .layer_count = ref->layer_count,
+            .base_mip    = ref->mip_level,
+            .mip_count   = 1,
+        };
+
+        PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
 
         color[i] = (VkRenderingAttachmentInfo) {
             .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-            .imageView   = img->image_view,
+            .imageView   = view->view,
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
@@ -292,23 +346,35 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     }
 
     VkRenderingAttachmentInfo depth = {0};
-    if(desc->depth_attachment != NULL)
+    if(has_depth)
     {
-        PImage* img                 = desc->depth_attachment;
+        const PAttachmentRef* ref   = &desc->depth_attachment;
+        PImage* img                 = ref->image;
         barriers[desc->color_count] = (PImageBarrier) {
-            .image      = img,
-            .old_layout = P_IMAGE_LAYOUT_UNDEFINED,
-            .new_layout = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
-            .src        = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-            .dst        = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-            .mip_count  = img->mip_levels,
+            .image       = img,
+            .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
+            .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+            .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .dst         = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .base_mip    = ref->mip_level,
+            .mip_count   = 1,
+            .base_layer  = ref->base_layer,
+            .layer_count = ref->layer_count,
         };
+
+        PImageViewDesc view_desc = {
+            .base_layer  = ref->base_layer,
+            .layer_count = ref->layer_count,
+            .base_mip    = ref->mip_level,
+            .mip_count   = 1,
+        };
+        PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
 
         VkClearDepthStencilValue clear_depth_stencil_value = {desc->depth_clear_value, 0};
 
         depth = (VkRenderingAttachmentInfo) {
             .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-            .imageView   = img->image_view,
+            .imageView   = view->view,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
@@ -318,13 +384,16 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
 
     pigment_cmd_image_barriers(pigment, cmd, barriers, barrier_count);
 
+    uint32_t layer_count = (desc->layer_count == 0) ? 1 : desc->layer_count;
+
     VkRenderingInfo rendering_info = {
         .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
         .renderArea           = {{0, 0}, {width, height}},
-        .layerCount           = 1,
+        .layerCount           = layer_count,
+        .viewMask             = desc->view_mask,
         .colorAttachmentCount = desc->color_count,
         .pColorAttachments    = color,
-        .pDepthAttachment     = (desc->depth_attachment != NULL) ? &depth : NULL,
+        .pDepthAttachment     = has_depth ? &depth : NULL,
     };
     vkCmdBeginRendering(cmd->buffer, &rendering_info);
 
@@ -359,7 +428,8 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
 
     vkCmdEndRendering(cmd->buffer);
 
-    uint32_t max_barriers = desc->color_count + (desc->depth_attachment != NULL ? 1 : 0);
+    bool has_depth        = (desc->depth_attachment.image != NULL);
+    uint32_t max_barriers = desc->color_count + (has_depth ? 1 : 0);
     if(max_barriers == 0)
     {
         return;
@@ -375,31 +445,39 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
 
     for(uint32_t i = 0; i < desc->color_count; i++)
     {
-        PImage* img = desc->color_attachments[i];
+        const PAttachmentRef* ref = &desc->color_attachments[i];
+        PImage* img               = ref->image;
         if(!(img->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
         {
             continue;
         }
         barriers[barrier_count++] = (PImageBarrier) {
-            .image      = img,
-            .old_layout = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
-            .new_layout = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
-            .src        = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
-            .dst        = {        P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
-            .mip_count  = img->mip_levels,
+            .image       = img,
+            .old_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
+            .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+            .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            .dst         = {        P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+            .base_mip    = ref->mip_level,
+            .mip_count   = 1,
+            .base_layer  = ref->base_layer,
+            .layer_count = ref->layer_count,
         };
     }
 
-    if(desc->depth_attachment != NULL && (desc->depth_attachment->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+    if(has_depth && (desc->depth_attachment.image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
     {
-        PImage* img               = desc->depth_attachment;
+        const PAttachmentRef* ref = &desc->depth_attachment;
+        PImage* img               = ref->image;
         barriers[barrier_count++] = (PImageBarrier) {
-            .image      = img,
-            .old_layout = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
-            .new_layout = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
-            .src        = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-            .dst        = {    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,            P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
-            .mip_count  = img->mip_levels,
+            .image       = img,
+            .old_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+            .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+            .src         = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .dst         = {    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,            P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+            .base_mip    = ref->mip_level,
+            .mip_count   = 1,
+            .base_layer  = ref->base_layer,
+            .layer_count = ref->layer_count,
         };
     }
 

@@ -13,7 +13,7 @@ layout(push_constant) uniform constants {
 } push;
 
 layout(binding = 0) uniform sampler _sampler[];
-layout(binding = 2) uniform texture2D _image[];
+layout(binding = 3) uniform texture2D _image[];
 
 layout(location = 0) in vec4 fragColor;
 layout(location = 1) in vec2 fragTexCoord;

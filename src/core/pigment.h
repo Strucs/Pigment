@@ -26,6 +26,7 @@
 #include "surface.h"
 #include "buffers.h"
 #include "image.h"
+#include "resize.h"
 
 Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);

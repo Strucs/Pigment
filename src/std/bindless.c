@@ -39,6 +39,19 @@ typedef struct PSamplerList {
     uint32_t capacity;
 } PSamplerList;
 
+typedef struct PTrackedRT {
+    PRenderTarget* rt;
+    uint32_t first_slot;
+    uint32_t color_count;
+    uint32_t last_seen_generation;
+} PTrackedRT;
+
+typedef struct PTrackedRTList {
+    PTrackedRT* targets;
+    uint32_t count;
+    uint32_t capacity;
+} PTrackedRTList;
+
 struct PStdBindless {
     PDescriptorSetLayout* layout;
     PDescriptorPool* pool;
@@ -47,8 +60,15 @@ struct PStdBindless {
 
     PImageList images;
     PImageList cubemaps;
+    PImageList render_targets;
     PSamplerList samplers;
+    PTrackedRTList tracked_rts;
 };
+
+#define PIGMENT_BINDLESS_BINDING_SAMPLERS 0
+#define PIGMENT_BINDLESS_BINDING_CUBEMAPS 1
+#define PIGMENT_BINDLESS_BINDING_RENDER_TARGETS 2
+#define PIGMENT_BINDLESS_BINDING_IMAGES 3
 
 static int image_list_append(PImageList* image_list, PImage* image);
 static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type);
@@ -60,18 +80,21 @@ static int add_default_image(Pigment* pigment, PStdBindless* bindless);
 static int sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers);
 static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list);
 static int image_list_init(PImageList* image_list);
-static void image_list_destroy(Pigment* pigment, PImageList* image_list);
+static void image_list_destroy(Pigment* pigment, PImageList* image_list, bool owns_images);
 static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PSampler* sampler);
 static void write_cubemap_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
+static void write_render_target_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, uint32_t start_slot, uint32_t count);
+static int tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry);
+static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless);
 
 static inline int imax(int a, int b)
 {
     return a > b ? a : b;
 }
 
-PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps)
+PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
 {
     if(pigment == NULL || max_images == 0 || max_samplers == 0)
     {
@@ -86,21 +109,28 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     PDescriptorBinding bindings[] = {
         {
-         .binding = 0,
+         .binding = PIGMENT_BINDLESS_BINDING_SAMPLERS,
          .type    = P_DESCRIPTOR_TYPE_SAMPLER,
          .count   = max_samplers,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
          .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
          },
         {
-         .binding = 1,
+         .binding = PIGMENT_BINDLESS_BINDING_CUBEMAPS,
          .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .count   = (max_cubemaps == 0) ? 1 : max_cubemaps,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
          .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
          },
         {
-         .binding = 2,
+         .binding = PIGMENT_BINDLESS_BINDING_RENDER_TARGETS,
+         .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+         .count   = (max_render_targets == 0) ? 1 : max_render_targets,
+         .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+         },
+        {
+         .binding = PIGMENT_BINDLESS_BINDING_IMAGES,
          .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .count   = max_images,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
@@ -123,9 +153,9 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     PDescriptorPoolSize pool_sizes[] = {
         {      .type  = P_DESCRIPTOR_TYPE_SAMPLER,
-         .count = frames * max_samplers               },
+         .count = frames * max_samplers                                    },
         {.type  = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-         .count = frames * (max_images + max_cubemaps)},
+         .count = frames * (max_images + max_cubemaps + max_render_targets)},
     };
 
     PDescriptorPoolDesc pool_desc = {
@@ -167,6 +197,11 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
         goto ERROR;
     }
 
+    if(image_list_init(&bindless->render_targets) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
     if(sampler_list_init(pigment, &bindless->samplers, max_samplers) != PIGMENT_SUCCESS)
     {
         goto ERROR;
@@ -197,7 +232,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
         PDescriptorWrite writes[2] = {
             {
              .set           = bindless->sets[f],
-             .binding       = 0,
+             .binding       = PIGMENT_BINDLESS_BINDING_SAMPLERS,
              .array_element = 0,
              .type          = P_DESCRIPTOR_TYPE_SAMPLER,
              .count         = bindless->samplers.count,
@@ -205,7 +240,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
              },
             {
              .set           = bindless->sets[f],
-             .binding       = 2,
+             .binding       = PIGMENT_BINDLESS_BINDING_IMAGES,
              .array_element = 0,
              .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
              .count         = 1,
@@ -229,9 +264,11 @@ void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless)
     {
         return;
     }
-    image_list_destroy(pigment, &bindless->images);
-    image_list_destroy(pigment, &bindless->cubemaps);
+    image_list_destroy(pigment, &bindless->images, true);
+    image_list_destroy(pigment, &bindless->cubemaps, true);
+    image_list_destroy(pigment, &bindless->render_targets, false);
     sampler_list_destroy(pigment, &bindless->samplers);
+    free(bindless->tracked_rts.targets);
     free(bindless->sets);
     pigment_destroy_descriptor_pool(pigment, bindless->pool);
     pigment_destroy_descriptor_set_layout(pigment, bindless->layout);
@@ -242,14 +279,14 @@ uint32_t pigment_std_upload_image(Pigment* pigment, PStdBindless* bindless, cons
 {
     if(pigment == NULL || bindless == NULL || pixels == NULL || width == 0 || height == 0)
     {
-        return 0;
+        return UINT32_MAX;
     }
 
     uint32_t slot = bindless->images.count;
 
     if(add_image_from_pixels(pigment, bindless, pixels, width, height, format) != PIGMENT_SUCCESS)
     {
-        return 0;
+        return UINT32_MAX;
     }
 
     write_image_descriptor(pigment, bindless, slot, bindless->images.images[slot]);
@@ -261,12 +298,12 @@ uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless
 {
     if(pigment == NULL || bindless == NULL || pixels == NULL || count == 0)
     {
-        return 0;
+        return UINT32_MAX;
     }
 
     PBuffer** stagings  = calloc(count, sizeof(*stagings));
     PImage** new_images = calloc(count, sizeof(*new_images));
-    uint32_t start_slot = 0;
+    uint32_t start_slot = UINT32_MAX;
 
     if(stagings == NULL || new_images == NULL)
     {
@@ -307,7 +344,7 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
 {
     if(pigment == NULL || bindless == NULL || desc == NULL)
     {
-        return 0;
+        return UINT32_MAX;
     }
 
     PSamplerList* samplers = &bindless->samplers;
@@ -324,13 +361,13 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
     if(slot >= samplers->capacity)
     {
         PLOG_ERROR(pigment, "Max samplers reached (%u)", samplers->capacity);
-        return 0;
+        return UINT32_MAX;
     }
 
     PSampler* sampler = pigment_create_sampler(pigment, desc);
     if(sampler == NULL)
     {
-        return 0;
+        return UINT32_MAX;
     }
     samplers->samplers[slot] = sampler;
     samplers->descs[slot]    = *desc;
@@ -344,7 +381,7 @@ uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, co
 {
     if(pigment == NULL || bindless == NULL || faces == NULL || face_width == 0 || face_height == 0)
     {
-        return 0;
+        return UINT32_MAX;
     }
 
     PBuffer* staging = NULL;
@@ -373,7 +410,47 @@ uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, co
 ERROR:
     pigment_destroy_buffer(pigment, staging);
     pigment_destroy_image(pigment, image);
-    return 0;
+    return UINT32_MAX;
+}
+
+uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt)
+{
+    if(pigment == NULL || bindless == NULL || rt == NULL)
+    {
+        return UINT32_MAX;
+    }
+
+    PImage** color_images = pigment_std_render_target_colors(rt);
+    uint32_t color_count  = pigment_std_render_target_color_count(rt);
+    if(color_images == NULL || color_count == 0)
+    {
+        return UINT32_MAX;
+    }
+
+    uint32_t first_slot = bindless->render_targets.count;
+
+    for(uint32_t i = 0; i < color_count; i++)
+    {
+        if(image_list_append(&bindless->render_targets, color_images[i]) != PIGMENT_SUCCESS)
+        {
+            return UINT32_MAX;
+        }
+        write_render_target_descriptor(pigment, bindless, first_slot + i, color_images[i]);
+    }
+
+    PTrackedRT entry = {
+        .rt                   = rt,
+        .first_slot           = first_slot,
+        .color_count          = color_count,
+        .last_seen_generation = pigment_std_render_target_generation(rt),
+    };
+
+    if(tracked_rt_list_append(&bindless->tracked_rts, entry) != PIGMENT_SUCCESS)
+    {
+        return UINT32_MAX;
+    }
+
+    return first_slot;
 }
 
 PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless)
@@ -381,7 +458,7 @@ PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless)
     return (bindless != NULL) ? bindless->layout : NULL;
 }
 
-PDescriptorSet* pigment_std_bindless_set(PStdBindless* bindless, uint32_t current_frame)
+PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, uint32_t current_frame)
 {
     if(bindless == NULL)
     {
@@ -392,6 +469,8 @@ PDescriptorSet* pigment_std_bindless_set(PStdBindless* bindless, uint32_t curren
     {
         return NULL;
     }
+
+    sync_tracked_rts(pigment, bindless);
 
     return bindless->sets[current_frame];
 }
@@ -410,11 +489,14 @@ static int image_list_init(PImageList* image_list)
     return PIGMENT_SUCCESS;
 }
 
-static void image_list_destroy(Pigment* pigment, PImageList* image_list)
+static void image_list_destroy(Pigment* pigment, PImageList* image_list, bool owns_images)
 {
-    for(uint32_t i = 0; i < image_list->count; i++)
+    if(owns_images)
     {
-        pigment_destroy_image(pigment, image_list->images[i]);
+        for(uint32_t i = 0; i < image_list->count; i++)
+        {
+            pigment_destroy_image(pigment, image_list->images[i]);
+        }
     }
 
     free(image_list->images);
@@ -425,13 +507,14 @@ static int image_list_append(PImageList* image_list, PImage* image)
     if(image_list->count >= image_list->capacity)
     {
         uint32_t new_capacity = image_list->capacity * 2;
-        PImage** new_ptr      = realloc(image_list->images, new_capacity * sizeof(*new_ptr));
+
+        PImage** new_ptr = realloc(image_list->images, new_capacity * sizeof(*new_ptr));
         if(new_ptr == NULL)
         {
             return PIGMENT_ERROR;
         }
 
-        image_list->images   = new_ptr;
+        image_list->images = new_ptr;
         image_list->capacity = new_capacity;
     }
 
@@ -646,7 +729,7 @@ static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, u
     {
         PDescriptorWrite write = {
             .set           = bindless->sets[i],
-            .binding       = 0,
+            .binding       = PIGMENT_BINDLESS_BINDING_SAMPLERS,
             .array_element = slot,
             .type          = P_DESCRIPTOR_TYPE_SAMPLER,
             .count         = 1,
@@ -656,17 +739,14 @@ static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, u
     }
 }
 
-static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image)
+static void write_sampled_image_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t binding, uint32_t slot, PImage* image)
 {
-    PDescriptorImageInfo info = {
-        .image = image
-    };
-
+    PDescriptorImageInfo info = {.image = image};
     for(uint32_t i = 0; i < bindless->set_count; i++)
     {
         PDescriptorWrite write = {
             .set           = bindless->sets[i],
-            .binding       = 2,
+            .binding       = binding,
             .array_element = slot,
             .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
             .count         = 1,
@@ -676,21 +756,19 @@ static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uin
     }
 }
 
+static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image)
+{
+    write_sampled_image_descriptor(pigment, bindless, PIGMENT_BINDLESS_BINDING_IMAGES, slot, image);
+}
+
 static void write_cubemap_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image)
 {
-    PDescriptorImageInfo info = {.image = image};
-    for(uint32_t i = 0; i < bindless->set_count; i++)
-    {
-        PDescriptorWrite write = {
-            .set           = bindless->sets[i],
-            .binding       = 1,
-            .array_element = slot,
-            .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-            .count         = 1,
-            .image_infos   = &info,
-        };
-        pigment_write_descriptors(pigment, &write, 1);
-    }
+    write_sampled_image_descriptor(pigment, bindless, PIGMENT_BINDLESS_BINDING_CUBEMAPS, slot, image);
+}
+
+static void write_render_target_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image)
+{
+    write_sampled_image_descriptor(pigment, bindless, PIGMENT_BINDLESS_BINDING_RENDER_TARGETS, slot, image);
 }
 
 static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, uint32_t start_slot, uint32_t count)
@@ -710,7 +788,7 @@ static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, ui
     {
         PDescriptorWrite write = {
             .set           = bindless->sets[f],
-            .binding       = 2,
+            .binding       = PIGMENT_BINDLESS_BINDING_IMAGES,
             .array_element = start_slot,
             .type          = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
             .count         = count,
@@ -720,4 +798,43 @@ static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, ui
         pigment_write_descriptors(pigment, &write, 1);
     }
     free(infos);
+}
+
+static int tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry)
+{
+    if(list->count >= list->capacity)
+    {
+        uint32_t new_capacity = (list->capacity == 0) ? 4 : list->capacity * 2;
+        PTrackedRT* new_ptr   = realloc(list->targets, new_capacity * sizeof(*new_ptr));
+        if(new_ptr == NULL)
+        {
+            return PIGMENT_ERROR;
+        }
+        list->targets  = new_ptr;
+        list->capacity = new_capacity;
+    }
+
+    list->targets[list->count++] = entry;
+    return PIGMENT_SUCCESS;
+}
+
+static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless)
+{
+    for(uint32_t i = 0; i < bindless->tracked_rts.count; i++)
+    {
+        PTrackedRT* tracked = &bindless->tracked_rts.targets[i];
+        uint32_t current    = pigment_std_render_target_generation(tracked->rt);
+        if(current == tracked->last_seen_generation)
+        {
+            continue;
+        }
+
+        PImage** color_images = pigment_std_render_target_colors(tracked->rt);
+        for(uint32_t s = 0; s < tracked->color_count; s++)
+        {
+            bindless->render_targets.images[tracked->first_slot + s] = color_images[s];
+            write_render_target_descriptor(pigment, bindless, tracked->first_slot + s, color_images[s]);
+        }
+        tracked->last_seen_generation = current;
+    }
 }

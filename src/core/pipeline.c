@@ -195,6 +195,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
 
     build->rendering = (VkPipelineRenderingCreateInfoKHR) {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+        .viewMask                = desc->view_mask,
         .colorAttachmentCount    = build->color_format_count,
         .pColorAttachmentFormats = build->color_formats,
         .depthAttachmentFormat   = (VkFormat) desc->depth_format,

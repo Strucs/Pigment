@@ -44,6 +44,12 @@ alignas(uint32_t) static constexpr unsigned char skybox_vertex_spv[] = {
 alignas(uint32_t) static constexpr unsigned char skybox_fragment_spv[] = {
     #embed <skybox_frag.spv>
 };
+alignas(uint32_t) static constexpr unsigned char crt_vertex_spv[] = {
+    #embed <crt_vert.spv>
+};
+alignas(uint32_t) static constexpr unsigned char crt_fragment_spv[] = {
+    #embed <crt_frag.spv>
+};
 
 char* load_shader_code(const char* file_path, uint32_t* shader_size)
 {
@@ -218,6 +224,41 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
     desc.vertex_spv_size   = (uint32_t) sizeof(skybox_vertex_spv);
     desc.fragment_spv      = (const uint32_t*) skybox_fragment_spv;
     desc.fragment_spv_size = (uint32_t) sizeof(skybox_fragment_spv);
+
+    desc.color_formats      = color_formats;
+    desc.color_format_count = color_format_count;
+    desc.depth_format       = depth_format;
+    desc.polygon_mode       = P_POLYGON_MODE_FILL;
+    desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
+    desc.blend_modes        = NULL;
+    desc.blend_mode_count   = 0;
+    desc.sample_count       = P_SAMPLE_COUNT_1;
+
+    return desc;
+}
+
+static PLayout* default_crt_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
+{
+    PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
+    PLayoutDesc desc                     = {
+        .set_layouts      = set_layouts,
+        .set_layout_count = 1,
+        .push_size        = sizeof(PStdCrtPushConstants),
+        .push_stages      = P_SHADER_STAGE_FRAGMENT_BIT,
+    };
+    return pigment_create_layout(pigment, &desc);
+}
+
+PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+{
+    PPipelineDesc desc = {0};
+
+    desc.layout = default_crt_pipeline_layout(pigment, bindless);
+
+    desc.vertex_spv        = (const uint32_t*) crt_vertex_spv;
+    desc.vertex_spv_size   = (uint32_t) sizeof(crt_vertex_spv);
+    desc.fragment_spv      = (const uint32_t*) crt_fragment_spv;
+    desc.fragment_spv_size = (uint32_t) sizeof(crt_fragment_spv);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;

@@ -137,8 +137,8 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
         goto ERROR;
     }
 
-    pigment->tracked_images = create_tracked_image_list();
-    if(pigment->tracked_images == NULL)
+    pigment->resize_callbacks = create_resize_callback_list();
+    if(pigment->resize_callbacks == NULL)
     {
         goto ERROR;
     }
@@ -175,7 +175,7 @@ void destroy_pigment(Pigment* pigment)
     }
     destroy_pipeline_list(pigment, pigment->pipelines);
     destroy_layout_list(pigment, pigment->layouts);
-    destroy_tracked_image_list(pigment->tracked_images);
+    destroy_resize_callback_list(pigment->resize_callbacks);
     destroy_command_pools(pigment, pigment->command_pools);
     if(pigment->owns_allocator)
     {

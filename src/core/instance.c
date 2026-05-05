@@ -361,6 +361,7 @@ static int build_instance_extensions(Pigment* pigment, PInstance* instance, cons
 
     instance->extensions->names = names;
     instance->extensions->size  = count;
+    names = NULL;
     return PIGMENT_SUCCESS;
 
 ERROR:

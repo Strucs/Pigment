@@ -21,12 +21,21 @@
 #include "pipeline.h"
 #include "buffers.h"
 
+typedef struct PAttachmentRef {
+    PImage* image;
+    uint32_t base_layer;
+    uint32_t layer_count;
+    uint32_t mip_level;
+} PAttachmentRef;
+
 struct PRenderPassDesc {
-    PImage** color_attachments;
+    PAttachmentRef* color_attachments;
     uint32_t color_count;
-    PImage* depth_attachment;
+    PAttachmentRef depth_attachment;
     float clear_color[4];
     float depth_clear_value;
+    uint32_t layer_count;
+    uint32_t view_mask;
 };
 
 bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index);

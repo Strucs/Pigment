@@ -493,7 +493,8 @@ static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* su
     device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (bool) available_2.features.fillModeNonSolid;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .multiview = VK_TRUE,
     };
     VkPhysicalDeviceVulkan12Features vk12_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,

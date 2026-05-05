@@ -77,12 +77,4 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
 uint32_t pigment_image_width(PImage* image);
 uint32_t pigment_image_height(PImage* image);
 
-/**
- * Track an image to a swapchain: when the swapchain is resized, the image is recreated with
- * width = swapchain.width * scale, height = swapchain.height * scale.
- * Untrack happens automatically when the image is destroyed.
- */
-void pigment_image_track_swapchain(Pigment* pigment, PImage* image, uint32_t window_index, float scale);
-void pigment_image_untrack(Pigment* pigment, PImage* image);
-
 #endif

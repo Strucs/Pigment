@@ -155,11 +155,11 @@ typedef struct PDescriptorSet PDescriptorSet;
 
 typedef struct PImage PImage;
 
+typedef struct PImageView PImageView;
+
 typedef struct PSampler PSampler;
 
-typedef struct PTrackedImage PTrackedImage;
-
-typedef struct PTrackedImageList PTrackedImageList;
+typedef struct PResizeCallbackList PResizeCallbackList;
 
 typedef struct PBuffer PBuffer;
 
@@ -170,6 +170,14 @@ typedef struct PRenderPassDesc PRenderPassDesc;
 typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
 
 typedef struct PigmentLogger PigmentLogger;
+
+typedef struct PSwapchainResizeEvent {
+    uint32_t window_index;
+    uint32_t width;
+    uint32_t height;
+} PSwapchainResizeEvent;
+
+typedef void (*PSwapchainResizeFn)(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data);
 
 typedef enum PShaderStageFlags {
     P_SHADER_STAGE_VERTEX_BIT   = 1 << 0,
@@ -198,6 +206,12 @@ typedef enum PFormat {
     P_FORMAT_B8G8R8A8_UNORM      = 44,
     P_FORMAT_B8G8R8A8_SRGB       = 50,
     P_FORMAT_R16G16B16A16_SFLOAT = 97,
+    P_FORMAT_D16_UNORM           = 124,
+    P_FORMAT_D32_SFLOAT          = 126,
+    P_FORMAT_S8_UINT             = 127,
+    P_FORMAT_D16_UNORM_S8_UINT   = 128,
+    P_FORMAT_D24_UNORM_S8_UINT   = 129,
+    P_FORMAT_D32_SFLOAT_S8_UINT  = 130,
 } PFormat;
 
 typedef enum PCompareOp {
@@ -258,6 +272,23 @@ typedef enum PImageLayout {
     P_IMAGE_LAYOUT_TRANSFER_DST             = 7,
     P_IMAGE_LAYOUT_PRESENT                  = 8,
 } PImageLayout;
+
+typedef enum PImageAspect {
+    P_IMAGE_ASPECT_INHERIT       = 0,    // use image->aspect
+    P_IMAGE_ASPECT_COLOR         = 1,
+    P_IMAGE_ASPECT_DEPTH         = 2,
+    P_IMAGE_ASPECT_STENCIL       = 3,
+    P_IMAGE_ASPECT_DEPTH_STENCIL = 4,
+} PImageAspect;
+
+typedef enum PImageViewType {
+    P_IMAGE_VIEW_TYPE_AUTO       = 0,    // derive from layer_count and create flags
+    P_IMAGE_VIEW_TYPE_2D         = 1,
+    P_IMAGE_VIEW_TYPE_2D_ARRAY   = 2,
+    P_IMAGE_VIEW_TYPE_CUBE       = 3,
+    P_IMAGE_VIEW_TYPE_CUBE_ARRAY = 4,
+    P_IMAGE_VIEW_TYPE_3D         = 5,
+} PImageViewType;
 
 typedef struct PigmentConfig {
     uint32_t max_frames_in_flight;

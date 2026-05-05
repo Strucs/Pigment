@@ -14,7 +14,7 @@ int main(void)
         .width                  = 1280,
         .height                 = 720,
         .title                  = "Primitives + Instancing",
-        .preferred_present_mode = P_PRESENT_MODE_DEFAULT,
+        .preferred_present_mode = P_PRESENT_MODE_FIFO,
         .flags                  = P_WINDOW_FLAGS_DEFAULT,
     };
 
@@ -26,9 +26,13 @@ int main(void)
     PLights* lights                     = NULL;
     PPipeline* pipeline                 = NULL;
     PPipeline* skybox_pipeline          = NULL;
+    PPipeline* crt_pipeline             = NULL;
     PPipelineBuild* build               = NULL;
     PPipelineBuild* skybox_build        = NULL;
+    PPipelineBuild* crt_build           = NULL;
+    PRenderTarget* rt                   = NULL;
     uint32_t cubemap_slot               = 0;
+    uint32_t rt_slot                    = 0;
     PMeshBuffers* gpu_cube              = NULL;
     PMeshBuffers* gpu_sphere            = NULL;
     PMeshBuffers* gpu_plane             = NULL;
@@ -59,7 +63,7 @@ int main(void)
         goto FREE;
     }
 
-    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS, PIGMENT_DEFAULT_MAX_CUBEMAPS);
+    bindless = pigment_std_create_bindless(pigment, PIGMENT_DEFAULT_MAX_IMAGES, PIGMENT_DEFAULT_MAX_SAMPLERS, PIGMENT_DEFAULT_MAX_CUBEMAPS, PIGMENT_DEFAULT_MAX_RENDER_TARGETS);
     if(bindless == NULL)
     {
         fprintf(stderr, "Failed to create bindless!\n");
@@ -91,7 +95,7 @@ int main(void)
         .type      = P_LIGHT_TYPE_DIRECTIONAL,
         .direction = {-0.4f, -1.0f, -0.3f},
         .color     = { 1.0f, 0.95f, 0.85f},
-        .intensity = 1.0f,
+        .intensity = 10.0f,
     };
     pigment_std_light_create(pigment, lights, &sun);
 
@@ -164,6 +168,20 @@ int main(void)
         }
     }
 
+    rt = pigment_std_create_render_target(pigment, &(PRenderTargetDesc) {
+                                                       .window_index = 0,
+                                                       .colors       = (PAttachmentDesc[]) {{.format = color_format, .scale = 1.0f}},
+                                                       .color_count  = 1,
+                                                       .depth        = {.format = depth_format, .scale = 1.0f},
+    });
+    if(rt == NULL)
+    {
+        fprintf(stderr, "Failed to create render targets!\n");
+        goto FREE;
+    }
+
+    rt_slot = pigment_std_register_render_target(pigment, bindless, rt);
+
     PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
     build              = pigment_pipeline_build_from_desc(pigment, &desc);
     if(build == NULL)
@@ -182,6 +200,14 @@ int main(void)
     if(skybox_build == NULL || pigment_create_graphic_pipelines(pigment, &skybox_build, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create skybox pipeline!\n");
+        goto FREE;
+    }
+
+    PPipelineDesc crt_desc = default_crt_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    crt_build              = pigment_pipeline_build_from_desc(pigment, &crt_desc);
+    if(crt_build == NULL || pigment_create_graphic_pipelines(pigment, &crt_build, 1, &crt_pipeline) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create CRT pipeline!\n");
         goto FREE;
     }
 
@@ -285,12 +311,29 @@ int main(void)
         {
             continue;
         }
-        pigment_begin_swapchain_pass(pigment, 0);
+
+        PAttachmentRef scene_colors[] = {pigment_std_render_target_color_ref(rt, 0)};
+        PRenderPassDesc scene_pass    = {
+            .color_attachments = scene_colors,
+            .color_count       = 1,
+            .depth_attachment  = pigment_std_render_target_depth_ref(rt),
+            .clear_color       = {0.0f, 0.0f, 0.0f, 1.0f},
+            .depth_clear_value = 0.0f,
+        };
+        pigment_begin_render_pass(pigment, cmd, &scene_pass);
+
         pigment_bind_pipeline(pigment, cmd, pipeline);
         pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipeline, draw_calls, 5);
 
         pigment_bind_pipeline(pigment, cmd, skybox_pipeline);
         pigment_std_draw_skybox(pigment, 0, bindless, skybox_pipeline, camera, cubemap_slot, 0);
+
+        pigment_end_render_pass(pigment, cmd, &scene_pass);
+
+        pigment_begin_swapchain_pass(pigment, 0);
+
+        pigment_bind_pipeline(pigment, cmd, crt_pipeline);
+        pigment_std_draw_crt(pigment, 0, bindless, crt_pipeline, rt_slot, 1);
 
         pigment_end_swapchain_pass(pigment, 0);
 
@@ -325,6 +368,7 @@ FREE:
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     pigment_std_destroy_bindless(pigment, bindless);
+    pigment_std_destroy_render_target(pigment, rt);
     destroy_pigment(pigment);
 
     return error_code;

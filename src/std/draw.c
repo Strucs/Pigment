@@ -92,7 +92,7 @@ void pigment_draw(Pigment* pigment, uint32_t window_index, PStdBindless* bindles
     PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
     uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
 
-    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(bindless, current_frame));
+    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(pigment, bindless, current_frame));
 
     if(current_frame != ring->last_seen_frame)
     {
@@ -152,7 +152,7 @@ void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindle
     PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
     uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
 
-    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(bindless, current_frame));
+    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(pigment, bindless, current_frame));
 
     pigment_std_camera_upload(camera, current_frame);
 
@@ -165,5 +165,37 @@ void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindle
 
     pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_FRONT, P_FRONT_FACE_COUNTER_CLOCKWISE);
     pigment_cmd_set_depth(pigment, cmd, true, false, P_COMPARE_OP_GREATER_OR_EQUAL);
+    pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
+}
+
+void pigment_std_draw_crt(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot)
+{
+    if(pigment == NULL || bindless == NULL || pipeline == NULL)
+    {
+        return;
+    }
+
+    PCommandBuffer* cmd       = pigment_window_frame_cmd(pigment, window_index);
+    uint32_t current_frame    = pigment_window_current_frame(pigment, window_index);
+    PWindowRenderer* renderer = pigment_get_window_renderer(pigment, window_index);
+
+    uint32_t w = 0;
+    uint32_t h = 0;
+    pigment_get_swapchain_size(renderer, &w, &h);
+
+    pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(pigment, bindless, current_frame));
+
+    PStdCrtPushConstants push = {
+        .texture_id   = texture_slot,
+        .sampler_id   = sampler_slot,
+        .time         = (float) SDL_GetTicks() / 1000.0f,
+        .aspect       = (h == 0) ? 1.0f : (float) w / (float) h,
+        .resolution_x = (float) w,
+        .resolution_y = (float) h,
+    };
+    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
+
+    pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_NONE, P_FRONT_FACE_COUNTER_CLOCKWISE);
+    pigment_cmd_set_depth(pigment, cmd, false, false, P_COMPARE_OP_ALWAYS);
     pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 }

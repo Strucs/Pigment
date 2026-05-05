@@ -104,7 +104,7 @@ struct Pigment {
     PCommandPoolList* command_pools;
     PPipelineList* pipelines;
     PLayoutList* layouts;
-    PTrackedImageList* tracked_images;
+    PResizeCallbackList* resize_callbacks;
 
     PRuntimeConfig config;
     PLogState* log;
@@ -277,39 +277,63 @@ struct PDescriptorSet {
     VkDescriptorSet set;
 };
 
+typedef struct PImageViewDesc {
+    PFormat format;             // 0 (P_FORMAT_UNDEFINED) = inherit image->vk_format
+    PImageAspect aspect;        // 0 (P_IMAGE_ASPECT_INHERIT) = inherit image->aspect
+    PImageViewType view_type;   // 0 (P_IMAGE_VIEW_TYPE_AUTO) = derive from layer_count and image create flags
+    uint32_t base_layer;
+    uint32_t layer_count;       // 0 = remaining
+    uint32_t base_mip;
+    uint32_t mip_count;         // 0 = remaining
+} PImageViewDesc;
+
+struct PImageView {
+    PImageViewDesc desc;
+    VkImageView view;
+};
+
+typedef struct PImageViewCache {
+    PImageView** views;
+    uint32_t count;
+    uint32_t capacity;
+} PImageViewCache;
+
 struct PImage {
     VkImage image;
-    VkImageView image_view;
     PVkAllocation* image_allocation;
-    uint32_t mip_levels;
 
     uint32_t width;
     uint32_t height;
     uint32_t depth;
+    uint32_t mip_levels;
     uint32_t array_layers;
     VkFormat vk_format;
     VkImageUsageFlags vk_usage;
     VkImageType vk_image_type;
-    VkImageViewType vk_view_type;
     VkImageCreateFlags vk_create_flags;
     VkSampleCountFlagBits vk_samples;
     VkImageAspectFlags aspect;
+
+    PImageViewCache view_cache;
 };
 
 struct PSampler {
     VkSampler sampler;
 };
 
-struct PTrackedImage {
-    PImage* image;
-    uint32_t window_index;
-    float scale;
-};
+typedef struct PResizeCallback {
+    PSwapchainResizeFn func;
+    void* user_data;
+    uint32_t handle;
+    bool alive;
+} PResizeCallback;
 
-struct PTrackedImageList {
-    PTrackedImage* tracked_images;
+struct PResizeCallbackList {
+    pigment_rwlock_t lock;
+    PResizeCallback* callbacks;
     uint32_t count;
     uint32_t capacity;
+    _Atomic uint32_t next_handle;
 };
 
 struct PBuffer {
