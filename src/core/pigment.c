@@ -58,6 +58,7 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     pigment->config.validation_enabled     = config && config->enable_validation;
     pigment->config.best_practices_enabled = config && config->enable_best_practices;
     pigment->config.depth_clear_value      = config ? config->depth_clear_value : 0.0f;
+    pigment->config.preferred_color_space  = config ? config->preferred_color_space : P_COLOR_SPACE_SRGB_NONLINEAR;
     pigment->config.extra                  = config ? config->extra : NULL;
 
     pigment->window_capacity = PIGMENT_DEFAULT_WINDOW_CAPACITY;

@@ -300,6 +300,10 @@ static int build_instance_extensions(Pigment* pigment, PInstance* instance, cons
     {
         max_extensions++;
     }
+    if(pigment->config.preferred_color_space != P_COLOR_SPACE_SRGB_NONLINEAR)
+    {
+        max_extensions++;
+    }
     if(vk_init != NULL)
     {
         max_extensions += vk_init->req_instance_extensions_count;
@@ -326,6 +330,12 @@ static int build_instance_extensions(Pigment* pigment, PInstance* instance, cons
     if(pigment->config.validation_enabled && !name_in_list((const char* const*) names, count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
     {
         names[count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    }
+    if(pigment->config.preferred_color_space != P_COLOR_SPACE_SRGB_NONLINEAR
+       && extension_available(available, available_count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)
+       && !name_in_list((const char* const*) names, count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))
+    {
+        names[count++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
     }
 
     if(vk_init != NULL)
@@ -361,7 +371,7 @@ static int build_instance_extensions(Pigment* pigment, PInstance* instance, cons
 
     instance->extensions->names = names;
     instance->extensions->size  = count;
-    names = NULL;
+    names                       = NULL;
     return PIGMENT_SUCCESS;
 
 ERROR:

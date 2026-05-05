@@ -88,6 +88,7 @@ typedef struct PRuntimeConfig {
     bool validation_enabled;
     bool best_practices_enabled;
     float depth_clear_value;
+    PColorSpace preferred_color_space;
     const void* extra;
 } PRuntimeConfig;
 
@@ -185,6 +186,7 @@ struct PSwapchain {
     VkImageView* image_views;
     uint32_t image_count;
     VkFormat image_format;
+    VkColorSpaceKHR color_space;
     VkExtent2D extent;
     uint32_t current_frame;
     PImage* depth;

@@ -20,13 +20,15 @@
 #include "log_internal.h"
 
 static void destroy_image_views(PSwapchain* swapchain, PDevice* device);
-static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count);
+static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred);
 static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
 static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
 static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, bool transparent);
 static PFormat find_supported_depth_format(Pigment* pigment);
 static int create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
+static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space);
+static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
 {
@@ -104,8 +106,21 @@ void destroy_support_details(SwapChainSupportDetails* details)
     }
 }
 
-static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count)
+static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred)
 {
+    VkColorSpaceKHR preferred_vk = color_space_to_vk(preferred);
+
+    if(preferred != P_COLOR_SPACE_SRGB_NONLINEAR)
+    {
+        for(size_t i = 0; i < formats_count; i++)
+        {
+            if(available_formats[i].colorSpace == preferred_vk)
+            {
+                return available_formats[i];
+            }
+        }
+    }
+
     for(size_t i = 0; i < formats_count; i++)
     {
         if(available_formats[i].format == VK_FORMAT_B8G8R8A8_SRGB && available_formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -115,6 +130,47 @@ static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_fo
     }
 
     return available_formats[0];
+}
+
+static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space)
+{
+    switch(color_space)
+    {
+        case P_COLOR_SPACE_SRGB_NONLINEAR:
+            return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+        case P_COLOR_SPACE_DISPLAY_P3_NONLINEAR:
+            return VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT;
+        case P_COLOR_SPACE_EXTENDED_SRGB_LINEAR:
+            return VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT;
+        case P_COLOR_SPACE_BT2020_LINEAR:
+            return VK_COLOR_SPACE_BT2020_LINEAR_EXT;
+        case P_COLOR_SPACE_HDR10_ST2084:
+            return VK_COLOR_SPACE_HDR10_ST2084_EXT;
+        case P_COLOR_SPACE_HDR10_HLG:
+            return VK_COLOR_SPACE_HDR10_HLG_EXT;
+    }
+    return VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+}
+
+static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space)
+{
+    switch(color_space)
+    {
+        case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+            return P_COLOR_SPACE_SRGB_NONLINEAR;
+        case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
+            return P_COLOR_SPACE_DISPLAY_P3_NONLINEAR;
+        case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+            return P_COLOR_SPACE_EXTENDED_SRGB_LINEAR;
+        case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
+            return P_COLOR_SPACE_BT2020_LINEAR;
+        case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+            return P_COLOR_SPACE_HDR10_ST2084;
+        case VK_COLOR_SPACE_HDR10_HLG_EXT:
+            return P_COLOR_SPACE_HDR10_HLG;
+        default:
+            return P_COLOR_SPACE_SRGB_NONLINEAR;
+    }
 }
 
 static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred)
@@ -213,7 +269,7 @@ PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint3
         goto ERROR;
     }
 
-    VkSurfaceFormatKHR surface_format = choose_surface_format(support_details->formats, support_details->formats_count);
+    VkSurfaceFormatKHR surface_format = choose_surface_format(support_details->formats, support_details->formats_count, pigment->config.preferred_color_space);
     VkPresentModeKHR present_mode     = choose_surface_present_modes(support_details->present_modes, support_details->present_modes_count, preferred_mode);
     VkExtent2D extent                 = choose_swap_extent(support_details->capabilities, framebuffer_width, framebuffer_height);
 
@@ -291,6 +347,7 @@ PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint3
 
     swapchain->image_count   = image_count;
     swapchain->image_format  = surface_format.format;
+    swapchain->color_space   = surface_format.colorSpace;
     swapchain->extent        = extent;
     swapchain->current_frame = 0;
 
@@ -448,6 +505,16 @@ PFormat pigment_get_depth_format(PWindowRenderer* renderer)
     }
 
     return (PFormat) renderer->swapchain->depth->vk_format;
+}
+
+PColorSpace pigment_get_color_space(PWindowRenderer* renderer)
+{
+    if(renderer == NULL || renderer->swapchain == NULL)
+    {
+        return P_COLOR_SPACE_SRGB_NONLINEAR;
+    }
+
+    return color_space_from_vk(renderer->swapchain->color_space);
 }
 
 void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height)

@@ -27,6 +27,7 @@ int create_image_views(Pigment* pigment, PSwapchain* swapchain);
 int recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode);
 PFormat pigment_get_color_format(PWindowRenderer* renderer);
 PFormat pigment_get_depth_format(PWindowRenderer* renderer);
+PColorSpace pigment_get_color_space(PWindowRenderer* renderer);
 void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height);
 
 #endif

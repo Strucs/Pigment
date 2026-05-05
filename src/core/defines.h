@@ -60,6 +60,15 @@ typedef enum {
     P_PRESENT_MODE_FIFO_RELAXED = 3,    // vsync, tears if frame is late
 } PPresentMode;
 
+typedef enum PColorSpace {
+    P_COLOR_SPACE_SRGB_NONLINEAR       = 0,    // SDR sRGB nonlinear (default)
+    P_COLOR_SPACE_DISPLAY_P3_NONLINEAR = 1,    // wide gamut, SDR
+    P_COLOR_SPACE_EXTENDED_SRGB_LINEAR = 2,    // scRGB, 16-bit float, linear, HDR-capable
+    P_COLOR_SPACE_BT2020_LINEAR        = 3,    // BT.2020 linear
+    P_COLOR_SPACE_HDR10_ST2084         = 4,    // HDR10 / PQ (10-bit, perceptual quantizer)
+    P_COLOR_SPACE_HDR10_HLG            = 5,    // HDR10 / HLG (broadcast)
+} PColorSpace;
+
 #define P_PRESENT_MODE_DEFAULT P_PRESENT_MODE_MAILBOX
 
 typedef enum PQueueFamily {
@@ -296,7 +305,8 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     bool enable_validation;
     bool enable_best_practices;
-    float depth_clear_value;    // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    float depth_clear_value;          // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    PColorSpace preferred_color_space; // 0 = SRGB. HDR values require a compatible display + driver, falls back to SRGB silently if unsupported.
     const void* extra;
 } PigmentConfig;
 
