@@ -392,7 +392,7 @@ static PFormat find_supported_depth_format(Pigment* pigment)
 {
     VkPhysicalDevice physical_device = pigment->device->physical_device;
 
-    VkFormat candidates[] = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT};
+    VkFormat candidates[] = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT};
     for(uint32_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++)
     {
         VkFormatProperties props;

@@ -30,6 +30,12 @@ typedef enum PStencilOp {
     P_STENCIL_OP_DECREMENT_AND_WRAP  = 7,
 } PStencilOp;
 
+typedef enum PStencilFaceFlags {
+    P_STENCIL_FACE_FRONT_BIT      = 1,
+    P_STENCIL_FACE_BACK_BIT       = 2,
+    P_STENCIL_FACE_FRONT_AND_BACK = 3,
+} PStencilFaceFlags;
+
 typedef enum PTopology {
     P_TOPOLOGY_POINT_LIST     = 0,
     P_TOPOLOGY_LINE_LIST      = 1,

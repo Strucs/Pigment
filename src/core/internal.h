@@ -45,6 +45,23 @@ static inline bool extension_available(const VkExtensionProperties* available, u
     return false;
 }
 
+static inline bool format_has_depth(PFormat f)
+{
+    return f == P_FORMAT_D16_UNORM
+           || f == P_FORMAT_D32_SFLOAT
+           || f == P_FORMAT_D16_UNORM_S8_UINT
+           || f == P_FORMAT_D24_UNORM_S8_UINT
+           || f == P_FORMAT_D32_SFLOAT_S8_UINT;
+}
+
+static inline bool format_has_stencil(PFormat f)
+{
+    return f == P_FORMAT_S8_UINT
+           || f == P_FORMAT_D16_UNORM_S8_UINT
+           || f == P_FORMAT_D24_UNORM_S8_UINT
+           || f == P_FORMAT_D32_SFLOAT_S8_UINT;
+}
+
 // window.c
 const char* const* window_get_vk_instance_extensions(Pigment* pigment, uint32_t* out_count);
 bool window_create_vk_surface(Pigment* pigment, PWindow* window, VkSurfaceKHR* out_surface);

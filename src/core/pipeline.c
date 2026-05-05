@@ -16,6 +16,7 @@
 
 #include "pipeline.h"
 #include "structs.h"
+#include "internal.h"
 #include "log_internal.h"
 
 static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
@@ -163,6 +164,9 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
         VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE,
         VK_DYNAMIC_STATE_STENCIL_OP,
+        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+        VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         VK_DYNAMIC_STATE_DEPTH_BIAS,
         VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE,
         VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE
@@ -198,7 +202,8 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         .viewMask                = desc->view_mask,
         .colorAttachmentCount    = build->color_format_count,
         .pColorAttachmentFormats = build->color_formats,
-        .depthAttachmentFormat   = (VkFormat) desc->depth_format,
+        .depthAttachmentFormat   = format_has_depth(desc->depth_format) ? (VkFormat) desc->depth_format : VK_FORMAT_UNDEFINED,
+        .stencilAttachmentFormat = format_has_stencil(desc->depth_format) ? (VkFormat) desc->depth_format : VK_FORMAT_UNDEFINED,
     };
 
     return build;

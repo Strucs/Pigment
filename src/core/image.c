@@ -491,6 +491,11 @@ static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage)
 {
     if(usage & P_IMAGE_USAGE_RENDER_DEPTH)
     {
+        if(format == VK_FORMAT_S8_UINT)
+        {
+            return VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+
         VkImageAspectFlags aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
         if(format == VK_FORMAT_D32_SFLOAT_S8_UINT
            || format == VK_FORMAT_D24_UNORM_S8_UINT

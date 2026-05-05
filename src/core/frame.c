@@ -182,6 +182,10 @@ void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t 
         .clearValue  = {.depthStencil = clear_depth_stencil_value},
     };
 
+    bool has_stencil = (swapchain->depth->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+
+    VkRenderingAttachmentInfo stencil_attachment = depth_attachment;
+
     VkRenderingInfoKHR rendering_info = {
         .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
         .renderArea           = {{0, 0}, swapchain->extent},
@@ -189,6 +193,7 @@ void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t 
         .colorAttachmentCount = 1,
         .pColorAttachments    = &color_attachment,
         .pDepthAttachment     = &depth_attachment,
+        .pStencilAttachment   = has_stencil ? &stencil_attachment : NULL,
     };
 
     vkCmdBeginRendering(cmd->buffer, &rendering_info);
@@ -246,8 +251,10 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     {
         return;
     }
-    bool has_depth = (desc->depth_attachment.image != NULL);
-    if(desc->color_count == 0 && !has_depth)
+    bool has_ds_attachment = (desc->depth_attachment.image != NULL);
+    bool has_depth         = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+    bool has_stencil       = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+    if(desc->color_count == 0 && !has_ds_attachment)
     {
         return;
     }
@@ -270,7 +277,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         }
     }
 
-    if(has_depth)
+    if(has_ds_attachment)
     {
         const PAttachmentRef* ref = &desc->depth_attachment;
 
@@ -296,7 +303,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         height = 1;
     }
 
-    uint32_t barrier_count           = desc->color_count + (has_depth ? 1 : 0);
+    uint32_t barrier_count           = desc->color_count + (has_ds_attachment ? 1 : 0);
     PImageBarrier* barriers          = malloc(barrier_count * sizeof(*barriers));
     VkRenderingAttachmentInfo* color = (desc->color_count > 0) ? malloc(desc->color_count * sizeof(*color)) : NULL;
 
@@ -345,8 +352,9 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         };
     }
 
-    VkRenderingAttachmentInfo depth = {0};
-    if(has_depth)
+    VkRenderingAttachmentInfo depth   = {0};
+    VkRenderingAttachmentInfo stencil = {0};
+    if(has_ds_attachment)
     {
         const PAttachmentRef* ref   = &desc->depth_attachment;
         PImage* img                 = ref->image;
@@ -370,9 +378,9 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         };
         PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
 
-        VkClearDepthStencilValue clear_depth_stencil_value = {desc->depth_clear_value, 0};
+        VkClearDepthStencilValue clear_depth_stencil_value = {desc->depth_clear_value, desc->stencil_clear_value};
 
-        depth = (VkRenderingAttachmentInfo) {
+        VkRenderingAttachmentInfo attachment = {
             .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
             .imageView   = view->view,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -380,6 +388,16 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
             .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
             .clearValue  = {.depthStencil = clear_depth_stencil_value},
         };
+
+        if(has_depth)
+        {
+            depth = attachment;
+        }
+
+        if(has_stencil)
+        {
+            stencil = attachment;
+        }
     }
 
     pigment_cmd_image_barriers(pigment, cmd, barriers, barrier_count);
@@ -394,6 +412,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         .colorAttachmentCount = desc->color_count,
         .pColorAttachments    = color,
         .pDepthAttachment     = has_depth ? &depth : NULL,
+        .pStencilAttachment   = has_stencil ? &stencil : NULL,
     };
     vkCmdBeginRendering(cmd->buffer, &rendering_info);
 
@@ -428,8 +447,8 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
 
     vkCmdEndRendering(cmd->buffer);
 
-    bool has_depth        = (desc->depth_attachment.image != NULL);
-    uint32_t max_barriers = desc->color_count + (has_depth ? 1 : 0);
+    bool has_ds_attachment = (desc->depth_attachment.image != NULL);
+    uint32_t max_barriers  = desc->color_count + (has_ds_attachment ? 1 : 0);
     if(max_barriers == 0)
     {
         return;
@@ -464,7 +483,7 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
         };
     }
 
-    if(has_depth && (desc->depth_attachment.image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+    if(has_ds_attachment && (desc->depth_attachment.image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
     {
         const PAttachmentRef* ref = &desc->depth_attachment;
         PImage* img               = ref->image;
@@ -569,6 +588,42 @@ void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, bool en
         return;
     }
     vkCmdSetStencilTestEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);
+}
+
+void pigment_cmd_set_stencil_op(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, PStencilOp fail_op, PStencilOp pass_op, PStencilOp depth_fail_op, PCompareOp compare_op)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    vkCmdSetStencilOp(cmd->buffer, (VkStencilFaceFlags) faces, (VkStencilOp) fail_op, (VkStencilOp) pass_op, (VkStencilOp) depth_fail_op, (VkCompareOp) compare_op);
+}
+
+void pigment_cmd_set_stencil_compare_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    vkCmdSetStencilCompareMask(cmd->buffer, (VkStencilFaceFlags) faces, mask);
+}
+
+void pigment_cmd_set_stencil_write_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    vkCmdSetStencilWriteMask(cmd->buffer, (VkStencilFaceFlags) faces, mask);
+}
+
+void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t reference)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    vkCmdSetStencilReference(cmd->buffer, (VkStencilFaceFlags) faces, reference);
 }
 
 void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, float x, float y, float width, float height, float min_depth, float max_depth)
