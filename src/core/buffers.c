@@ -184,6 +184,10 @@ static VkBufferUsageFlags translate_usage(PBufferUsage usage)
     {
         out |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     }
+    if(usage & P_BUFFER_USAGE_INDIRECT)
+    {
+        out |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    }
     if(usage & P_BUFFER_USAGE_TRANSFER_DST)
     {
         out |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;

@@ -823,3 +823,43 @@ void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* in
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_buffer_offset, vk_index_type);
     vkCmdDrawIndexed(cmd->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
+
+void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride)
+{
+    if(pigment == NULL || cmd == NULL || indirect_buffer == NULL)
+    {
+        return;
+    }
+    vkCmdDrawIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
+}
+
+void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride)
+{
+    if(pigment == NULL || cmd == NULL || index_buffer == NULL || indirect_buffer == NULL)
+    {
+        return;
+    }
+    VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
+    vkCmdDrawIndexedIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
+}
+
+void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride)
+{
+    if(pigment == NULL || cmd == NULL || indirect_buffer == NULL || count_buffer == NULL)
+    {
+        return;
+    }
+    vkCmdDrawIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
+}
+
+void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride)
+{
+    if(pigment == NULL || cmd == NULL || index_buffer == NULL || indirect_buffer == NULL || count_buffer == NULL)
+    {
+        return;
+    }
+    VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
+    vkCmdDrawIndexedIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
+}

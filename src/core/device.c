@@ -391,16 +391,20 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
     vkGetPhysicalDeviceFeatures2(device->physical_device, &available_2);
 
-    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (PBool) available_2.features.depthBounds;
-    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (PBool) available_2.features.fillModeNonSolid;
+    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]            = (PBool) available_2.features.depthBounds;
+    device->features[P_FEATURE_WIREFRAME_RASTERIZATION]      = (PBool) available_2.features.fillModeNonSolid;
+    device->features[P_FEATURE_MULTI_DRAW_INDIRECT]          = (PBool) available_2.features.multiDrawIndirect;
+    device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] = (PBool) available_2.features.drawIndirectFirstInstance;
+    device->features[P_FEATURE_DRAW_INDIRECT_COUNT]          = (PBool) available_12.drawIndirectCount;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
         .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
         .multiview = VK_TRUE,
     };
     VkPhysicalDeviceVulkan12Features vk12_features = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .pNext = &vk11_features,
+        .sType              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext              = &vk11_features,
+        .drawIndirectCount  = device->features[P_FEATURE_DRAW_INDIRECT_COUNT] ? VK_TRUE : VK_FALSE,
     };
     VkPhysicalDeviceVulkan13Features vk13_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -409,8 +413,10 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
-                     .fillModeNonSolid = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
-                     .depthBounds      = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
+                     .fillModeNonSolid          = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
+                     .depthBounds               = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
+                     .multiDrawIndirect         = device->features[P_FEATURE_MULTI_DRAW_INDIRECT] ? VK_TRUE : VK_FALSE,
+                     .drawIndirectFirstInstance = device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] ? VK_TRUE : VK_FALSE,
                      },
         .pNext = &vk13_features,
     };

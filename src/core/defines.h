@@ -55,8 +55,11 @@ typedef enum PigmentLogType {
 } PigmentLogType;
 
 typedef enum PFeature {
-    P_FEATURE_DEPTH_BOUNDS_TEST       = 0,
-    P_FEATURE_WIREFRAME_RASTERIZATION = 1,
+    P_FEATURE_DEPTH_BOUNDS_TEST            = 0,
+    P_FEATURE_WIREFRAME_RASTERIZATION      = 1,
+    P_FEATURE_MULTI_DRAW_INDIRECT          = 2,
+    P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE = 3,
+    P_FEATURE_DRAW_INDIRECT_COUNT          = 4,
     P_FEATURE_COUNT    // size of the device feature array
 } PFeature;
 

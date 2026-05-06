@@ -27,6 +27,7 @@ typedef enum PBufferUsage {
     P_BUFFER_USAGE_SHADER_ADDRESS = 1 << 4,
     P_BUFFER_USAGE_TRANSFER_SRC   = 1 << 5,
     P_BUFFER_USAGE_TRANSFER_DST   = 1 << 6,
+    P_BUFFER_USAGE_INDIRECT       = 1 << 7,
 } PBufferUsage;
 
 typedef enum PMemoryType {

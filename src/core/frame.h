@@ -21,6 +21,21 @@
 #include "pipeline.h"
 #include "buffers.h"
 
+typedef struct PDrawIndirectCommand {
+    uint32_t vertex_count;
+    uint32_t instance_count;
+    uint32_t first_vertex;
+    uint32_t first_instance;
+} PDrawIndirectCommand;
+
+typedef struct PDrawIndexedIndirectCommand {
+    uint32_t index_count;
+    uint32_t instance_count;
+    uint32_t first_index;
+    int32_t  vertex_offset;
+    uint32_t first_instance;
+} PDrawIndexedIndirectCommand;
+
 typedef struct PAttachmentRef {
     PImage* image;
     uint32_t base_layer;
@@ -54,6 +69,18 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
 void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data);
 void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
+
+/**
+ * Indirect draws. The draw parameters are read from a GPU buffer of PDrawIndirectCommand / PDrawIndexedIndirectCommand.
+ *
+ * draw_count > 1 requires P_FEATURE_MULTI_DRAW_INDIRECT.
+ * firstInstance != 0 in any command requires P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE.
+ * The _count variants require P_FEATURE_DRAW_INDIRECT_COUNT.
+ */
+void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
+void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
+void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
+void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
 
 void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
 void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);
