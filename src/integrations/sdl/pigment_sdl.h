@@ -19,10 +19,10 @@
 
 #include "defines.h"
 #include "log.h"
+
 #include <SDL3/SDL.h>
 
-void pigment_handle_sdl_event(Pigment* pigment, const SDL_Event* event);
-SDL_Window* pigment_get_sdl_window(Pigment* pigment, uint32_t window_index);
+PWindowHandles pigment_sdl_get_window_handles(SDL_Window* window);
 
 void pigment_sdl_log_callback(
     PigmentLogSeverity severity,

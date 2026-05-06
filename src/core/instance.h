@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef INSTANCE_H
-#define INSTANCE_H
+#ifndef PIGMENT_INSTANCE_H
+#define PIGMENT_INSTANCE_H
 
 #include "defines.h"
 

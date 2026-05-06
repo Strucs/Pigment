@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef SYNCHRONIZATION_H
-#define SYNCHRONIZATION_H
+#ifndef PIGMENT_SYNCHRONIZATION_H
+#define PIGMENT_SYNCHRONIZATION_H
 
 #include "defines.h"
 

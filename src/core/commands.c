@@ -20,7 +20,7 @@
 
 static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc);
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
-static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFamily family);
+static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
 static PResult command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
 static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool);
@@ -51,8 +51,8 @@ PCommandPoolList* create_command_pools(Pigment* pigment)
     }
 
     PCommandPoolDesc default_desc = {
-        .queue_family = P_QUEUE_FAMILY_GRAPHICS,
-        .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
+        .queue_flags = P_QUEUE_GRAPHICS_BIT,
+        .flags       = P_COMMAND_POOL_FLAG_RESET_BUFFER,
     };
 
     default_pool = create_command_pool_internal(pigment, &default_desc);
@@ -270,10 +270,10 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
     PDevice* device             = pigment->device;
     PCommandPool* command_pool  = NULL;
     VkCommandPool pool          = NULL;
-    uint32_t queue_family_index = P_QUEUE_FAMILY_MAX_ENUM;
+    uint32_t queue_family_index = UINT32_MAX;
 
-    queue_family_index = resolve_queue_family_index(pigment, desc->queue_family);
-    if(queue_family_index == P_QUEUE_FAMILY_MAX_ENUM)
+    queue_family_index = resolve_queue_family_index(pigment, desc->queue_flags);
+    if(queue_family_index == UINT32_MAX)
     {
         goto ERROR;
     }
@@ -291,7 +291,7 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
     }
 
     command_pool->pool               = pool;
-    command_pool->queue_family       = desc->queue_family;
+    command_pool->queue_flags        = desc->queue_flags;
     command_pool->queue_family_index = queue_family_index;
     command_pool->flags              = desc->flags;
 
@@ -325,15 +325,16 @@ static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_fam
     return command_pool;
 }
 
-static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFamily family)
+static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags)
 {
-    if(family != P_QUEUE_FAMILY_GRAPHICS)
+    PDeviceQueue* found = device_find_queue(pigment->device, flags, 0);
+    if(found == NULL)
     {
-        PLOG_ERROR(pigment, "resolve_queue_family_index: only P_QUEUE_FAMILY_GRAPHICS is supported (got %d).", family);
-        return P_QUEUE_FAMILY_MAX_ENUM;
+        PLOG_ERROR(pigment, "resolve_queue_family_index: no queue family on the picked GPU has flags %d.", (unsigned) flags);
+        return UINT32_MAX;
     }
 
-    return pigment->device->graphics_family_index;
+    return found->family_index;
 }
 
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)
@@ -465,12 +466,13 @@ static void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command
         .pCommandBuffers    = command_buffer
     };
 
-    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
+    VkQueue graphics_queue = device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0)->queue;
+    if((result = vkQueueSubmit(graphics_queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to submit single usage command buffer! (result: %d)", result);
     }
 
-    vkQueueWaitIdle(device->graphics_queue);
+    vkQueueWaitIdle(graphics_queue);
 
     vkFreeCommandBuffers(device->logical_device, command_pool, 1, command_buffer);
 }

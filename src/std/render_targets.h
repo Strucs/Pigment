@@ -48,7 +48,7 @@ typedef struct PAttachmentDesc {
 } PAttachmentDesc;
 
 typedef struct PRenderTargetDesc {
-    uint32_t window_index;
+    PWindowRenderer* renderer;
     const PAttachmentDesc* colors;    // NULL allowed if color_count == 0
     uint32_t color_count;
     PAttachmentDesc depth;    // depth.format == 0 -> no depth target

@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef DEVICE_H
-#define DEVICE_H
+#ifndef PIGMENT_DEVICE_H
+#define PIGMENT_DEVICE_H
 
 #include "defines.h"
 
-PDevice* create_device(Pigment* pigment, PSurface* surface);
+PDevice* create_device(Pigment* pigment);
 void destroy_device(Pigment* pigment);
 void device_wait_idle(Pigment* pigment);
 

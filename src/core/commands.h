@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef COMMANDS_H
-#define COMMANDS_H
+#ifndef PIGMENT_COMMANDS_H
+#define PIGMENT_COMMANDS_H
 
 #include "defines.h"
 

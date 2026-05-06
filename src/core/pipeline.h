@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef PIPELINE_H
-#define PIPELINE_H
+#ifndef PIGMENT_PIPELINE_H
+#define PIGMENT_PIPELINE_H
 
 #include "defines.h"
 

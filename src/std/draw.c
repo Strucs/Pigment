@@ -82,15 +82,15 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
     free(ring);
 }
 
-void pigment_draw(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
+void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
 {
-    if(pigment == NULL || bindless == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0)
+    if(pigment == NULL || renderer == NULL || bindless == NULL || ring == NULL || pipeline == NULL || draws == NULL || draw_count == 0)
     {
         return;
     }
 
-    PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
-    uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
+    PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
+    uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
     pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(pigment, bindless, current_frame));
 
@@ -142,15 +142,15 @@ void pigment_draw(Pigment* pigment, uint32_t window_index, PStdBindless* bindles
     }
 }
 
-void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
+void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
 {
-    if(pigment == NULL || bindless == NULL || pipeline == NULL || camera == NULL)
+    if(pigment == NULL || renderer == NULL || bindless == NULL || pipeline == NULL || camera == NULL)
     {
         return;
     }
 
-    PCommandBuffer* cmd    = pigment_window_frame_cmd(pigment, window_index);
-    uint32_t current_frame = pigment_window_current_frame(pigment, window_index);
+    PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
+    uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
     pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(pigment, bindless, current_frame));
 
@@ -168,16 +168,15 @@ void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindle
     pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 }
 
-void pigment_std_draw_crt(Pigment* pigment, uint32_t window_index, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot)
+void pigment_std_draw_crt(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time)
 {
-    if(pigment == NULL || bindless == NULL || pipeline == NULL)
+    if(pigment == NULL || renderer == NULL || bindless == NULL || pipeline == NULL)
     {
         return;
     }
 
-    PCommandBuffer* cmd       = pigment_window_frame_cmd(pigment, window_index);
-    uint32_t current_frame    = pigment_window_current_frame(pigment, window_index);
-    PWindowRenderer* renderer = pigment_get_window_renderer(pigment, window_index);
+    PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
+    uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
     uint32_t w = 0;
     uint32_t h = 0;
@@ -188,7 +187,7 @@ void pigment_std_draw_crt(Pigment* pigment, uint32_t window_index, PStdBindless*
     PStdCrtPushConstants push = {
         .texture_id   = texture_slot,
         .sampler_id   = sampler_slot,
-        .time         = (float) SDL_GetTicks() / 1000.0f,
+        .time         = time,
         .aspect       = (h == 0) ? 1.0f : (float) w / (float) h,
         .resolution_x = (float) w,
         .resolution_y = (float) h,

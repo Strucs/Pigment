@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef STD_MESH_H
-#define STD_MESH_H
+#ifndef PIGMENT_STD_MESH_H
+#define PIGMENT_STD_MESH_H
 
 #include "defines.h"
 #include "buffers.h"

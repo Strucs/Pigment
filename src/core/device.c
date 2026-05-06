@@ -20,13 +20,6 @@
 #include "pigment_vk.h"
 
 #include <vulkan/vulkan_core.h>
-#define QUEUE_FAMILY_NUM 2
-
-static QueueFamilySet* create_queue_family_set(QueueFamilyIndices* indices);
-static void destroy_queue_family_set(QueueFamilySet* set);
-static void append_set(uint32_t* set, uint32_t* idx, uint32_t element);
-static QueueFamilyIndices* init_indices(void);
-static PBool queue_families_indices_completed(QueueFamilyIndices indices);
 
 static PBool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available);
 static PBool features_chain_supports(const void* req, const void* available, size_t struct_size);
@@ -34,9 +27,9 @@ static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalD
 static void merge_features_chain_or(void* dst, const void* src, const void* available, size_t struct_size);
 
 static PBool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required);
-static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
-static PResult pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
-static PResult create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface);
+static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
+static PResult pick_physical_device(Pigment* pigment, PDevice* device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
+static PResult create_logical_device(Pigment* pigment, PDevice* device);
 
 static inline VkPhysicalDeviceFeatures pigment_req_features(void)
 {
@@ -66,87 +59,6 @@ static inline VkPhysicalDeviceVulkan13Features pigment_req_features_13(void)
         .dynamicRendering = VK_TRUE,
         .synchronization2 = VK_TRUE,
     };
-}
-
-static void append_set(uint32_t* set, uint32_t* idx, uint32_t element)
-{
-    PBool present = P_FALSE;
-    for(size_t i = 0; i < *idx; i++)
-    {
-        if(element == set[i])
-        {
-            present = P_TRUE;
-            break;
-        }
-    }
-
-    if(!present)
-    {
-        set[*idx] = element;
-        (*idx)++;
-    }
-}
-
-static QueueFamilySet* create_queue_family_set(QueueFamilyIndices* indices)
-{
-    QueueFamilySet* set = calloc(1, sizeof(*set));
-    if(set == NULL)
-    {
-        goto ERROR;
-    }
-    uint32_t queues[QUEUE_FAMILY_NUM] = {0};
-
-    if(indices->graphics_family.has_value)
-    {
-        append_set(queues, &set->size, indices->graphics_family.value);
-    }
-
-    if(indices->present_family.has_value)
-    {
-        append_set(queues, &set->size, indices->present_family.value);
-    }
-
-    set->set = malloc(set->size * sizeof(*set->set));
-    if(set->set == NULL)
-    {
-        goto ERROR;
-    }
-
-    memcpy(set->set, queues, set->size * sizeof(*set->set));
-
-    return set;
-
-ERROR:
-    if(set != NULL)
-    {
-        free(set->set);
-        free(set);
-    }
-    return NULL;
-}
-
-static void destroy_queue_family_set(QueueFamilySet* set)
-{
-    if(set != NULL)
-    {
-        free(set->set);
-        free(set);
-    }
-}
-
-static QueueFamilyIndices* init_indices(void)
-{
-    QueueFamilyIndices* indices = calloc(1, sizeof(*indices));
-    if(indices == NULL)
-    {
-        return NULL;
-    }
-    return indices;
-}
-
-static PBool queue_families_indices_completed(QueueFamilyIndices indices)
-{
-    return indices.graphics_family.has_value && indices.present_family.has_value;
 }
 
 static PBool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available)
@@ -262,38 +174,20 @@ static PBool check_device_extensions_supported(VkPhysicalDevice device, const Ex
     return extensions_found;
 }
 
-static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
+static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
 {
-    QueueFamilyIndices* indices      = NULL;
-    SwapChainSupportDetails* details = NULL;
-    PBool result                     = P_FALSE;
+    PBool result = P_FALSE;
 
-    indices = find_queue_families(device, surface);
-    if(indices == NULL)
+    uint32_t graphics_family = 0;
+    if(!find_graphics_family(device, &graphics_family))
     {
-        goto FREE;
-    }
-
-    if(!queue_families_indices_completed(*indices))
-    {
-        PLOG_TRACE(pigment, "Device rejected: incomplete queue families");
+        PLOG_TRACE(pigment, "Device rejected: no graphics queue family");
         goto FREE;
     }
 
     if(!check_device_extensions_supported(device, req_extensions))
     {
         PLOG_TRACE(pigment, "Device rejected: missing required extensions");
-        goto FREE;
-    }
-
-    details = get_support_details(device, surface);
-    if(details == NULL)
-    {
-        goto FREE;
-    }
-    if(details->formats_count == 0 || details->present_modes_count == 0)
-    {
-        PLOG_TRACE(pigment, "Device rejected: no surface formats or present modes");
         goto FREE;
     }
 
@@ -339,15 +233,10 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR
     result = P_TRUE;
 
 FREE:
-    free(indices);
-    if(details != NULL)
-    {
-        destroy_support_details(details);
-    }
     return result;
 }
 
-static PResult pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
+static PResult pick_physical_device(Pigment* pigment, PDevice* device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
 {
     VkPhysicalDevice* devices = NULL;
     uint32_t devices_count    = 0;
@@ -370,7 +259,7 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, PSurface*
 
     for(size_t i = 0; i < devices_count; i++)
     {
-        if(is_suitable(pigment, devices[i], surface->surface, req_extensions, vk_init))
+        if(is_suitable(pigment, devices[i], req_extensions, vk_init))
         {
             device->physical_device = devices[i];
             break;
@@ -393,95 +282,107 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, PSurface*
     return PIGMENT_SUCCESS;
 }
 
-QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface)
+PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family)
 {
-    QueueFamilyIndices* indices;
-    VkQueueFamilyProperties* queue_families;
-    uint32_t queue_families_count;
-    VkBool32 present_support;
-
-    indices = init_indices();
-    if(indices == NULL)
+    uint32_t queue_families_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, NULL);
+    if(queue_families_count == 0)
     {
-        goto ERROR;
+        return P_FALSE;
     }
 
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, NULL);
-
-    queue_families = malloc(queue_families_count * sizeof(*queue_families));
+    VkQueueFamilyProperties* queue_families = malloc(queue_families_count * sizeof(*queue_families));
     if(queue_families == NULL)
     {
-        goto ERROR;
+        return P_FALSE;
     }
 
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, queue_families);
 
+    PBool found = P_FALSE;
     for(uint32_t i = 0; i < queue_families_count; i++)
     {
         if(queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
-            indices->graphics_family.has_value = P_TRUE;
-            indices->graphics_family.value     = i;
-        }
-
-        present_support = VK_FALSE;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &present_support);
-
-        if(present_support)
-        {
-            indices->present_family.has_value = P_TRUE;
-            indices->present_family.value     = i;
-        }
-
-        if(queue_families_indices_completed(*indices))
-        {
+            *out_family = i;
+            found       = P_TRUE;
             break;
         }
     }
 
     free(queue_families);
+    return found;
+}
 
-    return indices;
+PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface)
+{
+    VkBool32 supported = VK_FALSE;
+    vkGetPhysicalDeviceSurfaceSupportKHR(device, family_index, surface, &supported);
+    return supported ? P_TRUE : P_FALSE;
+}
 
-ERROR:
-    free(indices);
+PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden)
+{
+    if(device == NULL)
+    {
+        return NULL;
+    }
+
+    for(uint32_t i = 0; i < device->queue_count; i++)
+    {
+        PQueueFlags flags = device->queues[i].flags;
+        if((flags & required) == required && (flags & forbidden) == 0)
+        {
+            return &device->queues[i];
+        }
+    }
+
     return NULL;
 }
 
-static PResult create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface)
+static PResult create_logical_device(Pigment* pigment, PDevice* device)
 {
-    PResult result                              = PIGMENT_ERROR_OUT_OF_MEMORY;
-    PInstance* instance                         = pigment->instance;
-    QueueFamilyIndices* indices                 = NULL;
-    VkDeviceQueueCreateInfo* queue_create_infos = NULL;
-    QueueFamilySet* set                         = NULL;
-    const PVkInitInfo* vk_init                  = (const PVkInitInfo*) pigment->config.extra;
+    PResult result                          = PIGMENT_ERROR_OUT_OF_MEMORY;
+    PInstance* instance                     = pigment->instance;
+    const PVkInitInfo* vk_init              = (const PVkInitInfo*) pigment->config.extra;
+    VkDeviceQueueCreateInfo* queue_infos    = NULL;
+    uint32_t* selected_families             = NULL;
+    VkQueueFamilyProperties* queue_families = NULL;
+    uint32_t queue_families_count           = 0;
 
-    indices = find_queue_families(device->physical_device, surface->surface);
-    if(indices == NULL)
+    vkGetPhysicalDeviceQueueFamilyProperties(device->physical_device, &queue_families_count, NULL);
+    queue_families = malloc(queue_families_count * sizeof(*queue_families));
+    if(queue_families == NULL)
+    {
+        goto ERROR;
+    }
+    vkGetPhysicalDeviceQueueFamilyProperties(device->physical_device, &queue_families_count, queue_families);
+
+    selected_families = malloc(queue_families_count * sizeof(*selected_families));
+    queue_infos       = calloc(queue_families_count, sizeof(*queue_infos));
+    if(selected_families == NULL || queue_infos == NULL)
     {
         goto ERROR;
     }
 
-    set = create_queue_family_set(indices);
-    if(set == NULL)
-    {
-        goto ERROR;
-    }
+    static const VkQueueFlags useful_flags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+    uint32_t selected_count                = 0;
 
-    queue_create_infos = calloc(set->size, sizeof(*queue_create_infos));
-    if(queue_create_infos == NULL)
+    for(uint32_t i = 0; i < queue_families_count; i++)
     {
-        goto ERROR;
+        if((queue_families[i].queueFlags & useful_flags) != 0)
+        {
+            selected_families[selected_count++] = i;
+        }
     }
 
     float queue_priority = 1.0f;
-    for(size_t i = 0; i < set->size; i++)
+    for(uint32_t i = 0; i < selected_count; i++)
     {
-        queue_create_infos[i].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queue_create_infos[i].queueFamilyIndex = indices->graphics_family.value;
-        queue_create_infos[i].queueCount       = 1;
-        queue_create_infos[i].pQueuePriorities = &queue_priority;
+        queue_infos[i].sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queue_infos[i].queueFamilyIndex = selected_families[i];
+        queue_infos[i].queueCount       = 1;
+        queue_infos[i].pQueuePriorities = &queue_priority;
     }
 
     VkPhysicalDeviceVulkan11Features available_11 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
@@ -538,8 +439,8 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device, PSurface
 
     VkDeviceCreateInfo create_info = {
         .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pQueueCreateInfos       = queue_create_infos,
-        .queueCreateInfoCount    = 1,
+        .pQueueCreateInfos       = queue_infos,
+        .queueCreateInfoCount    = selected_count,
         .pEnabledFeatures        = NULL,
         .pNext                   = &features,
         .enabledExtensionCount   = device->extensions->size,
@@ -569,26 +470,33 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device, PSurface
     }
     volkLoadDevice(device->logical_device);
 
-    vkGetDeviceQueue(device->logical_device, indices->graphics_family.value, 0, &device->graphics_queue);
-    vkGetDeviceQueue(device->logical_device, indices->present_family.value, 0, &device->present_queue);
+    device->queues = malloc(selected_count * sizeof(*device->queues));
+    if(device->queues == NULL)
+    {
+        result = PIGMENT_ERROR_OUT_OF_MEMORY;
+        goto ERROR;
+    }
+    device->queue_count = selected_count;
+    for(uint32_t i = 0; i < selected_count; i++)
+    {
+        device->queues[i].family_index = selected_families[i];
+        device->queues[i].flags        = (PQueueFlags) (queue_families[selected_families[i]].queueFlags & useful_flags);
+        vkGetDeviceQueue(device->logical_device, selected_families[i], 0, &device->queues[i].queue);
+    }
 
-    device->graphics_family_index = indices->graphics_family.value;
-    device->present_family_index  = indices->present_family.value;
-
-    free(queue_create_infos);
-    destroy_queue_family_set(set);
-    free(indices);
-
+    free(queue_infos);
+    free(selected_families);
+    free(queue_families);
     return PIGMENT_SUCCESS;
 
 ERROR:
-    free(queue_create_infos);
-    destroy_queue_family_set(set);
-    free(indices);
+    free(queue_infos);
+    free(selected_families);
+    free(queue_families);
     return result;
 }
 
-PDevice* create_device(Pigment* pigment, PSurface* surface)
+PDevice* create_device(Pigment* pigment)
 {
     PDevice* device                             = NULL;
     ExtensionList req_extensions                = {0};
@@ -633,7 +541,7 @@ PDevice* create_device(Pigment* pigment, PSurface* surface)
         }
     }
 
-    if(pick_physical_device(pigment, device, surface, &req_extensions, vk_init) != PIGMENT_SUCCESS)
+    if(pick_physical_device(pigment, device, &req_extensions, vk_init) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -683,7 +591,7 @@ PDevice* create_device(Pigment* pigment, PSurface* surface)
         }
     }
 
-    if(create_logical_device(pigment, device, surface) != PIGMENT_SUCCESS)
+    if(create_logical_device(pigment, device) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -720,6 +628,7 @@ void destroy_device(Pigment* pigment)
         free(device->extensions->names);
     }
     free(device->extensions);
+    free(device->queues);
     free(device);
 }
 

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef STD_LIGHTS_H
-#define STD_LIGHTS_H
+#ifndef PIGMENT_STD_LIGHTS_H
+#define PIGMENT_STD_LIGHTS_H
 
 #include <cglm/types.h>
 #include "defines.h"
@@ -56,6 +56,6 @@ void pigment_std_light_destroy(PLights* lights, uint32_t id);
 
 uint64_t pigment_std_light_address(PLights* lights);
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, uint32_t window_index, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
 
 #endif

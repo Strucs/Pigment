@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef BUFFERS_H
-#define BUFFERS_H
+#ifndef PIGMENT_BUFFERS_H
+#define PIGMENT_BUFFERS_H
 
 #include "defines.h"
 

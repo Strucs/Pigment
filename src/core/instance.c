@@ -285,14 +285,29 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
         goto ERROR;
     }
 
-    uint32_t window_extension_count      = 0;
-    const char* const* window_extensions = window_get_vk_instance_extensions(pigment, &window_extension_count);
-    if(window_extensions == NULL)
-    {
-        goto ERROR;
-    }
+    const char* surface_extensions[4] = {0};
+    uint32_t surface_extension_count  = 0;
 
-    uint32_t max_extensions = window_extension_count;
+    surface_extensions[surface_extension_count++] = "VK_KHR_surface";
+#ifdef _WIN32
+    surface_extensions[surface_extension_count++] = "VK_KHR_win32_surface";
+#elif defined(__APPLE__)
+    surface_extensions[surface_extension_count++] = "VK_EXT_metal_surface";
+#elif defined(__ANDROID__)
+    surface_extensions[surface_extension_count++] = "VK_KHR_android_surface";
+#elif defined(__linux__)
+    if(getenv("WAYLAND_DISPLAY") != NULL)
+    {
+        surface_extensions[surface_extension_count++] = "VK_KHR_wayland_surface";
+    }
+    else
+    {
+        surface_extensions[surface_extension_count++] = "VK_KHR_xcb_surface";
+        surface_extensions[surface_extension_count++] = "VK_KHR_xlib_surface";
+    }
+#endif
+
+    uint32_t max_extensions = surface_extension_count;
 #ifdef __APPLE__
     max_extensions++;
 #endif
@@ -300,10 +315,9 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     {
         max_extensions++;
     }
-    if(pigment->config.preferred_color_space != P_COLOR_SPACE_SRGB_NONLINEAR)
-    {
-        max_extensions++;
-    }
+
+    max_extensions++;
+
     if(vk_init != NULL)
     {
         max_extensions += vk_init->req_instance_extensions_count;
@@ -316,9 +330,12 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
         goto ERROR;
     }
 
-    for(uint32_t i = 0; i < window_extension_count; i++)
+    for(uint32_t i = 0; i < surface_extension_count; i++)
     {
-        names[count++] = window_extensions[i];
+        if(extension_available(available, available_count, surface_extensions[i]))
+        {
+            names[count++] = surface_extensions[i];
+        }
     }
 
 #ifdef __APPLE__
@@ -331,8 +348,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     {
         names[count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     }
-    if(pigment->config.preferred_color_space != P_COLOR_SPACE_SRGB_NONLINEAR
-       && extension_available(available, available_count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)
+    if(extension_available(available, available_count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)
        && !name_in_list((const char* const*) names, count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))
     {
         names[count++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;

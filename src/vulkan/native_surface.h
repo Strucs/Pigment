@@ -1,5 +1,5 @@
 /**
- * Copyright 2025-2026 Angel-Leduc TA
+ * Copyright 2026 Angel-Leduc TA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef WINDOW_H
-#define WINDOW_H
+#ifndef PIGMENT_VK_NATIVE_SURFACE_H
+#define PIGMENT_VK_NATIVE_SURFACE_H
 
 #include "defines.h"
+#include <volk.h>
 
-PWindow* create_window(Pigment* pigment, PWindowInfo* window_info);
-void destroy_window(PWindow* window);
-PBool window_should_close(PWindow* window);
-void show_window(PWindow* window);
-void get_framebuffer_size(PWindow* window, uint32_t* out_width, uint32_t* out_height);
+VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandles* handles);
 
 #endif

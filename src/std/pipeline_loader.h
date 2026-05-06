@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef LOADER_H
-#define LOADER_H
+#ifndef PIGMENT_STD_PIPELINE_LOADER_H
+#define PIGMENT_STD_PIPELINE_LOADER_H
 
 #include "defines.h"
 #include "descriptor.h"

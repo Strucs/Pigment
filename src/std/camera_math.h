@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef CAMERA_MATH_H
-#define CAMERA_MATH_H
+#ifndef PIGMENT_STD_CAMERA_MATH_H
+#define PIGMENT_STD_CAMERA_MATH_H
 
 #include <cglm/types.h>
 #include "defines.h"

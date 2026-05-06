@@ -19,7 +19,6 @@
 
 #include "defines.h"
 #include "log.h"
-#include "window.h"
 #include "frame.h"
 #include "sampler.h"
 #include "pipeline.h"
@@ -27,28 +26,21 @@
 #include "buffers.h"
 #include "image.h"
 #include "resize.h"
+#include "commands.h"
+#include "cmd_sync.h"
 
-Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfig* config);
+Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);
 void pigment_wait_idle(Pigment* pigment);
 
-void pigment_show_window(Pigment* pigment, uint32_t window_index);
-PBool pigment_should_run(Pigment* pigment);
+void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
+PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer);
+void pigment_end_frame(Pigment* pigment, PWindowRenderer* renderer);
+uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
+PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
 
-void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentMode mode);
-
-void pigment_wait_frame_ready(Pigment* pigment, uint32_t window_index);
-PCommandBuffer* pigment_begin_frame(Pigment* pigment, uint32_t window_index);
-void pigment_end_frame(Pigment* pigment, uint32_t window_index);
-uint32_t pigment_window_current_frame(Pigment* pigment, uint32_t window_index);
-PCommandBuffer* pigment_window_frame_cmd(Pigment* pigment, uint32_t window_index);
-
-void pigment_begin_swapchain_pass(Pigment* pigment, uint32_t window_index);
-void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index);
-
-PWindow* pigment_get_window(Pigment* pigment, uint32_t window_index);
-PWindowRenderer* pigment_get_window_renderer(Pigment* pigment, uint32_t window_index);
-uint32_t pigment_window_count(Pigment* pigment);
+void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
+void pigment_end_swapchain_pass(PWindowRenderer* renderer);
 
 PBool pigment_supports(Pigment* pigment, PFeature feature);
 

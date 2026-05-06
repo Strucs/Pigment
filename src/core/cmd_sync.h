@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef PIGMENT_CMD_SYNC_H
+#define PIGMENT_CMD_SYNC_H
+
 #include "defines.h"
 
 typedef struct PSyncFlags {
@@ -51,3 +54,5 @@ typedef struct PMemoryBarrier {
 void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PImageBarrier* barriers, uint32_t count);
 void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PBufferBarrier* barriers, uint32_t count);
 void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PMemoryBarrier* barriers, uint32_t count);
+
+#endif

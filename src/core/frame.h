@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef FRAME_H
-#define FRAME_H
+#ifndef PIGMENT_FRAME_H
+#define PIGMENT_FRAME_H
 
 #include "defines.h"
 #include "pipeline.h"

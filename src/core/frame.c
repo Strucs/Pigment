@@ -20,7 +20,6 @@
 #include "internal.h"
 #include "surface.h"
 #include "synchronization.h"
-#include "window.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
@@ -28,31 +27,27 @@
 PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index)
 {
     PDevice* device = pigment->device;
-    if(renderer->framebuffer_resized)
+    if(renderer->needs_recreate)
     {
-        renderer->framebuffer_resized = P_FALSE;
-
-        uint32_t framebuffer_width  = renderer->pending_width;
-        uint32_t framebuffer_height = renderer->pending_height;
-        PPresentMode present_mode   = renderer->requested_present_mode;
+        renderer->needs_recreate = P_FALSE;
 
         VkSurfaceCapabilitiesKHR caps;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device, renderer->surface->surface, &caps);
         if(caps.currentExtent.width != 0xFFFFFFFF)
         {
-            framebuffer_width  = caps.currentExtent.width;
-            framebuffer_height = caps.currentExtent.height;
+            renderer->desc.width  = caps.currentExtent.width;
+            renderer->desc.height = caps.currentExtent.height;
         }
-        if(framebuffer_width == 0 || framebuffer_height == 0)
+        if(renderer->desc.width == 0 || renderer->desc.height == 0)
         {
-            renderer->framebuffer_resized = P_TRUE;
+            renderer->needs_recreate = P_TRUE;
             return P_FALSE;
         }
 
         uint32_t old_image_count = renderer->swapchain->image_count;
-        if(recreate_swapchain(pigment, renderer, framebuffer_width, framebuffer_height, present_mode) != PIGMENT_SUCCESS)
+        if(recreate_swapchain(pigment, renderer) != PIGMENT_SUCCESS)
         {
-            renderer->framebuffer_resized = P_TRUE;
+            renderer->needs_recreate = P_TRUE;
             return P_FALSE;
         }
         if(old_image_count != renderer->swapchain->image_count)
@@ -60,22 +55,13 @@ PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_ima
             resize_render_finished_semaphores(pigment, renderer->sync, old_image_count, renderer->swapchain->image_count);
         }
 
-        for(uint32_t i = 0; i < pigment->window_count; i++)
-        {
-            if(pigment->renderers[i] == renderer)
-            {
-                PSwapchainResizeEvent event = {
-                    .window_index = i,
-                    .width        = renderer->swapchain->extent.width,
-                    .height       = renderer->swapchain->extent.height,
-                };
+        PSwapchainResizeEvent event = {
+            .renderer = renderer,
+            .width    = renderer->swapchain->extent.width,
+            .height   = renderer->swapchain->extent.height,
+        };
+        dispatch_swapchain_resize(pigment, &event);
 
-                dispatch_swapchain_resize(pigment, &event);
-                break;
-            }
-        }
-
-        renderer->swapchain->current_frame = 0;
         return P_FALSE;
     }
 
@@ -86,7 +72,7 @@ PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_ima
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
         recreate_image_available_semaphore(pigment, renderer->sync, current_frame);
-        renderer->framebuffer_resized = P_TRUE;
+        renderer->needs_recreate = P_TRUE;
         return P_FALSE;
     }
     else if(result != VK_SUCCESS)
@@ -120,7 +106,7 @@ void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t 
     uint32_t current_frame_idx = renderer->swapchain->current_frame;
     PCommandBuffer* cmd        = renderer->command_buffers[current_frame_idx];
     PSwapchain* swapchain      = renderer->swapchain;
-    PBool transparent          = renderer->transparent_framebuffer;
+    PBool transparent          = renderer->desc.transparent;
 
     VkImageMemoryBarrier2 color_barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -533,7 +519,7 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
         .pSignalSemaphores    = signal_semaphores
     };
 
-    if((result = vkQueueSubmit(device->graphics_queue, 1, &submit_info, renderer->sync->in_flight_fences[current_frame])) != VK_SUCCESS)
+    if((result = vkQueueSubmit(device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0)->queue, 1, &submit_info, renderer->sync->in_flight_fences[current_frame])) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return;
@@ -550,7 +536,7 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
         .pImageIndices      = &image_index
     };
 
-    result = vkQueuePresentKHR(device->present_queue, &present_info);
+    result = vkQueuePresentKHR(renderer->swapchain->present_queue, &present_info);
     if(result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR)
     {
         PLOG_ERROR(pigment, "Failed to present swap chain image!");

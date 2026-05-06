@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef DEFINES_H
-#define DEFINES_H
+#ifndef PIGMENT_DEFINES_H
+#define PIGMENT_DEFINES_H
 
 #include <stdint.h>
 
@@ -78,12 +78,11 @@ typedef enum PColorSpace {
 
 #define P_PRESENT_MODE_DEFAULT P_PRESENT_MODE_MAILBOX
 
-typedef enum PQueueFamily {
-    P_QUEUE_FAMILY_GRAPHICS = 0,
-    // P_QUEUE_FAMILY_COMPUTE  = 1,
-    // P_QUEUE_FAMILY_TRANSFER = 2,
-    P_QUEUE_FAMILY_MAX_ENUM = 0x7FFFFFFF
-} PQueueFamily;
+typedef enum PQueueFlags {
+    P_QUEUE_GRAPHICS_BIT = 1 << 0,
+    P_QUEUE_COMPUTE_BIT  = 1 << 1,
+    P_QUEUE_TRANSFER_BIT = 1 << 2,
+} PQueueFlags;
 
 typedef enum PCommandPoolFlags {
     P_COMMAND_POOL_FLAG_NONE         = 0,
@@ -92,36 +91,48 @@ typedef enum PCommandPoolFlags {
 } PCommandPoolFlags;
 
 typedef struct PCommandPoolDesc {
-    PQueueFamily queue_family;
+    PQueueFlags queue_flags;
     PCommandPoolFlags flags;
 } PCommandPoolDesc;
 
-typedef enum {
-    P_WINDOW_FLAG_NONE          = 0,
-    P_WINDOW_FLAG_RESIZABLE     = 1 << 0,
-    P_WINDOW_FLAG_BORDERLESS    = 1 << 1,
-    P_WINDOW_FLAG_FULLSCREEN    = 1 << 2,
-    P_WINDOW_FLAG_MAXIMIZED     = 1 << 3,
-    P_WINDOW_FLAG_MINIMIZED     = 1 << 4,
-    P_WINDOW_FLAG_ALWAYS_ON_TOP = 1 << 5,
-    P_WINDOW_FLAG_HIGH_DPI      = 1 << 6,
-    P_WINDOW_FLAG_TRANSPARENT   = 1 << 7,
-    P_WINDOW_FLAG_NOT_FOCUSABLE = 1 << 8,
-} PWindowFlags;
+typedef enum PWindowHandleType {
+    P_WINDOW_HANDLE_WIN32   = 0,
+    P_WINDOW_HANDLE_XLIB    = 1,
+    P_WINDOW_HANDLE_XCB     = 2,
+    P_WINDOW_HANDLE_WAYLAND = 3,
+    P_WINDOW_HANDLE_METAL   = 4,
+    P_WINDOW_HANDLE_ANDROID = 5,
+} PWindowHandleType;
 
-#define P_WINDOW_FLAGS_DEFAULT (P_WINDOW_FLAG_RESIZABLE | P_WINDOW_FLAG_HIGH_DPI)
-
-typedef struct PWindowInfo {
-    int width;
-    int height;
-    char* title;
-    PPresentMode preferred_present_mode;
-    PWindowFlags flags;
-} PWindowInfo;
+typedef struct PWindowHandles {
+    PWindowHandleType type;
+    union {
+        struct {
+            void* hwnd;
+            void* hinstance;
+        } win32;
+        struct {
+            void* display;
+            unsigned long window;
+        } xlib;
+        struct {
+            void* connection;
+            uint32_t window;
+        } xcb;
+        struct {
+            void* display;
+            void* surface;
+        } wayland;
+        struct {
+            void* ca_metal_layer;
+        } metal;
+        struct {
+            void* a_native_window;
+        } android;
+    };
+} PWindowHandles;
 
 typedef struct Pigment Pigment;
-
-typedef struct PWindow PWindow;
 
 typedef struct PWindowRenderer PWindowRenderer;
 
@@ -133,13 +144,7 @@ typedef struct ExtensionList ExtensionList;
 
 typedef struct PDevice PDevice;
 
-typedef struct QueueFamilyIndices QueueFamilyIndices;
-
-typedef struct FamilySet FamilySet;
-
 typedef struct PSurface PSurface;
-
-typedef struct QueueFamilySet QueueFamilySet;
 
 typedef struct SwapChainSupportDetails SwapChainSupportDetails;
 
@@ -177,6 +182,8 @@ typedef struct PSampler PSampler;
 
 typedef struct PResizeCallbackList PResizeCallbackList;
 
+typedef struct PRendererList PRendererList;
+
 typedef struct PBuffer PBuffer;
 
 typedef struct PSamplerDesc PSamplerDesc;
@@ -188,7 +195,7 @@ typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
 typedef struct PigmentLogger PigmentLogger;
 
 typedef struct PSwapchainResizeEvent {
-    uint32_t window_index;
+    PWindowRenderer* renderer;
     uint32_t width;
     uint32_t height;
 } PSwapchainResizeEvent;
@@ -229,6 +236,15 @@ typedef enum PFormat {
     P_FORMAT_D24_UNORM_S8_UINT   = 129,
     P_FORMAT_D32_SFLOAT_S8_UINT  = 130,
 } PFormat;
+
+typedef struct PSwapchainDesc {
+    uint32_t width;             // 0 = query from surface
+    uint32_t height;            // 0 = query from surface
+    PColorSpace color_space;    // 0 = SRGB. Fallback to compatible if HDR format requested but not supported.
+    PPresentMode present_mode;
+    uint32_t image_count;
+    PBool transparent;
+} PSwapchainDesc;
 
 typedef enum PCompareOp {
     P_COMPARE_OP_NEVER            = 0,
@@ -312,8 +328,7 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     PBool enable_validation;
     PBool enable_best_practices;
-    float depth_clear_value;              // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
-    PColorSpace preferred_color_space;    // 0 = SRGB. HDR values require a compatible display + driver, falls back to SRGB silently if unsupported.
+    float depth_clear_value;    // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
     const void* extra;
 } PigmentConfig;
 

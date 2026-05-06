@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef GLTF_LOADER_H
-#define GLTF_LOADER_H
+#ifndef PIGMENT_STD_GLTF_LOADER_H
+#define PIGMENT_STD_GLTF_LOADER_H
 
 #include <cglm/types.h>
 #include "defines.h"

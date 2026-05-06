@@ -12,15 +12,9 @@ int main(void)
         .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)
     };
 
-    PWindowInfo window_info = {
-        .width                  = 1280,
-        .height                 = 720,
-        .title                  = "Suzanne and Cube",
-        .preferred_present_mode = P_PRESENT_MODE_DEFAULT,
-        .flags                  = P_WINDOW_FLAGS_DEFAULT,
-    };
-
+    SDL_Window* window               = NULL;
     Pigment* pigment                 = NULL;
+    PWindowRenderer* renderer        = NULL;
     PStdBindless* bindless           = NULL;
     PCamera* camera                  = NULL;
     PInstanceRing* ring              = NULL;
@@ -40,6 +34,20 @@ int main(void)
     PInstanceData* instance_storage2 = NULL;
     int error_code                   = 1;
 
+    if(!SDL_Init(SDL_INIT_VIDEO))
+    {
+        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        return 1;
+    }
+
+    window = SDL_CreateWindow("Suzanne and Cube", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    if(window == NULL)
+    {
+        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        SDL_Quit();
+        return 1;
+    }
+
     PigmentLoggerCreateInfo loggers[] = {
         {
          .severity_filter = PIGMENT_LOG_TRACE_BIT | PIGMENT_LOG_DEBUG_BIT | PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
@@ -54,10 +62,25 @@ int main(void)
         .enable_validation = P_TRUE,
     };
 
-    pigment = init_pigment(&app_info, &window_info, &config);
+    pigment = init_pigment(&app_info, &config);
     if(pigment == NULL)
     {
         fprintf(stderr, "Failed to initialize Pigment!\n");
+        goto FREE;
+    }
+
+    int win_w = 0, win_h = 0;
+    SDL_GetWindowSizeInPixels(window, &win_w, &win_h);
+    PWindowHandles handles        = pigment_sdl_get_window_handles(window);
+    PSwapchainDesc swapchain_desc = {
+        .width  = (uint32_t) win_w,
+        .height = (uint32_t) win_h,
+    };
+
+    renderer = pigment_renderer_create(pigment, &handles, &swapchain_desc);
+    if(renderer == NULL)
+    {
+        fprintf(stderr, "Failed to create renderer!\n");
         goto FREE;
     }
 
@@ -109,10 +132,9 @@ int main(void)
         goto FREE;
     }
 
-    FPSCameraState fps_state = fps_camera_state_init(camera, pigment_get_sdl_window(pigment, 0), camera_position);
-    SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), P_TRUE);
+    FPSCameraState fps_state = fps_camera_state_init(camera, window, camera_position);
+    SDL_SetWindowRelativeMouseMode(window, P_TRUE);
 
-    PWindowRenderer* renderer   = pigment_get_window_renderer(pigment, 0);
     PFormat color_format        = pigment_get_color_format(renderer);
     PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer));
     PPipelineBuild* build       = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
@@ -234,39 +256,51 @@ int main(void)
     draw_calls2[0].first_index       = 0;
     draw_calls2[0].index_count       = cube_idx;
 
-    pigment_show_window(pigment, 0);
+    SDL_ShowWindow(window);
 
-    while(pigment_should_run(pigment))
+    PBool running = P_TRUE;
+    while(running)
     {
         SDL_Event event;
         while(SDL_PollEvent(&event))
         {
-            pigment_handle_sdl_event(pigment, &event);
+            switch(event.type)
+            {
+                case SDL_EVENT_QUIT:
+                case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                    running = P_FALSE;
+                    break;
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    pigment_renderer_resize(renderer, (uint32_t) event.window.data1, (uint32_t) event.window.data2);
+                    break;
+                default:
+                    break;
+            }
             fps_camera_handle_sdl_event(camera, &fps_state, &event);
         }
 
         fps_camera_update(camera, &fps_state);
 
-        pigment_wait_frame_ready(pigment, 0);
+        pigment_wait_frame_ready(pigment, renderer);
 
-        PCommandBuffer* cmd = pigment_begin_frame(pigment, 0);
+        PCommandBuffer* cmd = pigment_begin_frame(pigment, renderer);
         if(cmd == NULL)
         {
             continue;
         }
 
-        pigment_begin_swapchain_pass(pigment, 0);
+        pigment_begin_swapchain_pass(pigment, renderer);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
-        pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipeline, draw_calls, draw_count);
-        pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipeline, draw_calls2, draw_count2);
+        pigment_draw(pigment, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls, draw_count);
+        pigment_draw(pigment, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls2, draw_count2);
 
         pigment_bind_pipeline(pigment, cmd, gizmo_pipeline);
-        pigment_std_draw_light_gizmos(pigment, 0, gizmo_pipeline, camera, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
+        pigment_std_draw_light_gizmos(pigment, renderer, gizmo_pipeline, camera, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
 
-        pigment_end_swapchain_pass(pigment, 0);
+        pigment_end_swapchain_pass(renderer);
 
-        pigment_end_frame(pigment, 0);
+        pigment_end_frame(pigment, renderer);
     }
 
     error_code = 0;
@@ -300,6 +334,12 @@ FREE:
     pigment_std_destroy_materials(pigment, materials);
     pigment_std_destroy_bindless(pigment, bindless);
     destroy_pigment(pigment);
+
+    if(window != NULL)
+    {
+        SDL_DestroyWindow(window);
+    }
+    SDL_Quit();
 
     return error_code;
 }

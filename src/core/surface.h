@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef SURFACE_H
-#define SURFACE_H
+#ifndef PIGMENT_SURFACE_H
+#define PIGMENT_SURFACE_H
 
 #include "defines.h"
 
-PSurface* create_surface(Pigment* pigment, PWindow* window);
-void destroy_surface(Pigment* pigment, PSurface* surface);
-PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PBool transparent, PSurface* surface);
-void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
-PResult create_image_views(Pigment* pigment, PSwapchain* swapchain);
-PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode);
+PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles* handles, const PSwapchainDesc* desc);
+void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer);
+void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height);
+void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);
+void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace color_space);
+
 PFormat pigment_get_color_format(PWindowRenderer* renderer);
 PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 PColorSpace pigment_get_color_space(PWindowRenderer* renderer);

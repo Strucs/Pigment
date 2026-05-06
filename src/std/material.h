@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef STD_MATERIAL_H
-#define STD_MATERIAL_H
+#ifndef PIGMENT_STD_MATERIAL_H
+#define PIGMENT_STD_MATERIAL_H
 
 #include <cglm/types.h>
 #include "defines.h"

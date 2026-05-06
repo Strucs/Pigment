@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef STD_VERTEX_H
-#define STD_VERTEX_H
+#ifndef PIGMENT_STD_VERTEX_H
+#define PIGMENT_STD_VERTEX_H
 
 #include <cglm/types.h>
 #include "defines.h"

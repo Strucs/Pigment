@@ -123,6 +123,100 @@ void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBu
     free(vk_regions);
 }
 
+void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PBuffer* dst, const PBufferImageCopy* regions, uint32_t region_count)
+{
+    if(pigment == NULL || cmd == NULL || src == NULL || dst == NULL || regions == NULL || region_count == 0)
+    {
+        return;
+    }
+
+    VkBufferImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    if(vk_regions == NULL)
+    {
+        return;
+    }
+
+    for(uint32_t i = 0; i < region_count; i++)
+    {
+        const PBufferImageCopy* r = &regions[i];
+        vk_regions[i]             = (VkBufferImageCopy) {
+            .bufferOffset                    = (VkDeviceSize) r->buffer_offset,
+            .bufferRowLength                 = r->buffer_row_length,
+            .bufferImageHeight               = r->buffer_image_height,
+            .imageSubresource.aspectMask     = src->aspect,
+            .imageSubresource.mipLevel       = r->mip_level,
+            .imageSubresource.baseArrayLayer = r->base_array_layer,
+            .imageSubresource.layerCount     = r->layer_count,
+            .imageOffset                     = {r->offset_x, r->offset_y, r->offset_z},
+            .imageExtent                     = {r->extent_w, r->extent_h, r->extent_d},
+        };
+    }
+
+    vkCmdCopyImageToBuffer(cmd->buffer, src->image, image_layout_to_vk(src_layout), dst->buffer, region_count, vk_regions);
+
+    free(vk_regions);
+}
+
+void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageCopy* regions, uint32_t region_count)
+{
+    if(pigment == NULL || cmd == NULL || src == NULL || dst == NULL || regions == NULL || region_count == 0)
+    {
+        return;
+    }
+
+    VkImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    if(vk_regions == NULL)
+    {
+        return;
+    }
+
+    for(uint32_t i = 0; i < region_count; i++)
+    {
+        const PImageCopy* r = &regions[i];
+        vk_regions[i]       = (VkImageCopy) {
+            .srcSubresource = {.aspectMask = src->aspect, .mipLevel = r->src_mip_level, .baseArrayLayer = r->src_base_array_layer, .layerCount = r->src_layer_count},
+            .srcOffset      = {r->src_offset_x, r->src_offset_y, r->src_offset_z},
+            .dstSubresource = {.aspectMask = dst->aspect, .mipLevel = r->dst_mip_level, .baseArrayLayer = r->dst_base_array_layer, .layerCount = r->dst_layer_count},
+            .dstOffset      = {r->dst_offset_x, r->dst_offset_y, r->dst_offset_z},
+            .extent         = {r->extent_w, r->extent_h, r->extent_d},
+        };
+    }
+
+    vkCmdCopyImage(cmd->buffer, src->image, image_layout_to_vk(src_layout), dst->image, image_layout_to_vk(dst_layout), region_count, vk_regions);
+
+    free(vk_regions);
+}
+
+void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageBlit* regions, uint32_t region_count, PFilteringMode filter)
+{
+    if(pigment == NULL || cmd == NULL || src == NULL || dst == NULL || regions == NULL || region_count == 0)
+    {
+        return;
+    }
+
+    VkImageBlit* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    if(vk_regions == NULL)
+    {
+        return;
+    }
+
+    for(uint32_t i = 0; i < region_count; i++)
+    {
+        const PImageBlit* r = &regions[i];
+        vk_regions[i]       = (VkImageBlit) {
+            .srcSubresource = {.aspectMask = src->aspect, .mipLevel = r->src_mip_level, .baseArrayLayer = r->src_base_array_layer, .layerCount = r->src_layer_count},
+            .srcOffsets     = {{r->src_min_x, r->src_min_y, r->src_min_z}, {r->src_max_x, r->src_max_y, r->src_max_z}},
+            .dstSubresource = {.aspectMask = dst->aspect, .mipLevel = r->dst_mip_level, .baseArrayLayer = r->dst_base_array_layer, .layerCount = r->dst_layer_count},
+            .dstOffsets     = {{r->dst_min_x, r->dst_min_y, r->dst_min_z}, {r->dst_max_x, r->dst_max_y, r->dst_max_z}},
+        };
+    }
+
+    VkFilter vk_filter = (filter == P_FILTERING_MODE_LINEAR) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+    vkCmdBlitImage(cmd->buffer, src->image, image_layout_to_vk(src_layout), dst->image, image_layout_to_vk(dst_layout), region_count, vk_regions, vk_filter);
+
+    free(vk_regions);
+}
+
 void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage* image, uint32_t base_layer, uint32_t layer_count, PImageLayout final_layout)
 {
     if(pigment == NULL || cmd == NULL || image == NULL || image->mip_levels == 0 || layer_count == 0)
@@ -130,60 +224,52 @@ void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage*
         return;
     }
 
-    VkImageLayout vk_layout = image_layout_to_vk(final_layout);
-
-    VkImageMemoryBarrier2 barrier = {
-        .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .image               = image->image,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .subresourceRange    = {image->aspect, 0, 1, base_layer, layer_count},
-    };
-
-    VkDependencyInfo dep = {
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers    = &barrier,
-    };
-
     int32_t mip_width  = (int32_t) image->width;
     int32_t mip_height = (int32_t) image->height;
 
     for(uint32_t i = 1; i < image->mip_levels; i++)
     {
-        barrier.subresourceRange.baseMipLevel = i - 1;
-        barrier.oldLayout                     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout                     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcStageMask                  = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        barrier.srcAccessMask                 = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-        barrier.dstStageMask                  = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        barrier.dstAccessMask                 = VK_ACCESS_2_TRANSFER_READ_BIT;
-
-        vkCmdPipelineBarrier2(cmd->buffer, &dep);
-
-        VkImageBlit blit = {
-            .srcSubresource.aspectMask     = image->aspect,
-            .srcSubresource.mipLevel       = i - 1,
-            .srcSubresource.baseArrayLayer = base_layer,
-            .srcSubresource.layerCount     = layer_count,
-            .srcOffsets                    = {{0, 0, 0},                                                  {mip_width, mip_height, 1}},
-            .dstSubresource.aspectMask     = image->aspect,
-            .dstSubresource.mipLevel       = i,
-            .dstSubresource.baseArrayLayer = base_layer,
-            .dstSubresource.layerCount     = layer_count,
-            .dstOffsets                    = {{0, 0, 0}, {mip_width > 1 ? mip_width / 2 : 1, mip_height > 1 ? mip_height / 2 : 1, 1}},
+        PImageBarrier prepare_src = {
+            .image       = image,
+            .old_layout  = P_IMAGE_LAYOUT_TRANSFER_DST,
+            .new_layout  = P_IMAGE_LAYOUT_TRANSFER_SRC,
+            .src         = {P_PIPELINE_STAGE_TRANSFER_BIT, P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
+            .dst         = {P_PIPELINE_STAGE_TRANSFER_BIT,  P_MEMORY_ACCESS_TRANSFER_READ_BIT},
+            .base_mip    = i - 1,
+            .mip_count   = 1,
+            .base_layer  = base_layer,
+            .layer_count = layer_count,
         };
+        pigment_cmd_image_barriers(pigment, cmd, &prepare_src, 1);
 
-        vkCmdBlitImage(cmd->buffer, image->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+        PImageBlit blit = {
+            .src_mip_level        = i - 1,
+            .src_base_array_layer = base_layer,
+            .src_layer_count      = layer_count,
+            .src_max_x            = mip_width,
+            .src_max_y            = mip_height,
+            .src_max_z            = 1,
+            .dst_mip_level        = i,
+            .dst_base_array_layer = base_layer,
+            .dst_layer_count      = layer_count,
+            .dst_max_x            = mip_width > 1 ? mip_width / 2 : 1,
+            .dst_max_y            = mip_height > 1 ? mip_height / 2 : 1,
+            .dst_max_z            = 1,
+        };
+        pigment_cmd_blit_image(pigment, cmd, image, P_IMAGE_LAYOUT_TRANSFER_SRC, image, P_IMAGE_LAYOUT_TRANSFER_DST, &blit, 1, P_FILTERING_MODE_LINEAR);
 
-        barrier.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.newLayout     = vk_layout;
-        barrier.srcStageMask  = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-        barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
-        barrier.dstStageMask  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-        barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-
-        vkCmdPipelineBarrier2(cmd->buffer, &dep);
+        PImageBarrier finalize_src = {
+            .image       = image,
+            .old_layout  = P_IMAGE_LAYOUT_TRANSFER_SRC,
+            .new_layout  = final_layout,
+            .src         = {       P_PIPELINE_STAGE_TRANSFER_BIT,       P_MEMORY_ACCESS_TRANSFER_READ_BIT},
+            .dst         = {P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+            .base_mip    = i - 1,
+            .mip_count   = 1,
+            .base_layer  = base_layer,
+            .layer_count = layer_count,
+        };
+        pigment_cmd_image_barriers(pigment, cmd, &finalize_src, 1);
 
         if(mip_width > 1)
         {
@@ -195,15 +281,18 @@ void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage*
         }
     }
 
-    barrier.subresourceRange.baseMipLevel = image->mip_levels - 1;
-    barrier.oldLayout                     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout                     = vk_layout;
-    barrier.srcStageMask                  = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    barrier.srcAccessMask                 = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    barrier.dstStageMask                  = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-    barrier.dstAccessMask                 = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-
-    vkCmdPipelineBarrier2(cmd->buffer, &dep);
+    PImageBarrier finalize_last = {
+        .image       = image,
+        .old_layout  = P_IMAGE_LAYOUT_TRANSFER_DST,
+        .new_layout  = final_layout,
+        .src         = {       P_PIPELINE_STAGE_TRANSFER_BIT,      P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
+        .dst         = {P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+        .base_mip    = image->mip_levels - 1,
+        .mip_count   = 1,
+        .base_layer  = base_layer,
+        .layer_count = layer_count,
+    };
+    pigment_cmd_image_barriers(pigment, cmd, &finalize_last, 1);
 }
 
 PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)

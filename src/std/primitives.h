@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef PRIMITIVES_H
-#define PRIMITIVES_H
+#ifndef PIGMENT_STD_PRIMITIVES_H
+#define PIGMENT_STD_PRIMITIVES_H
 
 #include "defines.h"
 #include "vertex.h"

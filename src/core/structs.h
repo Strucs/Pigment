@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef STRUCT_H
-#define STRUCT_H
+#ifndef PIGMENT_STRUCTS_H
+#define PIGMENT_STRUCTS_H
 
 #include "defines.h"
 #include "pigment_vk.h"
 
 #include <volk.h>
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -87,16 +85,10 @@ typedef struct PRuntimeConfig {
     PBool validation_enabled;
     PBool best_practices_enabled;
     float depth_clear_value;
-    PColorSpace preferred_color_space;
     const void* extra;
 } PRuntimeConfig;
 
 struct Pigment {
-    PWindow** windows;
-    PWindowRenderer** renderers;
-    uint32_t window_count;
-    uint32_t window_capacity;
-
     PInstance* instance;
     PDevice* device;
     PVkAllocator* allocator;
@@ -104,16 +96,12 @@ struct Pigment {
     PCommandPoolList* command_pools;
     PPipelineList* pipelines;
     PLayoutList* layouts;
+
+    PRendererList* renderers;
     PResizeCallbackList* resize_callbacks;
 
     PRuntimeConfig config;
     PLogState* log;
-};
-
-struct PWindow {
-    PWindowInfo* info;
-    SDL_Window* window;
-    PBool should_close;
 };
 
 struct PWindowRenderer {
@@ -122,11 +110,8 @@ struct PWindowRenderer {
     PSync* sync;
     PCommandBuffer** command_buffers;
     uint32_t current_image_index;
-    PBool framebuffer_resized;
-    uint32_t pending_width;
-    uint32_t pending_height;
-    PPresentMode requested_present_mode;
-    PBool transparent_framebuffer;
+    PBool needs_recreate;
+    PSwapchainDesc desc;
 };
 
 struct PInstance {
@@ -146,29 +131,23 @@ struct ExtensionList {
     uint32_t size;
 };
 
+typedef struct PDeviceQueue {
+    VkQueue queue;
+    uint32_t family_index;
+    PQueueFlags flags;
+} PDeviceQueue;
+
 struct PDevice {
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
-    VkQueue graphics_queue;
-    VkQueue present_queue;
-    uint32_t graphics_family_index;
-    uint32_t present_family_index;
+    PDeviceQueue* queues;
+    uint32_t queue_count;
     ExtensionList* extensions;
     PBool features[P_FEATURE_COUNT];
 };
 
-struct QueueFamilyIndices {
-    optional_uint32 graphics_family;
-    optional_uint32 present_family;
-};
-
 struct PSurface {
     VkSurfaceKHR surface;
-};
-
-struct QueueFamilySet {
-    uint32_t* set;
-    uint32_t size;
 };
 
 struct SwapChainSupportDetails {
@@ -189,6 +168,9 @@ struct PSwapchain {
     VkExtent2D extent;
     uint32_t current_frame;
     PImage* depth;
+
+    VkQueue present_queue;
+    uint32_t present_family_index;
 };
 
 struct PPipeline {
@@ -198,6 +180,12 @@ struct PPipeline {
 
 struct PPipelineList {
     PPipeline** pipelines;
+    uint32_t count;
+    uint32_t capacity;
+};
+
+struct PRendererList {
+    PWindowRenderer** renderers;
     uint32_t count;
     uint32_t capacity;
 };
@@ -241,7 +229,7 @@ struct PPipelineBuild {
 
 struct PCommandPool {
     VkCommandPool pool;
-    PQueueFamily queue_family;
+    PQueueFlags queue_flags;
     uint32_t queue_family_index;
     PCommandPoolFlags flags;
 };

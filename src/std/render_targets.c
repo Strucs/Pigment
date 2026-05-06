@@ -32,7 +32,7 @@ struct PRenderTarget {
     PImage* depth;
     float depth_scale;
     float depth_aspect_ratio;
-    uint32_t window_index;
+    PWindowRenderer* renderer;
     uint32_t width;
     uint32_t height;
     uint32_t generation;
@@ -58,17 +58,16 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
         return NULL;
     }
 
-    target->window_index       = desc->window_index;
+    target->renderer           = desc->renderer;
     target->depth_scale        = desc->depth.scale;
     target->depth_aspect_ratio = desc->depth.aspect_ratio;
 
     uint32_t base_w = 0;
     uint32_t base_h = 0;
 
-    PWindowRenderer* renderer = pigment_get_window_renderer(pigment, desc->window_index);
-    if(renderer != NULL)
+    if(desc->renderer != NULL)
     {
-        pigment_get_swapchain_size(renderer, &base_w, &base_h);
+        pigment_get_swapchain_size(desc->renderer, &base_w, &base_h);
     }
 
     if(desc->color_count > 0 && desc->colors != NULL)
@@ -294,7 +293,7 @@ static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, 
 static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data)
 {
     PRenderTarget* target = (PRenderTarget*) user_data;
-    if(event->window_index != target->window_index)
+    if(event->renderer != target->renderer)
     {
         return;
     }

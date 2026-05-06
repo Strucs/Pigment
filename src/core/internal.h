@@ -62,16 +62,15 @@ static inline PBool format_has_stencil(PFormat f)
            || f == P_FORMAT_D32_SFLOAT_S8_UINT;
 }
 
-// window.c
-const char* const* window_get_vk_instance_extensions(Pigment* pigment, uint32_t* out_count);
-PBool window_create_vk_surface(Pigment* pigment, PWindow* window, VkSurfaceKHR* out_surface);
-
 // device.c
-QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR surface);
+PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family);
+PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
+PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden);
 
 // surface.c
-SwapChainSupportDetails* get_support_details(VkPhysicalDevice device, VkSurfaceKHR surface);
-void destroy_support_details(SwapChainSupportDetails* details);
+PRendererList* create_renderer_list(void);
+void destroy_renderer_list(Pigment* pigment, PRendererList* list);
+PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
 
 // commands.c
 PCommandPool* pigment_default_pool(Pigment* pigment);

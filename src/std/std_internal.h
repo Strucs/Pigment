@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef STD_INTERNAL_H
-#define STD_INTERNAL_H
+#ifndef PIGMENT_STD_INTERNAL_H
+#define PIGMENT_STD_INTERNAL_H
 
 #include "defines.h"
 

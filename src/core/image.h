@@ -18,6 +18,7 @@
 #define PIGMENT_IMAGE_H
 
 #include "defines.h"
+#include "sampler.h"
 
 typedef enum PImageUsage {
     P_IMAGE_USAGE_SAMPLED      = 1 << 0,
@@ -63,10 +64,52 @@ typedef struct PBufferImageCopy {
     uint32_t extent_d;
 } PBufferImageCopy;
 
+typedef struct PImageCopy {
+    uint32_t src_mip_level;
+    uint32_t src_base_array_layer;
+    uint32_t src_layer_count;
+    int32_t src_offset_x;
+    int32_t src_offset_y;
+    int32_t src_offset_z;
+    uint32_t dst_mip_level;
+    uint32_t dst_base_array_layer;
+    uint32_t dst_layer_count;
+    int32_t dst_offset_x;
+    int32_t dst_offset_y;
+    int32_t dst_offset_z;
+    uint32_t extent_w;
+    uint32_t extent_h;
+    uint32_t extent_d;
+} PImageCopy;
+
+typedef struct PImageBlit {
+    uint32_t src_mip_level;
+    uint32_t src_base_array_layer;
+    uint32_t src_layer_count;
+    int32_t src_min_x;
+    int32_t src_min_y;
+    int32_t src_min_z;
+    int32_t src_max_x;
+    int32_t src_max_y;
+    int32_t src_max_z;
+    uint32_t dst_mip_level;
+    uint32_t dst_base_array_layer;
+    uint32_t dst_layer_count;
+    int32_t dst_min_x;
+    int32_t dst_min_y;
+    int32_t dst_min_z;
+    int32_t dst_max_x;
+    int32_t dst_max_y;
+    int32_t dst_max_z;
+} PImageBlit;
+
 uint32_t pigment_format_pixel_size(PFormat format);
 PBool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format);
 
 void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PImage* dst, PImageLayout dst_layout, const PBufferImageCopy* regions, uint32_t region_count);
+void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PBuffer* dst, const PBufferImageCopy* regions, uint32_t region_count);
+void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageCopy* regions, uint32_t region_count);
+void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageBlit* regions, uint32_t region_count, PFilteringMode filter);
 
 void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage* image, uint32_t base_layer, uint32_t layer_count, PImageLayout final_layout);
 
