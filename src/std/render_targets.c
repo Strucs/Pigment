@@ -43,7 +43,7 @@ static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, 
 static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data);
 static void resize_attachment(Pigment* pigment, PImage* image, float scale, float aspect_ratio, uint32_t base_w, uint32_t base_h);
 static void compute_attachment_size(float scale, uint32_t base_w, uint32_t base_h, float aspect_ratio, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
-static bool any_attachment_tracked(const PRenderTargetDesc* desc);
+static PBool any_attachment_tracked(const PRenderTargetDesc* desc);
 
 PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderTargetDesc* desc)
 {
@@ -243,9 +243,9 @@ PAttachmentRef pigment_std_render_target_depth_layer_ref(PRenderTarget* target, 
 
 static void compute_attachment_size(float scale, uint32_t base_w, uint32_t base_h, float aspect_ratio, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h)
 {
-    bool tracked = (scale > 0.0f);
-    uint32_t w   = tracked ? (uint32_t) ((float) fallback_w * scale) : base_w;
-    uint32_t h   = tracked ? (uint32_t) ((float) fallback_h * scale) : base_h;
+    PBool tracked = (scale > 0.0f);
+    uint32_t w    = tracked ? (uint32_t) ((float) fallback_w * scale) : base_w;
+    uint32_t h    = tracked ? (uint32_t) ((float) fallback_h * scale) : base_h;
 
     if(aspect_ratio > 0.0f)
     {
@@ -309,7 +309,7 @@ static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* e
         resize_attachment(pigment, target->depth, target->depth_scale, target->depth_aspect_ratio, event->width, event->height);
     }
 
-    bool any_tracked = (target->depth_scale > 0.0f);
+    PBool any_tracked = (target->depth_scale > 0.0f);
     for(uint32_t i = 0; i < target->color_count && !any_tracked; i++)
     {
         any_tracked = (target->color_scales[i] > 0.0f);
@@ -337,20 +337,20 @@ static void resize_attachment(Pigment* pigment, PImage* image, float scale, floa
     pigment_image_resize(pigment, image, w, h);
 }
 
-static bool any_attachment_tracked(const PRenderTargetDesc* desc)
+static PBool any_attachment_tracked(const PRenderTargetDesc* desc)
 {
     if(desc->depth.format != P_FORMAT_UNDEFINED && desc->depth.scale > 0.0f)
     {
-        return true;
+        return P_TRUE;
     }
 
     for(uint32_t i = 0; i < desc->color_count; i++)
     {
         if(desc->colors[i].scale > 0.0f)
         {
-            return true;
+            return P_TRUE;
         }
     }
 
-    return false;
+    return P_FALSE;
 }

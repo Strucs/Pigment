@@ -39,7 +39,7 @@ struct PRenderPassDesc {
     uint32_t view_mask;
 };
 
-bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index);
+PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index);
 void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index, uint32_t max_frame);
 void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index);
 void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);
@@ -51,16 +51,16 @@ void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cmd, PPipeline
 void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
 
-void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, bool test, bool write, PCompareOp op);
+void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
 void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);
-void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, bool enable);
+void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, PBool enable);
 void pigment_cmd_set_stencil_op(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, PStencilOp fail_op, PStencilOp pass_op, PStencilOp depth_fail_op, PCompareOp compare_op);
 void pigment_cmd_set_stencil_compare_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
 void pigment_cmd_set_stencil_write_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
 void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t reference);
 void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, float x, float y, float width, float height, float min_depth, float max_depth);
 void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, int32_t x, int32_t y, uint32_t width, uint32_t height);
-void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, bool enable, float constant, float clamp, float slope);
-void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, bool enable, float min, float max);
+void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope);
+void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max);
 
 #endif

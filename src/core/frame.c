@@ -25,12 +25,12 @@
 
 #include <stdlib.h>
 
-bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index)
+PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index)
 {
     PDevice* device = pigment->device;
     if(renderer->framebuffer_resized)
     {
-        renderer->framebuffer_resized = false;
+        renderer->framebuffer_resized = P_FALSE;
 
         uint32_t framebuffer_width  = renderer->pending_width;
         uint32_t framebuffer_height = renderer->pending_height;
@@ -45,15 +45,15 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
         }
         if(framebuffer_width == 0 || framebuffer_height == 0)
         {
-            renderer->framebuffer_resized = true;
-            return false;
+            renderer->framebuffer_resized = P_TRUE;
+            return P_FALSE;
         }
 
         uint32_t old_image_count = renderer->swapchain->image_count;
         if(recreate_swapchain(pigment, renderer, framebuffer_width, framebuffer_height, present_mode) != PIGMENT_SUCCESS)
         {
-            renderer->framebuffer_resized = true;
-            return false;
+            renderer->framebuffer_resized = P_TRUE;
+            return P_FALSE;
         }
         if(old_image_count != renderer->swapchain->image_count)
         {
@@ -76,7 +76,7 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
         }
 
         renderer->swapchain->current_frame = 0;
-        return false;
+        return P_FALSE;
     }
 
     uint32_t current_frame = renderer->swapchain->current_frame;
@@ -86,13 +86,13 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
         recreate_image_available_semaphore(pigment, renderer->sync, current_frame);
-        renderer->framebuffer_resized = true;
-        return false;
+        renderer->framebuffer_resized = P_TRUE;
+        return P_FALSE;
     }
     else if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to acquire swapchain image!");
-        return false;
+        return P_FALSE;
     }
 
     vkResetFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame]);
@@ -102,17 +102,17 @@ bool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_imag
     if((result = vkResetCommandBuffer(cmd, 0)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to reset command buffer! (result: %d)", result);
-        return false;
+        return P_FALSE;
     }
 
     VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     if((result = vkBeginCommandBuffer(cmd, &begin_info)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to begin command buffer! (result: %d)", result);
-        return false;
+        return P_FALSE;
     }
 
-    return true;
+    return P_TRUE;
 }
 
 void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index)
@@ -120,7 +120,7 @@ void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t 
     uint32_t current_frame_idx = renderer->swapchain->current_frame;
     PCommandBuffer* cmd        = renderer->command_buffers[current_frame_idx];
     PSwapchain* swapchain      = renderer->swapchain;
-    bool transparent           = renderer->transparent_framebuffer;
+    PBool transparent          = renderer->transparent_framebuffer;
 
     VkImageMemoryBarrier2 color_barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -182,7 +182,7 @@ void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t 
         .clearValue  = {.depthStencil = clear_depth_stencil_value},
     };
 
-    bool has_stencil = (swapchain->depth->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+    PBool has_stencil = (swapchain->depth->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
 
     VkRenderingAttachmentInfo stencil_attachment = depth_attachment;
 
@@ -251,9 +251,9 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     {
         return;
     }
-    bool has_ds_attachment = (desc->depth_attachment.image != NULL);
-    bool has_depth         = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
-    bool has_stencil       = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+    PBool has_ds_attachment = (desc->depth_attachment.image != NULL);
+    PBool has_depth         = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+    PBool has_stencil       = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
     if(desc->color_count == 0 && !has_ds_attachment)
     {
         return;
@@ -447,8 +447,8 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
 
     vkCmdEndRendering(cmd->buffer);
 
-    bool has_ds_attachment = (desc->depth_attachment.image != NULL);
-    uint32_t max_barriers  = desc->color_count + (has_ds_attachment ? 1 : 0);
+    PBool has_ds_attachment = (desc->depth_attachment.image != NULL);
+    uint32_t max_barriers   = desc->color_count + (has_ds_attachment ? 1 : 0);
     if(max_barriers == 0)
     {
         return;
@@ -560,7 +560,7 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
     renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
 }
 
-void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, bool test, bool write, PCompareOp op)
+void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op)
 {
     if(pigment == NULL || cmd == NULL)
     {
@@ -581,7 +581,7 @@ void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode,
     vkCmdSetFrontFace(cmd->buffer, (VkFrontFace) face);
 }
 
-void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, bool enable)
+void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, PBool enable)
 {
     if(pigment == NULL || cmd == NULL)
     {
@@ -656,7 +656,7 @@ void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, int32_t x, i
     vkCmdSetScissorWithCount(cmd->buffer, 1, &rect);
 }
 
-void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, bool enable, float constant, float clamp, float slope)
+void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope)
 {
     if(pigment == NULL || cmd == NULL)
     {
@@ -669,7 +669,7 @@ void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, bool enab
     }
 }
 
-void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, bool enable, float min, float max)
+void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max)
 {
     if(cmd == NULL || pigment == NULL)
     {

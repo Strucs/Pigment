@@ -22,13 +22,13 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-int pigment_log_init(Pigment* pigment);
+PResult pigment_log_init(Pigment* pigment);
 void pigment_log_destroy(Pigment* pigment);
 
 void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, PigmentLogType type, const char* message_id_name, int32_t message_id, const char* fmt, ...)
     __attribute__((format(printf, 6, 7)));
 
-static inline int pigment_log_should_dispatch(const Pigment* p, PigmentLogSeverity sev, PigmentLogType type)
+static inline PBool pigment_log_should_dispatch(const Pigment* p, PigmentLogSeverity sev, PigmentLogType type)
 {
     uint32_t active_sev  = atomic_load_explicit(&p->log->active_severities, memory_order_relaxed);
     uint32_t active_type = atomic_load_explicit(&p->log->active_types, memory_order_relaxed);

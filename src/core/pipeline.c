@@ -30,7 +30,7 @@ static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_creat
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
 static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
-static bool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count);
+static PBool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count);
 static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline);
 
 #define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
@@ -237,13 +237,13 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
     free(build);
 }
 
-int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out)
+PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out)
 {
     VkGraphicsPipelineCreateInfo* pipeline_create_infos = NULL;
     VkPipeline* vk_pipelines                            = NULL;
     PPipeline** temp_pipelines                          = NULL;
     uint32_t temp_pipelines_allocated                   = 0;
-    int status                                          = PIGMENT_ERROR;
+    PResult status                                      = PIGMENT_ERROR;
 
     if(pigment == NULL || builds == NULL || out == NULL || count == 0)
     {
@@ -258,6 +258,8 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
             goto FREE;
         }
     }
+
+    status = PIGMENT_ERROR_OUT_OF_MEMORY;
 
     VkDevice device     = pigment->device->logical_device;
     PPipelineList* list = pigment->pipelines;
@@ -318,6 +320,7 @@ int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, 
         };
     }
 
+    status          = PIGMENT_ERROR_VULKAN;
     VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, NULL, vk_pipelines);
     if(result != VK_SUCCESS)
     {
@@ -604,20 +607,20 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
     return dynamic_state_create_info;
 }
 
-static bool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count)
+static PBool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count)
 {
     if(candidate->set_layout_count != set_layout_count)
     {
-        return false;
+        return P_FALSE;
     }
     for(uint32_t i = 0; i < set_layout_count; i++)
     {
         if(candidate->set_layouts[i] != set_layouts[i])
         {
-            return false;
+            return P_FALSE;
         }
     }
-    return true;
+    return P_TRUE;
 }
 
 PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)

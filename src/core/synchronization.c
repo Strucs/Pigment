@@ -132,13 +132,13 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     free(sync);
 }
 
-int recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t index)
+PResult recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t index)
 {
     PDevice* device   = pigment->device;
     VkSemaphore fresh = create_semaphore(pigment);
     if(fresh == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[index], NULL);
@@ -147,8 +147,9 @@ int recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t i
     return PIGMENT_SUCCESS;
 }
 
-int resize_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
+PResult resize_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
 {
+    PResult result              = PIGMENT_ERROR_OUT_OF_MEMORY;
     PDevice* device             = pigment->device;
     VkSemaphore* new_semaphores = calloc(new_count, sizeof(*new_semaphores));
     if(new_semaphores == NULL)
@@ -156,6 +157,7 @@ int resize_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t ol
         goto ERROR;
     }
 
+    result = PIGMENT_ERROR_VULKAN;
     for(uint32_t i = 0; i < new_count; i++)
     {
         new_semaphores[i] = create_semaphore(pigment);
@@ -179,7 +181,7 @@ ERROR:
     PLOG_ERROR(pigment, "Failed to resize render_finished_semaphores, keeping previous ones");
     if(new_semaphores == NULL)
     {
-        return PIGMENT_ERROR;
+        return result;
     }
 
     for(uint32_t i = 0; i < new_count; i++)
@@ -191,7 +193,7 @@ ERROR:
     }
     free(new_semaphores);
 
-    return PIGMENT_ERROR;
+    return result;
 }
 
 static VkSemaphore create_semaphore(Pigment* pigment)

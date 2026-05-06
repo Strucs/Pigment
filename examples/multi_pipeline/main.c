@@ -49,7 +49,7 @@ int main(void)
     PigmentConfig config = {
         .loggers           = loggers,
         .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation = true,
+        .enable_validation = P_TRUE,
     };
 
     pigment = init_pigment(&app_info, &window_info, &config);
@@ -104,7 +104,7 @@ int main(void)
     }
 
     FPSCameraState fps_state = fps_camera_state_init(camera, pigment_get_sdl_window(pigment, 0), camera_position);
-    SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), true);
+    SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), P_TRUE);
 
     PWindowRenderer* renderer = pigment_get_window_renderer(pigment, 0);
     PFormat color_format      = pigment_get_color_format(renderer);
@@ -253,7 +253,7 @@ int main(void)
         pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[1]);
-        pigment_cmd_set_depth(pigment, cmd, true, false, P_COMPARE_OP_GREATER);
+        pigment_cmd_set_depth(pigment, cmd, P_TRUE, P_FALSE, P_COMPARE_OP_GREATER);
         pigment_draw(pigment, 0, bindless, ring, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
 
         pigment_end_swapchain_pass(pigment, 0);

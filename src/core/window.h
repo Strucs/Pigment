@@ -21,7 +21,7 @@
 
 PWindow* create_window(Pigment* pigment, PWindowInfo* window_info);
 void destroy_window(PWindow* window);
-bool window_should_close(PWindow* window);
+PBool window_should_close(PWindow* window);
 void show_window(PWindow* window);
 void get_framebuffer_size(PWindow* window, uint32_t* out_width, uint32_t* out_height);
 

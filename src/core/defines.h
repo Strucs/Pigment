@@ -18,10 +18,17 @@
 #define DEFINES_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
-#define PIGMENT_SUCCESS 0
-#define PIGMENT_ERROR 1
+typedef unsigned char PBool;
+#define P_TRUE 1
+#define P_FALSE 0
+
+typedef enum PResult {
+    PIGMENT_SUCCESS             = 0,
+    PIGMENT_ERROR               = 1,
+    PIGMENT_ERROR_OUT_OF_MEMORY = 2,
+    PIGMENT_ERROR_VULKAN        = 3,
+} PResult;
 
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \
     ((((uint32_t) (major)) << 22U) | (((uint32_t) (minor)) << 12U) | ((uint32_t) (patch)))
@@ -303,10 +310,10 @@ typedef struct PigmentConfig {
     uint32_t max_frames_in_flight;
     const PigmentLoggerCreateInfo* loggers;
     uint32_t logger_count;
-    bool enable_validation;
-    bool enable_best_practices;
-    float depth_clear_value;          // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
-    PColorSpace preferred_color_space; // 0 = SRGB. HDR values require a compatible display + driver, falls back to SRGB silently if unsupported.
+    PBool enable_validation;
+    PBool enable_best_practices;
+    float depth_clear_value;              // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    PColorSpace preferred_color_space;    // 0 = SRGB. HDR values require a compatible display + driver, falls back to SRGB silently if unsupported.
     const void* extra;
 } PigmentConfig;
 

@@ -41,7 +41,7 @@ void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PIm
         uint32_t mip_count   = (b->mip_count == 0) ? VK_REMAINING_MIP_LEVELS : b->mip_count;
         uint32_t layer_count = (b->layer_count == 0) ? VK_REMAINING_ARRAY_LAYERS : b->layer_count;
 
-        bool transfer  = (b->src_queue_family != b->dst_queue_family);
+        PBool transfer = (b->src_queue_family != b->dst_queue_family);
         vk_barriers[i] = (VkImageMemoryBarrier2) {
             .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .oldLayout           = image_layout_to_vk(b->old_layout),
@@ -85,7 +85,7 @@ void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PB
     {
         const PBufferBarrier* b = &barriers[i];
 
-        bool transfer  = (b->src_queue_family != b->dst_queue_family);
+        PBool transfer = (b->src_queue_family != b->dst_queue_family);
         vk_barriers[i] = (VkBufferMemoryBarrier2) {
             .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
             .srcStageMask        = pipeline_stage_to_vk(b->src.stages),

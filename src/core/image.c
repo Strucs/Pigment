@@ -26,7 +26,7 @@
 static void translate_image_type(PImageType type, VkImageType* out_image_type, VkImageCreateFlags* out_flags);
 static VkImageUsageFlags translate_usage(PImageUsage usage);
 static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage);
-static int allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
+static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
 static void free_resources(Pigment* pigment, PImage* image);
 static PImageViewType derive_view_type(PImage* image, uint32_t layer_count);
 static VkImageAspectFlags aspect_to_vk(PImageAspect aspect, PImage* image);
@@ -52,11 +52,11 @@ uint32_t pigment_format_pixel_size(PFormat format)
     }
 }
 
-bool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format)
+PBool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format)
 {
     if(pigment == NULL || pigment->device == NULL)
     {
-        return false;
+        return P_FALSE;
     }
     VkFormatProperties format_properties;
     vkGetPhysicalDeviceFormatProperties(pigment->device->physical_device, (VkFormat) format, &format_properties);
@@ -278,7 +278,7 @@ uint32_t pigment_image_height(PImage* image)
     return (image != NULL) ? image->height : 0;
 }
 
-int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties)
+PResult create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties)
 {
     VkImageCreateInfo image_create_info = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -303,7 +303,7 @@ int create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (result: %d)", result);
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     return PIGMENT_SUCCESS;
@@ -510,11 +510,11 @@ static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage)
     return VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
-static int allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
+static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
 {
     if(create_vk_image(pigment, &image->image, &image->image_allocation, image->vk_image_type, width, height, image->depth, image->mip_levels, image->array_layers, image->vk_format, VK_IMAGE_TILING_OPTIMAL, image->vk_usage, image->vk_create_flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     image->width  = width;
@@ -528,7 +528,7 @@ static int allocate_resources(Pigment* pigment, PImage* image, uint32_t width, u
         pigment->allocator->destroy_image(pigment->allocator->user_data, image->image, image->image_allocation);
         image->image            = VK_NULL_HANDLE;
         image->image_allocation = NULL;
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     return PIGMENT_SUCCESS;
@@ -555,7 +555,7 @@ static PImageViewType derive_view_type(PImage* image, uint32_t layer_count)
         return P_IMAGE_VIEW_TYPE_3D;
     }
 
-    bool cube = (image->vk_create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) != 0;
+    PBool cube = (image->vk_create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) != 0;
     if(layer_count == 1)
     {
         return P_IMAGE_VIEW_TYPE_2D;

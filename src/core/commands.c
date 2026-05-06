@@ -22,7 +22,7 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFamily family);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
-static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
+static PResult command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
 static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool);
 static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool command_pool, const uint32_t command_buffers_numbers);
 static VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
@@ -350,7 +350,7 @@ static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)
     return result;
 }
 
-static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
+static PResult command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
 {
     if(pools->count >= pools->capacity)
     {
@@ -359,7 +359,7 @@ static int command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
 
         if(new_ptr == NULL)
         {
-            return PIGMENT_ERROR;
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
 
         pools->pools    = new_ptr;

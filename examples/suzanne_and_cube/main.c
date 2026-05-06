@@ -51,7 +51,7 @@ int main(void)
     PigmentConfig config = {
         .loggers           = loggers,
         .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation = true,
+        .enable_validation = P_TRUE,
     };
 
     pigment = init_pigment(&app_info, &window_info, &config);
@@ -110,7 +110,7 @@ int main(void)
     }
 
     FPSCameraState fps_state = fps_camera_state_init(camera, pigment_get_sdl_window(pigment, 0), camera_position);
-    SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), true);
+    SDL_SetWindowRelativeMouseMode(pigment_get_sdl_window(pigment, 0), P_TRUE);
 
     PWindowRenderer* renderer   = pigment_get_window_renderer(pigment, 0);
     PFormat color_format        = pigment_get_color_format(renderer);

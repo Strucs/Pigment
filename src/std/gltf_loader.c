@@ -34,16 +34,16 @@ typedef struct PrimAttrs {
     cgltf_accessor* color;
 } PrimAttrs;
 
-static int darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t add, size_t elem_size);
+static PResult darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t add, size_t elem_size);
 static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s);
 static PrimAttrs find_primitive_attrs(cgltf_primitive* prim);
-static int append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs);
+static PResult append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs);
 static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data* data);
-static int append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
-static int process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
-static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node);
+static PResult append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
+static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
+static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node);
 
-static int darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t add, size_t elem_size)
+static PResult darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t add, size_t elem_size)
 {
     if((uint64_t) count + add <= *cap)
     {
@@ -59,7 +59,7 @@ static int darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t ad
     void* new_ptr = realloc(*ptr, elem_size * new_cap);
     if(new_ptr == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     *ptr = new_ptr;
@@ -160,7 +160,7 @@ static PrimAttrs find_primitive_attrs(cgltf_primitive* prim)
     return attributes;
 }
 
-static int append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs)
+static PResult append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs)
 {
     if(attrs->pos == NULL || attrs->pos->count == 0)
     {
@@ -168,9 +168,10 @@ static int append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs)
     }
 
     uint32_t add = (uint32_t) attrs->pos->count;
-    if(darray_reserve((void**) &asset->vertices, asset->vertex_count, &asset->vertex_capacity, add, sizeof(PVertex)))
+    PResult res  = darray_reserve((void**) &asset->vertices, asset->vertex_count, &asset->vertex_capacity, add, sizeof(PVertex));
+    if(res != PIGMENT_SUCCESS)
     {
-        return PIGMENT_ERROR;
+        return res;
     }
 
     if(asset->vertices == NULL)
@@ -209,7 +210,7 @@ static int append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs)
     return PIGMENT_SUCCESS;
 }
 
-static int append_primitive_indices(MeshAsset* asset, cgltf_accessor* indices, uint32_t base_vertex)
+static PResult append_primitive_indices(MeshAsset* asset, cgltf_accessor* indices, uint32_t base_vertex)
 {
     if(indices == NULL || indices->count == 0)
     {
@@ -217,9 +218,10 @@ static int append_primitive_indices(MeshAsset* asset, cgltf_accessor* indices, u
     }
 
     uint32_t add = (uint32_t) indices->count;
-    if(darray_reserve((void**) &asset->indices, asset->index_count, &asset->index_capacity, add, sizeof(uint32_t)) == PIGMENT_ERROR)
+    PResult res  = darray_reserve((void**) &asset->indices, asset->index_count, &asset->index_capacity, add, sizeof(uint32_t));
+    if(res != PIGMENT_SUCCESS)
     {
-        return PIGMENT_ERROR;
+        return res;
     }
 
     if(asset->indices == NULL)
@@ -274,7 +276,7 @@ static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data*
         .metallic_factor            = 1.0f,
         .roughness_factor           = 1.0f,
         .normal_scale               = 1.0f,
-        .occlusion_scale         = 1.0f,
+        .occlusion_scale            = 1.0f,
     };
 
     if(mat == NULL)
@@ -311,7 +313,7 @@ static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data*
     return desc;
 }
 
-static int append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc)
+static PResult append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc)
 {
     if((uint64_t) asset->surface_count + 1 > asset->surface_capacity)
     {
@@ -322,7 +324,7 @@ static int append_surface(MeshAsset* asset, PRawSurface surface, const PMaterial
 
         if(new_surfaces == NULL || new_descs == NULL)
         {
-            return PIGMENT_ERROR;
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
 
         asset->surfaces         = new_surfaces;
@@ -337,31 +339,34 @@ static int append_surface(MeshAsset* asset, PRawSurface surface, const PMaterial
     return PIGMENT_SUCCESS;
 }
 
-static int process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx)
+static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx)
 {
     PrimAttrs attrs = find_primitive_attrs(prim);
 
     uint32_t base_vertex = asset->vertex_count;
     uint32_t index_start = asset->index_count;
 
-    if(append_primitive_vertices(asset, &attrs) == PIGMENT_ERROR)
+    PResult res = append_primitive_vertices(asset, &attrs);
+    if(res != PIGMENT_SUCCESS)
     {
-        return PIGMENT_ERROR;
+        return res;
     }
 
     if(prim->indices)
     {
-        if(append_primitive_indices(asset, prim->indices, base_vertex) == PIGMENT_ERROR)
+        res = append_primitive_indices(asset, prim->indices, base_vertex);
+        if(res != PIGMENT_SUCCESS)
         {
-            return PIGMENT_ERROR;
+            return res;
         }
     }
     else if(attrs.pos)
     {
         uint32_t add = (uint32_t) attrs.pos->count;
-        if(darray_reserve((void**) &asset->indices, asset->index_count, &asset->index_capacity, add, sizeof(uint32_t)) == PIGMENT_ERROR)
+        res          = darray_reserve((void**) &asset->indices, asset->index_count, &asset->index_capacity, add, sizeof(uint32_t));
+        if(res != PIGMENT_SUCCESS)
         {
-            return PIGMENT_ERROR;
+            return res;
         }
         for(uint32_t i = 0; i < add; i++)
         {
@@ -382,7 +387,7 @@ static int process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive
     return append_surface(asset, surface, &desc);
 }
 
-static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
+static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
 {
     if(node->mesh)
     {
@@ -392,9 +397,10 @@ static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
 
         cgltf_node_transform_world(node, world);
 
-        if(darray_reserve((void**) &asset->node_transforms, asset->node_count, &asset->node_capacity, 1, sizeof(mat4)) == PIGMENT_ERROR)
+        PResult res = darray_reserve((void**) &asset->node_transforms, asset->node_count, &asset->node_capacity, 1, sizeof(mat4));
+        if(res != PIGMENT_SUCCESS)
         {
-            return PIGMENT_ERROR;
+            return res;
         }
 
         this_node_idx = asset->node_count;
@@ -404,18 +410,20 @@ static int process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
         gltf_mesh = node->mesh;
         for(size_t p = 0; p < gltf_mesh->primitives_count; p++)
         {
-            if(process_primitive(asset, data, &gltf_mesh->primitives[p], this_node_idx) == PIGMENT_ERROR)
+            res = process_primitive(asset, data, &gltf_mesh->primitives[p], this_node_idx);
+            if(res != PIGMENT_SUCCESS)
             {
-                return PIGMENT_ERROR;
+                return res;
             }
         }
     }
 
     for(size_t c = 0; c < node->children_count; c++)
     {
-        if(process_node(asset, data, node->children[c]) == PIGMENT_ERROR)
+        PResult res = process_node(asset, data, node->children[c]);
+        if(res != PIGMENT_SUCCESS)
         {
-            return PIGMENT_ERROR;
+            return res;
         }
     }
     return PIGMENT_SUCCESS;
@@ -549,7 +557,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
         cgltf_scene* scene = &data->scenes[s];
         for(size_t n = 0; n < scene->nodes_count; n++)
         {
-            if(process_node(asset, data, scene->nodes[n]) == PIGMENT_ERROR)
+            if(process_node(asset, data, scene->nodes[n]) != PIGMENT_SUCCESS)
             {
                 goto ERROR;
             }
@@ -567,14 +575,14 @@ FREE:
     return asset;
 }
 
-int upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials)
+PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials)
 {
     if(pigment == NULL || asset == NULL)
     {
         return PIGMENT_ERROR;
     }
 
-    int status                   = PIGMENT_SUCCESS;
+    PResult status               = PIGMENT_SUCCESS;
     const unsigned char** pixels = NULL;
     uint32_t* tex_map            = NULL;
     uint32_t* samp_map           = NULL;
@@ -595,7 +603,7 @@ int upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* as
 
         if(tex_map == NULL || pixels == NULL || widths == NULL || heights == NULL || formats == NULL || src_indices == NULL)
         {
-            status = PIGMENT_ERROR;
+            status = PIGMENT_ERROR_OUT_OF_MEMORY;
             goto FREE;
         }
 

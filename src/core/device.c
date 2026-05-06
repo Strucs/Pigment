@@ -26,17 +26,17 @@ static QueueFamilySet* create_queue_family_set(QueueFamilyIndices* indices);
 static void destroy_queue_family_set(QueueFamilySet* set);
 static void append_set(uint32_t* set, uint32_t* idx, uint32_t element);
 static QueueFamilyIndices* init_indices(void);
-static bool queue_families_indices_completed(QueueFamilyIndices indices);
+static PBool queue_families_indices_completed(QueueFamilyIndices indices);
 
-static bool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available);
-static bool features_chain_supports(const void* req, const void* available, size_t struct_size);
+static PBool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available);
+static PBool features_chain_supports(const void* req, const void* available, size_t struct_size);
 static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalDeviceFeatures* src, const VkPhysicalDeviceFeatures* available);
 static void merge_features_chain_or(void* dst, const void* src, const void* available, size_t struct_size);
 
-static bool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required);
-static bool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
-static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
-static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface);
+static PBool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required);
+static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
+static PResult pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
+static PResult create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface);
 
 static inline VkPhysicalDeviceFeatures pigment_req_features(void)
 {
@@ -70,12 +70,12 @@ static inline VkPhysicalDeviceVulkan13Features pigment_req_features_13(void)
 
 static void append_set(uint32_t* set, uint32_t* idx, uint32_t element)
 {
-    bool present = false;
+    PBool present = P_FALSE;
     for(size_t i = 0; i < *idx; i++)
     {
         if(element == set[i])
         {
-            present = true;
+            present = P_TRUE;
             break;
         }
     }
@@ -144,16 +144,16 @@ static QueueFamilyIndices* init_indices(void)
     return indices;
 }
 
-static bool queue_families_indices_completed(QueueFamilyIndices indices)
+static PBool queue_families_indices_completed(QueueFamilyIndices indices)
 {
     return indices.graphics_family.has_value && indices.present_family.has_value;
 }
 
-static bool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available)
+static PBool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available)
 {
     if(req == NULL)
     {
-        return true;
+        return P_TRUE;
     }
     const VkBool32* req_fields       = (const VkBool32*) req;
     const VkBool32* available_fields = (const VkBool32*) available;
@@ -162,17 +162,17 @@ static bool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhy
     {
         if(req_fields[i] && !available_fields[i])
         {
-            return false;
+            return P_FALSE;
         }
     }
-    return true;
+    return P_TRUE;
 }
 
-static bool features_chain_supports(const void* req, const void* available, size_t struct_size)
+static PBool features_chain_supports(const void* req, const void* available, size_t struct_size)
 {
     if(req == NULL)
     {
-        return true;
+        return P_TRUE;
     }
     const size_t header              = sizeof(VkBaseOutStructure);
     const VkBool32* req_fields       = (const VkBool32*) ((const char*) req + header);
@@ -182,10 +182,10 @@ static bool features_chain_supports(const void* req, const void* available, size
     {
         if(req_fields[i] && !available_fields[i])
         {
-            return false;
+            return P_FALSE;
         }
     }
-    return true;
+    return P_TRUE;
 }
 
 static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalDeviceFeatures* src, const VkPhysicalDeviceFeatures* available)
@@ -227,7 +227,7 @@ static void merge_features_chain_or(void* dst, const void* src, const void* avai
     }
 }
 
-static bool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required)
+static PBool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required)
 {
     uint32_t count                   = 0;
     VkExtensionProperties* available = NULL;
@@ -235,7 +235,7 @@ static bool check_device_extensions_supported(VkPhysicalDevice device, const Ext
     vkEnumerateDeviceExtensionProperties(device, NULL, &count, NULL);
     if(count == 0 && required->size > 0)
     {
-        return false;
+        return P_FALSE;
     }
 
     if(count > 0)
@@ -243,17 +243,17 @@ static bool check_device_extensions_supported(VkPhysicalDevice device, const Ext
         available = malloc(count * sizeof(*available));
         if(available == NULL)
         {
-            return false;
+            return P_FALSE;
         }
         vkEnumerateDeviceExtensionProperties(device, NULL, &count, available);
     }
 
-    bool extensions_found = true;
+    PBool extensions_found = P_TRUE;
     for(size_t i = 0; i < required->size; i++)
     {
         if(!extension_available(available, count, required->names[i]))
         {
-            extensions_found = false;
+            extensions_found = P_FALSE;
             break;
         }
     }
@@ -262,11 +262,11 @@ static bool check_device_extensions_supported(VkPhysicalDevice device, const Ext
     return extensions_found;
 }
 
-static bool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
+static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
 {
     QueueFamilyIndices* indices      = NULL;
     SwapChainSupportDetails* details = NULL;
-    bool result                      = false;
+    PBool result                     = P_FALSE;
 
     indices = find_queue_families(device, surface);
     if(indices == NULL)
@@ -336,7 +336,7 @@ static bool is_suitable(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR 
         }
     }
 
-    result = true;
+    result = P_TRUE;
 
 FREE:
     free(indices);
@@ -347,7 +347,7 @@ FREE:
     return result;
 }
 
-static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
+static PResult pick_physical_device(Pigment* pigment, PDevice* device, PSurface* surface, const ExtensionList* req_extensions, const PVkInitInfo* vk_init)
 {
     VkPhysicalDevice* devices = NULL;
     uint32_t devices_count    = 0;
@@ -357,13 +357,13 @@ static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* sur
     if(devices_count == 0)
     {
         PLOG_ERROR(pigment, "Failed to find GPUs compatible with Vulkan");
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     devices = malloc(devices_count * sizeof(*devices));
     if(devices == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, devices);
@@ -382,7 +382,7 @@ static int pick_physical_device(Pigment* pigment, PDevice* device, PSurface* sur
     if(device->physical_device == VK_NULL_HANDLE)
     {
         PLOG_ERROR(pigment, "Failed to find a suitable GPU");
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     VkPhysicalDeviceProperties device_properties;
@@ -420,16 +420,16 @@ QueueFamilyIndices* find_queue_families(VkPhysicalDevice device, VkSurfaceKHR su
     {
         if(queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
-            indices->graphics_family.has_value = true;
+            indices->graphics_family.has_value = P_TRUE;
             indices->graphics_family.value     = i;
         }
 
-        present_support = false;
+        present_support = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &present_support);
 
         if(present_support)
         {
-            indices->present_family.has_value = true;
+            indices->present_family.has_value = P_TRUE;
             indices->present_family.value     = i;
         }
 
@@ -448,8 +448,9 @@ ERROR:
     return NULL;
 }
 
-static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface)
+static PResult create_logical_device(Pigment* pigment, PDevice* device, PSurface* surface)
 {
+    PResult result                              = PIGMENT_ERROR_OUT_OF_MEMORY;
     PInstance* instance                         = pigment->instance;
     QueueFamilyIndices* indices                 = NULL;
     VkDeviceQueueCreateInfo* queue_create_infos = NULL;
@@ -489,8 +490,8 @@ static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* su
     VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
     vkGetPhysicalDeviceFeatures2(device->physical_device, &available_2);
 
-    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (bool) available_2.features.depthBounds;
-    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (bool) available_2.features.fillModeNonSolid;
+    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (PBool) available_2.features.depthBounds;
+    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (PBool) available_2.features.fillModeNonSolid;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
         .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
@@ -560,6 +561,7 @@ static int create_logical_device(Pigment* pigment, PDevice* device, PSurface* su
         create_info.enabledLayerCount = 0;
     }
 
+    result = PIGMENT_ERROR_VULKAN;
     if(vkCreateDevice(device->physical_device, &create_info, NULL, &(device->logical_device)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create logical device");
@@ -583,7 +585,7 @@ ERROR:
     free(queue_create_infos);
     destroy_queue_family_set(set);
     free(indices);
-    return PIGMENT_ERROR;
+    return result;
 }
 
 PDevice* create_device(Pigment* pigment, PSurface* surface)

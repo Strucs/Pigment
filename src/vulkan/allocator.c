@@ -64,12 +64,12 @@ struct PVkAllocation {
 
 static inline VkDeviceSize align_up(VkDeviceSize value, VkDeviceSize alignment);
 static uint32_t find_memory_type_index(const VkPhysicalDeviceMemoryProperties* props, uint32_t type_filter, VkMemoryPropertyFlags properties);
-static bool memory_type_is_host_visible(const VkPhysicalDeviceMemoryProperties* props, uint32_t type_index);
+static PBool memory_type_is_host_visible(const VkPhysicalDeviceMemoryProperties* props, uint32_t type_index);
 static void destroy_block(DefaultAllocator* alloc, DefaultBlock* block);
 static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_index, VkDeviceSize size);
-static bool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset);
+static PBool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset);
 static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize size);
-static bool block_is_empty(const DefaultBlock* block);
+static PBool block_is_empty(const DefaultBlock* block);
 static PVkAllocation* create_allocation(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, void* block_mapped, DefaultBlock* block, uint32_t memory_type_index);
 static PVkAllocation* allocate_pooled(DefaultAllocator* alloc, VkDeviceSize size, VkDeviceSize alignment, uint32_t memory_type_index);
 static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize size, uint32_t memory_type_index);
@@ -147,7 +147,7 @@ static uint32_t find_memory_type_index(const VkPhysicalDeviceMemoryProperties* p
     return UINT32_MAX;
 }
 
-static bool memory_type_is_host_visible(const VkPhysicalDeviceMemoryProperties* props, uint32_t type_index)
+static PBool memory_type_is_host_visible(const VkPhysicalDeviceMemoryProperties* props, uint32_t type_index)
 {
     return (props->memoryTypes[type_index].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
 }
@@ -223,7 +223,7 @@ ERROR:
     return NULL;
 }
 
-static bool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset)
+static PBool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset)
 {
     for(uint32_t i = 0; i < block->free_range_count; i++)
     {
@@ -247,7 +247,7 @@ static bool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceS
                 DefaultFreeRange* new_ranges = realloc(block->free_ranges, new_capacity * sizeof(*new_ranges));
                 if(new_ranges == NULL)
                 {
-                    return false;
+                    return P_FALSE;
                 }
                 block->free_ranges         = new_ranges;
                 block->free_range_capacity = new_capacity;
@@ -274,10 +274,10 @@ static bool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceS
             block->free_range_count--;
         }
 
-        return true;
+        return P_TRUE;
     }
 
-    return false;
+    return P_FALSE;
 }
 
 static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize size)
@@ -288,8 +288,8 @@ static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize
         i++;
     }
 
-    bool merge_prev = (i > 0) && (block->free_ranges[i - 1].offset + block->free_ranges[i - 1].size == offset);
-    bool merge_next = (i < block->free_range_count) && (offset + size == block->free_ranges[i].offset);
+    PBool merge_prev = (i > 0) && (block->free_ranges[i - 1].offset + block->free_ranges[i - 1].size == offset);
+    PBool merge_next = (i < block->free_range_count) && (offset + size == block->free_ranges[i].offset);
 
     if(merge_prev && merge_next)
     {
@@ -327,7 +327,7 @@ static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize
     }
 }
 
-static bool block_is_empty(const DefaultBlock* block)
+static PBool block_is_empty(const DefaultBlock* block)
 {
     return block->free_range_count == 1 && block->free_ranges[0].offset == 0 && block->free_ranges[0].size == block->block_size;
 }
@@ -494,7 +494,7 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
         goto ERROR;
     }
 
-    bool needs_dedicated = requirements.size > alloc->dedicated_threshold;
+    PBool needs_dedicated = requirements.size > alloc->dedicated_threshold;
 
     pigment_rwlock_wrlock(&alloc->lock);
     PVkAllocation* allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, memory_type_index)
@@ -561,7 +561,7 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
         goto ERROR;
     }
 
-    bool needs_dedicated = requirements.size > alloc->dedicated_threshold;
+    PBool needs_dedicated = requirements.size > alloc->dedicated_threshold;
 
     pigment_rwlock_wrlock(&alloc->lock);
     PVkAllocation* allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, memory_type_index)

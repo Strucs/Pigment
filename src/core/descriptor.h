@@ -65,7 +65,7 @@ typedef struct PDescriptorPoolDesc {
     const PDescriptorPoolSize* pool_sizes;
     uint32_t pool_size_count;
     uint32_t max_sets;
-    bool allow_update_after_bind;
+    PBool allow_update_after_bind;
 } PDescriptorPoolDesc;
 
 typedef struct PDescriptorImageInfo {

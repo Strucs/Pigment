@@ -65,6 +65,6 @@ typedef struct MeshAsset {
 MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath);
 void free_mesh_asset(MeshAsset* mesh);
 
-int upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);
+PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);
 
 #endif

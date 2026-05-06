@@ -19,9 +19,9 @@
 #include "log_internal.h"
 #include "pigment_vk.h"
 
-static bool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
-static int build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count);
-static int build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count);
+static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
+static PResult build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count);
+static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count);
 static PigmentLogSeverity vk_severity_to_pigment(VkDebugUtilsMessageSeverityFlagBitsEXT severity);
 static PigmentLogType vk_type_to_pigment(VkDebugUtilsMessageTypeFlagsEXT type);
 static void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT* create_info, Pigment* pigment);
@@ -86,8 +86,8 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     if(pigment->config.validation_enabled)
     {
-        bool layer_ok       = layer_available(available_layers, available_layer_count, "VK_LAYER_KHRONOS_validation");
-        bool debug_utils_ok = extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        PBool layer_ok       = layer_available(available_layers, available_layer_count, "VK_LAYER_KHRONOS_validation");
+        PBool debug_utils_ok = extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         if(!layer_ok)
         {
             PLOG_WARN(pigment, "VK_LAYER_KHRONOS_validation not installed. Disabling validation.");
@@ -98,8 +98,8 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         }
         if(!layer_ok || !debug_utils_ok)
         {
-            pigment->config.validation_enabled     = false;
-            pigment->config.best_practices_enabled = false;
+            pigment->config.validation_enabled     = P_FALSE;
+            pigment->config.best_practices_enabled = P_FALSE;
         }
     }
 
@@ -193,7 +193,7 @@ ERROR:
     return NULL;
 }
 
-static int build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count)
+static PResult build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count)
 {
     instance->layers = calloc(1, sizeof(*(instance->layers)));
     if(instance->layers == NULL)
@@ -271,10 +271,10 @@ ERROR:
     }
     free(instance->layers);
     instance->layers = NULL;
-    return PIGMENT_ERROR;
+    return PIGMENT_ERROR_OUT_OF_MEMORY;
 }
 
-static int build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count)
+static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count)
 {
     const char** names = NULL;
     uint32_t count     = 0;
@@ -378,7 +378,7 @@ ERROR:
     free(names);
     free(instance->extensions);
     instance->extensions = NULL;
-    return PIGMENT_ERROR;
+    return PIGMENT_ERROR_OUT_OF_MEMORY;
 }
 
 void destroy_instance(Pigment* pigment)
@@ -400,16 +400,16 @@ void destroy_instance(Pigment* pigment)
     free(instance);
 }
 
-static bool layer_available(const VkLayerProperties* available, uint32_t count, const char* name)
+static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name)
 {
     for(uint32_t i = 0; i < count; i++)
     {
         if(strcmp(available[i].layerName, name) == 0)
         {
-            return true;
+            return P_TRUE;
         }
     }
-    return false;
+    return P_FALSE;
 }
 
 static PigmentLogSeverity vk_severity_to_pigment(VkDebugUtilsMessageSeverityFlagBitsEXT severity)

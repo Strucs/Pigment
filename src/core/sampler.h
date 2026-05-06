@@ -38,7 +38,7 @@ struct PSamplerDesc {
     PAddressMode address_mode;     // 0 = REPEAT
 
     float max_anisotropy;    // 0 = off, otherwise clamped to device max
-    bool compare_enable;     // depth-compare sampler (shadow maps)
+    PBool compare_enable;    // depth-compare sampler (shadow maps)
     PCompareOp compare_op;
 };
 

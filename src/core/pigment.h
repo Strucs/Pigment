@@ -33,7 +33,7 @@ void destroy_pigment(Pigment* pigment);
 void pigment_wait_idle(Pigment* pigment);
 
 void pigment_show_window(Pigment* pigment, uint32_t window_index);
-bool pigment_should_run(Pigment* pigment);
+PBool pigment_should_run(Pigment* pigment);
 
 void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentMode mode);
 
@@ -50,6 +50,6 @@ PWindow* pigment_get_window(Pigment* pigment, uint32_t window_index);
 PWindowRenderer* pigment_get_window_renderer(Pigment* pigment, uint32_t window_index);
 uint32_t pigment_window_count(Pigment* pigment);
 
-bool pigment_supports(Pigment* pigment, PFeature feature);
+PBool pigment_supports(Pigment* pigment, PFeature feature);
 
 #endif

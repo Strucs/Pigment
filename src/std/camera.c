@@ -33,7 +33,7 @@ struct PCamera {
     PBuffer* buffer;
     uint32_t frame_count;
     uint32_t last_uploaded_frame;
-    bool dirty;
+    PBool dirty;
 };
 
 PCamera* pigment_std_create_camera(Pigment* pigment)
@@ -52,7 +52,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
     camera->data                = (PCameraData) {.view = GLM_MAT4_IDENTITY_INIT, .projection = GLM_MAT4_IDENTITY_INIT};
     camera->frame_count         = pigment->config.max_frames_in_flight;
     camera->last_uploaded_frame = UINT32_MAX;
-    camera->dirty               = true;
+    camera->dirty               = P_TRUE;
 
     PBufferDesc desc = {
         .size   = (uint64_t) camera->frame_count * sizeof(PCameraData),
@@ -88,7 +88,7 @@ void pigment_std_camera_set_view(PCamera* camera, mat4 view)
         return;
     }
     memcpy(camera->data.view, view, sizeof(mat4));
-    camera->dirty = true;
+    camera->dirty = P_TRUE;
 }
 
 void pigment_std_camera_set_projection(PCamera* camera, mat4 projection)
@@ -98,7 +98,7 @@ void pigment_std_camera_set_projection(PCamera* camera, mat4 projection)
         return;
     }
     memcpy(camera->data.projection, projection, sizeof(mat4));
-    camera->dirty = true;
+    camera->dirty = P_TRUE;
 }
 
 void pigment_std_camera_upload(PCamera* camera, uint32_t current_frame)
@@ -115,7 +115,7 @@ void pigment_std_camera_upload(PCamera* camera, uint32_t current_frame)
     *slot             = camera->data;
 
     camera->last_uploaded_frame = current_frame;
-    camera->dirty               = false;
+    camera->dirty               = P_FALSE;
 }
 
 uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame)

@@ -43,7 +43,7 @@ static void recompute_active_masks_locked(PLogState* log)
     atomic_store_explicit(&log->active_types, type_mask, memory_order_release);
 }
 
-int pigment_log_init(Pigment* pigment)
+PResult pigment_log_init(Pigment* pigment)
 {
     if(pigment == NULL)
     {
@@ -53,7 +53,7 @@ int pigment_log_init(Pigment* pigment)
     PLogState* log = calloc(1, sizeof(*log));
     if(log == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     if(pigment_rwlock_init(&log->lock) != 0)
@@ -283,7 +283,7 @@ void pigment_default_log_callback(PigmentLogSeverity severity, PigmentLogType ty
     {
         case PIGMENT_LOG_TRACE_BIT:
             level_str = "TRACE";
-            color     = "\x1b[2;37m";  // gray
+            color     = "\x1b[2;37m";    // gray
             break;
         case PIGMENT_LOG_DEBUG_BIT:
             level_str = "DEBUG";

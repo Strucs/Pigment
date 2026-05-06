@@ -30,7 +30,7 @@
 #define PIGMENT_DEFAULT_WINDOW_CAPACITY 4
 
 static PWindowRenderer* create_window_renderer(PWindowInfo* window_info);
-static int init_window_renderer_resources(Pigment* pigment, uint32_t window_index);
+static PResult init_window_renderer_resources(Pigment* pigment, uint32_t window_index);
 
 Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfig* config)
 {
@@ -108,12 +108,12 @@ Pigment* init_pigment(PAppInfo* app_info, PWindowInfo* window_info, PigmentConfi
     if(vk_init != NULL && vk_init->allocator != NULL)
     {
         pigment->allocator      = vk_init->allocator;
-        pigment->owns_allocator = false;
+        pigment->owns_allocator = P_FALSE;
     }
     else
     {
         pigment->allocator      = pigment_vk_create_default_allocator(pigment, NULL);
-        pigment->owns_allocator = true;
+        pigment->owns_allocator = P_TRUE;
     }
 
     if(pigment->allocator == NULL)
@@ -229,21 +229,21 @@ void pigment_show_window(Pigment* pigment, uint32_t window_index)
     show_window(pigment->windows[window_index]);
 }
 
-bool pigment_should_run(Pigment* pigment)
+PBool pigment_should_run(Pigment* pigment)
 {
     if(pigment == NULL || pigment->window_count == 0)
     {
-        return false;
+        return P_FALSE;
     }
 
     for(uint32_t i = 0; i < pigment->window_count; i++)
     {
         if(!window_should_close(pigment->windows[i]))
         {
-            return true;
+            return P_TRUE;
         }
     }
-    return false;
+    return P_FALSE;
 }
 
 void pigment_wait_frame_ready(Pigment* pigment, uint32_t window_index)
@@ -267,7 +267,7 @@ void pigment_set_present_mode(Pigment* pigment, uint32_t window_index, PPresentM
 
     PWindowRenderer* renderer                                    = pigment->renderers[window_index];
     renderer->requested_present_mode                             = mode;
-    renderer->framebuffer_resized                                = true;
+    renderer->framebuffer_resized                                = P_TRUE;
     pigment->windows[window_index]->info->preferred_present_mode = mode;
 }
 
@@ -339,15 +339,15 @@ void pigment_end_swapchain_pass(Pigment* pigment, uint32_t window_index)
     end_swapchain_pass(renderer, renderer->current_image_index);
 }
 
-bool pigment_supports(Pigment* pigment, PFeature feature)
+PBool pigment_supports(Pigment* pigment, PFeature feature)
 {
     if(pigment == NULL || pigment->device == NULL)
     {
-        return false;
+        return P_FALSE;
     }
     if((unsigned) feature >= (unsigned) P_FEATURE_COUNT)
     {
-        return false;
+        return P_FALSE;
     }
     return pigment->device->features[feature];
 }
@@ -390,7 +390,7 @@ static PWindowRenderer* create_window_renderer(PWindowInfo* window_info)
         return NULL;
     }
 
-    renderer->framebuffer_resized     = false;
+    renderer->framebuffer_resized     = P_FALSE;
     renderer->pending_width           = (uint32_t) window_info->width;
     renderer->pending_height          = (uint32_t) window_info->height;
     renderer->requested_present_mode  = window_info->preferred_present_mode;
@@ -399,7 +399,7 @@ static PWindowRenderer* create_window_renderer(PWindowInfo* window_info)
     return renderer;
 }
 
-static int init_window_renderer_resources(Pigment* pigment, uint32_t window_index)
+static PResult init_window_renderer_resources(Pigment* pigment, uint32_t window_index)
 {
     PWindow* window           = pigment->windows[window_index];
     PWindowRenderer* renderer = pigment->renderers[window_index];

@@ -89,7 +89,7 @@ uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn 
         .func      = func,
         .user_data = user_data,
         .handle    = handle,
-        .alive     = true,
+        .alive     = P_TRUE,
     };
 
     pigment_rwlock_wrunlock(&list->lock);
@@ -110,7 +110,7 @@ void pigment_unregister_swapchain_resize(Pigment* pigment, uint32_t handle)
     {
         if(list->callbacks[i].handle == handle)
         {
-            list->callbacks[i].alive = false;
+            list->callbacks[i].alive = P_FALSE;
             list->callbacks[i].func  = NULL;
             break;
         }

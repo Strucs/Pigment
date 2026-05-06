@@ -23,7 +23,7 @@
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
 static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
-static int pool_append_set(PDescriptorPool* pool, PDescriptorSet* set);
+static PResult pool_append_set(PDescriptorPool* pool, PDescriptorSet* set);
 static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override);
 
 PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc)
@@ -42,7 +42,7 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         goto ERROR;
     }
 
-    bool needs_update_after_bind = false;
+    PBool needs_update_after_bind = P_FALSE;
     for(uint32_t i = 0; i < desc->binding_count; i++)
     {
         const PDescriptorBinding* b = &desc->bindings[i];
@@ -57,7 +57,7 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         binding_flags[i] = to_vk_binding_flags(b->flags);
         if(b->flags & P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT)
         {
-            needs_update_after_bind = true;
+            needs_update_after_bind = P_TRUE;
         }
     }
 
@@ -382,7 +382,7 @@ static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flag
     return out;
 }
 
-static int pool_append_set(PDescriptorPool* pool, PDescriptorSet* set)
+static PResult pool_append_set(PDescriptorPool* pool, PDescriptorSet* set)
 {
     if(pool->set_count >= pool->set_capacity)
     {
@@ -390,7 +390,7 @@ static int pool_append_set(PDescriptorPool* pool, PDescriptorSet* set)
         PDescriptorSet** new_ptr = realloc(pool->sets, new_capacity * sizeof(*new_ptr));
         if(new_ptr == NULL)
         {
-            return PIGMENT_ERROR;
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
 
         pool->sets         = new_ptr;

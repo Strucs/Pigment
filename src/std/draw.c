@@ -164,7 +164,7 @@ void pigment_std_draw_skybox(Pigment* pigment, uint32_t window_index, PStdBindle
     pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
 
     pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_FRONT, P_FRONT_FACE_COUNTER_CLOCKWISE);
-    pigment_cmd_set_depth(pigment, cmd, true, false, P_COMPARE_OP_GREATER_OR_EQUAL);
+    pigment_cmd_set_depth(pigment, cmd, P_TRUE, P_FALSE, P_COMPARE_OP_GREATER_OR_EQUAL);
     pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 }
 
@@ -196,6 +196,6 @@ void pigment_std_draw_crt(Pigment* pigment, uint32_t window_index, PStdBindless*
     pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
 
     pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_NONE, P_FRONT_FACE_COUNTER_CLOCKWISE);
-    pigment_cmd_set_depth(pigment, cmd, false, false, P_COMPARE_OP_ALWAYS);
+    pigment_cmd_set_depth(pigment, cmd, P_FALSE, P_FALSE, P_COMPARE_OP_ALWAYS);
     pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 }

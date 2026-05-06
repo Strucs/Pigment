@@ -27,7 +27,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <stdatomic.h>
 
 #ifndef _WIN32
@@ -71,7 +70,7 @@ typedef SRWLOCK pigment_rwlock_t;
 #endif
 
 typedef struct {
-    bool has_value;
+    PBool has_value;
     uint32_t value;
 } optional_uint32;
 
@@ -85,8 +84,8 @@ typedef struct PLogState {
 
 typedef struct PRuntimeConfig {
     uint32_t max_frames_in_flight;
-    bool validation_enabled;
-    bool best_practices_enabled;
+    PBool validation_enabled;
+    PBool best_practices_enabled;
     float depth_clear_value;
     PColorSpace preferred_color_space;
     const void* extra;
@@ -101,7 +100,7 @@ struct Pigment {
     PInstance* instance;
     PDevice* device;
     PVkAllocator* allocator;
-    bool owns_allocator;
+    PBool owns_allocator;
     PCommandPoolList* command_pools;
     PPipelineList* pipelines;
     PLayoutList* layouts;
@@ -114,7 +113,7 @@ struct Pigment {
 struct PWindow {
     PWindowInfo* info;
     SDL_Window* window;
-    bool should_close;
+    PBool should_close;
 };
 
 struct PWindowRenderer {
@@ -123,11 +122,11 @@ struct PWindowRenderer {
     PSync* sync;
     PCommandBuffer** command_buffers;
     uint32_t current_image_index;
-    bool framebuffer_resized;
+    PBool framebuffer_resized;
     uint32_t pending_width;
     uint32_t pending_height;
     PPresentMode requested_present_mode;
-    bool transparent_framebuffer;
+    PBool transparent_framebuffer;
 };
 
 struct PInstance {
@@ -155,7 +154,7 @@ struct PDevice {
     uint32_t graphics_family_index;
     uint32_t present_family_index;
     ExtensionList* extensions;
-    bool features[P_FEATURE_COUNT];
+    PBool features[P_FEATURE_COUNT];
 };
 
 struct QueueFamilyIndices {
@@ -280,13 +279,13 @@ struct PDescriptorSet {
 };
 
 typedef struct PImageViewDesc {
-    PFormat format;             // 0 (P_FORMAT_UNDEFINED) = inherit image->vk_format
-    PImageAspect aspect;        // 0 (P_IMAGE_ASPECT_INHERIT) = inherit image->aspect
-    PImageViewType view_type;   // 0 (P_IMAGE_VIEW_TYPE_AUTO) = derive from layer_count and image create flags
+    PFormat format;              // 0 (P_FORMAT_UNDEFINED) = inherit image->vk_format
+    PImageAspect aspect;         // 0 (P_IMAGE_ASPECT_INHERIT) = inherit image->aspect
+    PImageViewType view_type;    // 0 (P_IMAGE_VIEW_TYPE_AUTO) = derive from layer_count and image create flags
     uint32_t base_layer;
-    uint32_t layer_count;       // 0 = remaining
+    uint32_t layer_count;    // 0 = remaining
     uint32_t base_mip;
-    uint32_t mip_count;         // 0 = remaining
+    uint32_t mip_count;    // 0 = remaining
 } PImageViewDesc;
 
 struct PImageView {
@@ -327,7 +326,7 @@ typedef struct PResizeCallback {
     PSwapchainResizeFn func;
     void* user_data;
     uint32_t handle;
-    bool alive;
+    PBool alive;
 } PResizeCallback;
 
 struct PResizeCallbackList {

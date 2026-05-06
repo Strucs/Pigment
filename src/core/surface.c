@@ -23,9 +23,9 @@ static void destroy_image_views(PSwapchain* swapchain, PDevice* device);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred);
 static VkPresentModeKHR choose_surface_present_modes(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
 static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
-static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, bool transparent);
+static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, PBool transparent);
 static PFormat find_supported_depth_format(Pigment* pigment);
-static int create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
+static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
 static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space);
 static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space);
@@ -206,7 +206,7 @@ static VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR capabilities
     return actual_extent;
 }
 
-static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, bool transparent)
+static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, PBool transparent)
 {
     if(transparent)
     {
@@ -250,7 +250,7 @@ static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsK
     return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 }
 
-PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, bool transparent, PSurface* surface)
+PSwapchain* create_swapchain(Pigment* pigment, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode, PBool transparent, PSurface* surface)
 {
     PDevice* device                          = pigment->device;
     PSwapchain* swapchain                    = NULL;
@@ -407,7 +407,7 @@ static PFormat find_supported_depth_format(Pigment* pigment)
     return P_FORMAT_UNDEFINED;
 }
 
-static int create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
+static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
 {
     PImageDesc desc = {
         .width      = swapchain->extent.width,
@@ -432,12 +432,12 @@ static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
     }
 }
 
-int create_image_views(Pigment* pigment, PSwapchain* swapchain)
+PResult create_image_views(Pigment* pigment, PSwapchain* swapchain)
 {
     swapchain->image_views = calloc(swapchain->image_count, sizeof(*(swapchain->image_views)));
     if(swapchain->image_views == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     for(size_t i = 0; i < swapchain->image_count; i++)
@@ -463,7 +463,7 @@ static void destroy_image_views(PSwapchain* swapchain, PDevice* device)
     free(swapchain->images);
 }
 
-int recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode)
+PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer, uint32_t framebuffer_width, uint32_t framebuffer_height, PPresentMode preferred_mode)
 {
     PDevice* device           = pigment->device;
     PSwapchain* new_swapchain = NULL;

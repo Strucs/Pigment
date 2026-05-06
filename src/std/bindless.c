@@ -70,23 +70,23 @@ struct PStdBindless {
 #define PIGMENT_BINDLESS_BINDING_RENDER_TARGETS 2
 #define PIGMENT_BINDLESS_BINDING_IMAGES 3
 
-static int image_list_append(PImageList* image_list, PImage* image);
-static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type);
+static PResult image_list_append(PImageList* image_list, PImage* image);
+static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type);
 static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, uint32_t width, uint32_t height, uint32_t layer_count, uint64_t layer_size_bytes);
-static int batch_record_uploads(Pigment* pigment, PCommandBuffer* cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
+static PResult batch_record_uploads(Pigment* pigment, PCommandBuffer* cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 static uint32_t batch_append_images(PImageList* list, PImage** images, uint32_t count);
-static int add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
-static int add_default_image(Pigment* pigment, PStdBindless* bindless);
-static int sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers);
+static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+static PResult add_default_image(Pigment* pigment, PStdBindless* bindless);
+static PResult sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers);
 static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list);
-static int image_list_init(PImageList* image_list);
-static void image_list_destroy(Pigment* pigment, PImageList* image_list, bool owns_images);
+static PResult image_list_init(PImageList* image_list);
+static void image_list_destroy(Pigment* pigment, PImageList* image_list, PBool owns_images);
 static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PSampler* sampler);
 static void write_cubemap_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void write_image_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void write_render_target_descriptor(Pigment* pigment, PStdBindless* bindless, uint32_t slot, PImage* image);
 static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, uint32_t start_slot, uint32_t count);
-static int tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry);
+static PResult tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry);
 static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless);
 
 static inline int imax(int a, int b)
@@ -264,9 +264,9 @@ void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless)
     {
         return;
     }
-    image_list_destroy(pigment, &bindless->images, true);
-    image_list_destroy(pigment, &bindless->cubemaps, true);
-    image_list_destroy(pigment, &bindless->render_targets, false);
+    image_list_destroy(pigment, &bindless->images, P_TRUE);
+    image_list_destroy(pigment, &bindless->cubemaps, P_TRUE);
+    image_list_destroy(pigment, &bindless->render_targets, P_FALSE);
     sampler_list_destroy(pigment, &bindless->samplers);
     free(bindless->tracked_rts.targets);
     free(bindless->sets);
@@ -311,7 +311,7 @@ uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless
     }
 
     PCommandBuffer* cmd = pigment_begin_single_use_cmd(pigment, NULL);
-    int result          = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
+    PResult result      = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
     pigment_end_single_use_cmd(pigment, cmd);
 
     if(result == PIGMENT_SUCCESS)
@@ -475,12 +475,12 @@ PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindles
     return bindless->sets[current_frame];
 }
 
-static int image_list_init(PImageList* image_list)
+static PResult image_list_init(PImageList* image_list)
 {
     image_list->images = calloc(1, sizeof(*image_list->images));
     if(image_list->images == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     image_list->capacity = 1;
@@ -489,7 +489,7 @@ static int image_list_init(PImageList* image_list)
     return PIGMENT_SUCCESS;
 }
 
-static void image_list_destroy(Pigment* pigment, PImageList* image_list, bool owns_images)
+static void image_list_destroy(Pigment* pigment, PImageList* image_list, PBool owns_images)
 {
     if(owns_images)
     {
@@ -502,7 +502,7 @@ static void image_list_destroy(Pigment* pigment, PImageList* image_list, bool ow
     free(image_list->images);
 }
 
-static int image_list_append(PImageList* image_list, PImage* image)
+static PResult image_list_append(PImageList* image_list, PImage* image)
 {
     if(image_list->count >= image_list->capacity)
     {
@@ -511,10 +511,10 @@ static int image_list_append(PImageList* image_list, PImage* image)
         PImage** new_ptr = realloc(image_list->images, new_capacity * sizeof(*new_ptr));
         if(new_ptr == NULL)
         {
-            return PIGMENT_ERROR;
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
 
-        image_list->images = new_ptr;
+        image_list->images   = new_ptr;
         image_list->capacity = new_capacity;
     }
 
@@ -523,7 +523,7 @@ static int image_list_append(PImageList* image_list, PImage* image)
     return PIGMENT_SUCCESS;
 }
 
-static int sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers)
+static PResult sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers)
 {
     sampler_list->samplers = calloc(max_samplers, sizeof(*sampler_list->samplers));
     sampler_list->descs    = calloc(max_samplers, sizeof(*sampler_list->descs));
@@ -534,7 +534,7 @@ static int sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint3
     {
         free(sampler_list->samplers);
         free(sampler_list->descs);
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     PSamplerDesc nearest_desc = {
@@ -573,7 +573,7 @@ static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list)
     free(sampler_list->descs);
 }
 
-static int add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
+static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
     PBuffer* staging = NULL;
     PImage* image    = NULL;
@@ -603,7 +603,7 @@ ERROR:
     return PIGMENT_ERROR;
 }
 
-static int add_default_image(Pigment* pigment, PStdBindless* bindless)
+static PResult add_default_image(Pigment* pigment, PStdBindless* bindless)
 {
     unsigned char white[] = {255, 255, 255, 255};
     return add_image_from_pixels(pigment, bindless, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM);
@@ -643,7 +643,7 @@ static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* i
     pigment_cmd_generate_mipmaps(pigment, cmd, image, 0, layer_count, P_IMAGE_LAYOUT_SHADER_READ_ONLY);
 }
 
-static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type)
+static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type)
 {
     uint32_t pixel_size = pigment_format_pixel_size(format);
     if(pixel_size == 0)
@@ -671,7 +671,7 @@ static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PB
     *out_staging = pigment_create_buffer(pigment, &staging_desc);
     if(*out_staging == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     unsigned char* mapped = (unsigned char*) pigment_buffer_mapped(*out_staging);
@@ -693,19 +693,20 @@ static int prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PB
     *out_image = pigment_create_image(pigment, &image_desc);
     if(*out_image == NULL)
     {
-        return PIGMENT_ERROR;
+        return PIGMENT_ERROR_VULKAN;
     }
 
     return PIGMENT_SUCCESS;
 }
 
-static int batch_record_uploads(Pigment* pigment, PCommandBuffer* cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
+static PResult batch_record_uploads(Pigment* pigment, PCommandBuffer* cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
 {
     for(uint32_t i = 0; i < count; i++)
     {
-        if(prepare_layered_image_upload(pigment, &out_images[i], &stagings[i], &pixels[i], widths[i], heights[i], 1, formats[i], P_IMAGE_TYPE_2D) != PIGMENT_SUCCESS)
+        PResult r = prepare_layered_image_upload(pigment, &out_images[i], &stagings[i], &pixels[i], widths[i], heights[i], 1, formats[i], P_IMAGE_TYPE_2D);
+        if(r != PIGMENT_SUCCESS)
         {
-            return PIGMENT_ERROR;
+            return r;
         }
         record_image_upload(pigment, cmd, out_images[i], stagings[i], widths[i], heights[i], 1, 0);
     }
@@ -800,7 +801,7 @@ static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, ui
     free(infos);
 }
 
-static int tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry)
+static PResult tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry)
 {
     if(list->count >= list->capacity)
     {
@@ -808,7 +809,7 @@ static int tracked_rt_list_append(PTrackedRTList* list, PTrackedRT entry)
         PTrackedRT* new_ptr   = realloc(list->targets, new_capacity * sizeof(*new_ptr));
         if(new_ptr == NULL)
         {
-            return PIGMENT_ERROR;
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
         list->targets  = new_ptr;
         list->capacity = new_capacity;

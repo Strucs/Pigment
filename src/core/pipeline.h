@@ -125,7 +125,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc);
 PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc);
 void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 
-int pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out);
+PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out);
 
 void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
 

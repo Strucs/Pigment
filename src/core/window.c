@@ -41,7 +41,7 @@ PWindow* create_window(Pigment* pigment, PWindowInfo* window_info)
         goto ERROR;
     }
 
-    window->should_close = false;
+    window->should_close = P_FALSE;
 
     SDL_WindowFlags sdl_flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN;
     PWindowFlags pflags       = window_info->flags;
@@ -115,7 +115,7 @@ void destroy_window(PWindow* window)
     free(window);
 }
 
-bool window_should_close(PWindow* window)
+PBool window_should_close(PWindow* window)
 {
     return window->should_close;
 }
@@ -145,14 +145,14 @@ const char* const* window_get_vk_instance_extensions(Pigment* pigment, uint32_t*
     return extensions;
 }
 
-bool window_create_vk_surface(Pigment* pigment, PWindow* window, VkSurfaceKHR* out_surface)
+PBool window_create_vk_surface(Pigment* pigment, PWindow* window, VkSurfaceKHR* out_surface)
 {
     if(!SDL_Vulkan_CreateSurface(window->window, pigment->instance->vulkan_instance, NULL, out_surface))
     {
         PLOG_ERROR(pigment, "SDL_Vulkan_CreateSurface: %s", SDL_GetError());
-        return false;
+        return P_FALSE;
     }
-    return true;
+    return P_TRUE;
 }
 
 static uint32_t find_index_by_window_id(Pigment* pigment, SDL_WindowID id)
@@ -180,7 +180,7 @@ void pigment_handle_sdl_event(Pigment* pigment, const SDL_Event* event)
             {
                 for(uint32_t i = 0; i < pigment->window_count; i++)
                 {
-                    pigment->windows[i]->should_close = true;
+                    pigment->windows[i]->should_close = P_TRUE;
                 }
                 break;
             }
@@ -189,7 +189,7 @@ void pigment_handle_sdl_event(Pigment* pigment, const SDL_Event* event)
                 uint32_t i = find_index_by_window_id(pigment, event->window.windowID);
                 if(i != UINT32_MAX)
                 {
-                    pigment->windows[i]->should_close = true;
+                    pigment->windows[i]->should_close = P_TRUE;
                 }
                 break;
             }
@@ -201,7 +201,7 @@ void pigment_handle_sdl_event(Pigment* pigment, const SDL_Event* event)
                     PWindowRenderer* renderer         = pigment->renderers[i];
                     renderer->pending_width           = (uint32_t) event->window.data1;
                     renderer->pending_height          = (uint32_t) event->window.data2;
-                    renderer->framebuffer_resized     = true;
+                    renderer->framebuffer_resized     = P_TRUE;
                     pigment->windows[i]->info->width  = event->window.data1;
                     pigment->windows[i]->info->height = event->window.data2;
                 }

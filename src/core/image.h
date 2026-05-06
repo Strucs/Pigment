@@ -64,7 +64,7 @@ typedef struct PBufferImageCopy {
 } PBufferImageCopy;
 
 uint32_t pigment_format_pixel_size(PFormat format);
-bool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format);
+PBool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format);
 
 void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PImage* dst, PImageLayout dst_layout, const PBufferImageCopy* regions, uint32_t region_count);
 
