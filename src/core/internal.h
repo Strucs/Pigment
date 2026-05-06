@@ -62,6 +62,16 @@ static inline PBool format_has_stencil(PFormat f)
            || f == P_FORMAT_D32_SFLOAT_S8_UINT;
 }
 
+static inline VkResolveModeFlagBits resolve_mode_to_vk(PResolveMode mode, PBool is_depth_stencil)
+{
+    if(mode == P_RESOLVE_MODE_AUTO)
+    {
+        return is_depth_stencil ? VK_RESOLVE_MODE_SAMPLE_ZERO_BIT : VK_RESOLVE_MODE_AVERAGE_BIT;
+    }
+
+    return (VkResolveModeFlagBits) mode;
+}
+
 // device.c
 PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family);
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
@@ -71,13 +81,14 @@ PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFla
 PRendererList* create_renderer_list(void);
 void destroy_renderer_list(Pigment* pigment, PRendererList* list);
 PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
+VkSampleCountFlags supported_sample_counts(Pigment* pigment);
 
 // commands.c
 PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
-PResult create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties);
+PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, VkMemoryPropertyFlags properties);
 VkImageLayout image_layout_to_vk(PImageLayout layout);
 PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
 void image_destroy_view_cache(Pigment* pigment, PImage* image);

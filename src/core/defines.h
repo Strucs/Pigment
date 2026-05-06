@@ -220,6 +220,14 @@ typedef enum PSampleCount {
     P_SAMPLE_COUNT_64 = 64,
 } PSampleCount;
 
+typedef enum PResolveMode {
+    P_RESOLVE_MODE_AUTO        = 0,    // AVERAGE for color, SAMPLE_ZERO for depth/stencil
+    P_RESOLVE_MODE_SAMPLE_ZERO = 1,
+    P_RESOLVE_MODE_AVERAGE     = 2,
+    P_RESOLVE_MODE_MIN         = 4,
+    P_RESOLVE_MODE_MAX         = 8,
+} PResolveMode;
+
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,
     P_FORMAT_R8_UNORM            = 9,
@@ -242,6 +250,7 @@ typedef struct PSwapchainDesc {
     uint32_t height;            // 0 = query from surface
     PColorSpace color_space;    // 0 = SRGB. Fallback to compatible if HDR format requested but not supported.
     PPresentMode present_mode;
+    PSampleCount samples;       // 0 or P_SAMPLE_COUNT_1 = no MSAA. Falls back to 1x if hardware does not support requested count.
     uint32_t image_count;
     PBool transparent;
 } PSwapchainDesc;

@@ -26,6 +26,10 @@ typedef struct PAttachmentRef {
     uint32_t base_layer;
     uint32_t layer_count;
     uint32_t mip_level;
+    PImage* resolve_image;          // NULL = no MSAA resolve. Otherwise, must be a 1-sample image with matching format/extent.
+    uint32_t resolve_base_layer;
+    uint32_t resolve_mip_level;
+    PResolveMode resolve_mode;
 } PAttachmentRef;
 
 struct PRenderPassDesc {

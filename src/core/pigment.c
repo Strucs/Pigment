@@ -243,3 +243,31 @@ PBool pigment_supports(Pigment* pigment, PFeature feature)
     }
     return pigment->device->features[feature];
 }
+
+PSampleCount pigment_get_max_sample_count(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return P_SAMPLE_COUNT_1;
+    }
+
+    VkSampleCountFlags supported = supported_sample_counts(pigment);
+    for(VkSampleCountFlagBits bit = VK_SAMPLE_COUNT_64_BIT; bit > VK_SAMPLE_COUNT_1_BIT; bit >>= 1)
+    {
+        if(supported & bit)
+        {
+            return (PSampleCount) bit;
+        }
+    }
+
+    return P_SAMPLE_COUNT_1;
+}
+
+PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples)
+{
+    if(pigment == NULL || samples == 0 || samples == P_SAMPLE_COUNT_1)
+    {
+        return P_TRUE;
+    }
+    return (supported_sample_counts(pigment) & (VkSampleCountFlagBits) samples) ? P_TRUE : P_FALSE;
+}

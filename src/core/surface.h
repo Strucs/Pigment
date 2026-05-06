@@ -24,10 +24,12 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer);
 void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height);
 void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);
 void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace color_space);
+void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples);
 
 PFormat pigment_get_color_format(PWindowRenderer* renderer);
 PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 PColorSpace pigment_get_color_space(PWindowRenderer* renderer);
+PSampleCount pigment_get_sample_count(PWindowRenderer* renderer);
 void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height);
 
 #endif

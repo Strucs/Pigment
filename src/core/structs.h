@@ -168,6 +168,8 @@ struct PSwapchain {
     VkExtent2D extent;
     uint32_t current_frame;
     PImage* depth;
+    PImage* color_multisample;
+    VkSampleCountFlagBits samples;
 
     VkQueue present_queue;
     uint32_t present_family_index;

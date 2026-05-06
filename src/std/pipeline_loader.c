@@ -143,7 +143,7 @@ PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
     return pigment_create_layout(pigment, &desc);
 }
 
-PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
 {
     PPipelineDesc desc = {0};
 
@@ -161,7 +161,7 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
     desc.blend_modes        = NULL;
     desc.blend_mode_count   = 0;
-    desc.sample_count       = P_SAMPLE_COUNT_1;
+    desc.sample_count       = samples;
 
     return desc;
 }
@@ -179,7 +179,7 @@ PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bin
     return pigment_create_layout(pigment, &desc);
 }
 
-PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
 {
     PPipelineDesc desc = {0};
 
@@ -197,7 +197,7 @@ PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* 
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
     desc.blend_modes        = NULL;
     desc.blend_mode_count   = 0;
-    desc.sample_count       = P_SAMPLE_COUNT_1;
+    desc.sample_count       = samples;
 
     return desc;
 }
@@ -214,7 +214,7 @@ PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless
     return pigment_create_layout(pigment, &desc);
 }
 
-PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
 {
     PPipelineDesc desc = {0};
 
@@ -232,7 +232,7 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
     desc.blend_modes        = NULL;
     desc.blend_mode_count   = 0;
-    desc.sample_count       = P_SAMPLE_COUNT_1;
+    desc.sample_count       = samples;
 
     return desc;
 }
@@ -249,7 +249,7 @@ static PLayout* default_crt_pipeline_layout(Pigment* pigment, PStdBindless* bind
     return pigment_create_layout(pigment, &desc);
 }
 
-PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format)
+PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
 {
     PPipelineDesc desc = {0};
 
@@ -267,7 +267,7 @@ PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
     desc.blend_modes        = NULL;
     desc.blend_mode_count   = 0;
-    desc.sample_count       = P_SAMPLE_COUNT_1;
+    desc.sample_count       = samples;
 
     return desc;
 }

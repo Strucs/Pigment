@@ -420,9 +420,8 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
         return UINT32_MAX;
     }
 
-    PImage** color_images = pigment_std_render_target_colors(rt);
-    uint32_t color_count  = pigment_std_render_target_color_count(rt);
-    if(color_images == NULL || color_count == 0)
+    uint32_t color_count = pigment_std_render_target_color_count(rt);
+    if(color_count == 0)
     {
         return UINT32_MAX;
     }
@@ -431,11 +430,16 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
 
     for(uint32_t i = 0; i < color_count; i++)
     {
-        if(image_list_append(&bindless->render_targets, color_images[i]) != PIGMENT_SUCCESS)
+        PImage* sampled = pigment_std_render_target_color_sampled(rt, i);
+        if(sampled == NULL)
         {
             return UINT32_MAX;
         }
-        write_render_target_descriptor(pigment, bindless, first_slot + i, color_images[i]);
+        if(image_list_append(&bindless->render_targets, sampled) != PIGMENT_SUCCESS)
+        {
+            return UINT32_MAX;
+        }
+        write_render_target_descriptor(pigment, bindless, first_slot + i, sampled);
     }
 
     PTrackedRT entry = {
@@ -830,11 +834,11 @@ static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless)
             continue;
         }
 
-        PImage** color_images = pigment_std_render_target_colors(tracked->rt);
         for(uint32_t s = 0; s < tracked->color_count; s++)
         {
-            bindless->render_targets.images[tracked->first_slot + s] = color_images[s];
-            write_render_target_descriptor(pigment, bindless, tracked->first_slot + s, color_images[s]);
+            PImage* sampled                                          = pigment_std_render_target_color_sampled(tracked->rt, s);
+            bindless->render_targets.images[tracked->first_slot + s] = sampled;
+            write_render_target_descriptor(pigment, bindless, tracked->first_slot + s, sampled);
         }
         tracked->last_seen_generation = current;
     }

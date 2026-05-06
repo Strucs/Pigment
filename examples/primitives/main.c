@@ -78,6 +78,7 @@ int main(void)
         .width        = (uint32_t) win_w,
         .height       = (uint32_t) win_h,
         .present_mode = P_PRESENT_MODE_FIFO,
+        .samples      = P_SAMPLE_COUNT_8,
     };
 
     renderer = pigment_renderer_create(pigment, &handles, &swapchain_desc);
@@ -152,8 +153,9 @@ int main(void)
     FPSCameraState fps_state = fps_camera_state_init(camera, window, camera_position);
     SDL_SetWindowRelativeMouseMode(window, P_TRUE);
 
-    PFormat color_format = pigment_get_color_format(renderer);
-    PFormat depth_format = pigment_get_depth_format(renderer);
+    PFormat color_format    = pigment_get_color_format(renderer);
+    PFormat depth_format    = pigment_get_depth_format(renderer);
+    PSampleCount rt_samples = P_SAMPLE_COUNT_4;
 
     {
         const uint32_t face_size              = 64;
@@ -193,9 +195,9 @@ int main(void)
 
     rt = pigment_std_create_render_target(pigment, &(PRenderTargetDesc) {
                                                        .renderer    = renderer,
-                                                       .colors      = (PAttachmentDesc[]) {{.format = color_format, .scale = 1.0f}},
+                                                       .colors      = (PAttachmentDesc[]) {{.format = color_format, .scale = 1.0f, .samples = rt_samples}},
                                                        .color_count = 1,
-                                                       .depth       = {.format = depth_format, .scale = 1.0f},
+                                                       .depth       = {.format = depth_format, .scale = 1.0f, .samples = rt_samples},
     });
     if(rt == NULL)
     {
@@ -205,7 +207,7 @@ int main(void)
 
     rt_slot = pigment_std_register_render_target(pigment, bindless, rt);
 
-    PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
     build              = pigment_pipeline_build_from_desc(pigment, &desc);
     if(build == NULL)
     {
@@ -218,7 +220,7 @@ int main(void)
         goto FREE;
     }
 
-    PPipelineDesc skybox_desc = default_skybox_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    PPipelineDesc skybox_desc = default_skybox_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
     skybox_build              = pigment_pipeline_build_from_desc(pigment, &skybox_desc);
     if(skybox_build == NULL || pigment_create_graphic_pipelines(pigment, &skybox_build, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
     {
@@ -226,7 +228,7 @@ int main(void)
         goto FREE;
     }
 
-    PPipelineDesc crt_desc = default_crt_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    PPipelineDesc crt_desc = default_crt_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, pigment_get_sample_count(renderer));
     crt_build              = pigment_pipeline_build_from_desc(pigment, &crt_desc);
     if(crt_build == NULL || pigment_create_graphic_pipelines(pigment, &crt_build, 1, &crt_pipeline) != PIGMENT_SUCCESS)
     {

@@ -44,4 +44,7 @@ void pigment_end_swapchain_pass(PWindowRenderer* renderer);
 
 PBool pigment_supports(Pigment* pigment, PFeature feature);
 
+PSampleCount pigment_get_max_sample_count(Pigment* pigment);
+PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples);
+
 #endif

@@ -26,10 +26,12 @@
 
 struct PRenderTarget {
     PImage** colors;
+    PImage** color_resolves;    // parallel to colors, NULL slot when samples == 1
     float* color_scales;
     float* color_aspect_ratios;
     uint32_t color_count;
     PImage* depth;
+    PImage* depth_resolve;
     float depth_scale;
     float depth_aspect_ratio;
     PWindowRenderer* renderer;
@@ -40,6 +42,7 @@ struct PRenderTarget {
 };
 
 static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
+static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h);
 static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data);
 static void resize_attachment(Pigment* pigment, PImage* image, float scale, float aspect_ratio, uint32_t base_w, uint32_t base_h);
 static void compute_attachment_size(float scale, uint32_t base_w, uint32_t base_h, float aspect_ratio, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
@@ -73,9 +76,10 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
     if(desc->color_count > 0 && desc->colors != NULL)
     {
         target->colors              = calloc(desc->color_count, sizeof(*target->colors));
+        target->color_resolves      = calloc(desc->color_count, sizeof(*target->color_resolves));
         target->color_scales        = calloc(desc->color_count, sizeof(*target->color_scales));
         target->color_aspect_ratios = calloc(desc->color_count, sizeof(*target->color_aspect_ratios));
-        if(target->colors == NULL || target->color_scales == NULL || target->color_aspect_ratios == NULL)
+        if(target->colors == NULL || target->color_resolves == NULL || target->color_scales == NULL || target->color_aspect_ratios == NULL)
         {
             goto ERROR;
         }
@@ -89,6 +93,12 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
             target->color_scales[i]        = desc->colors[i].scale;
             target->color_aspect_ratios[i] = desc->colors[i].aspect_ratio;
             if(target->colors[i] == NULL)
+            {
+                goto ERROR;
+            }
+
+            target->color_resolves[i] = create_resolve_attachment(pigment, &desc->colors[i], P_IMAGE_USAGE_RENDER_COLOR, w, h);
+            if(desc->colors[i].samples > P_SAMPLE_COUNT_1 && target->color_resolves[i] == NULL)
             {
                 goto ERROR;
             }
@@ -109,6 +119,12 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
         uint32_t h    = 0;
         target->depth = create_attachment(pigment, &desc->depth, P_IMAGE_USAGE_RENDER_DEPTH, base_w, base_h, &w, &h);
         if(target->depth == NULL)
+        {
+            goto ERROR;
+        }
+
+        target->depth_resolve = create_resolve_attachment(pigment, &desc->depth, P_IMAGE_USAGE_RENDER_DEPTH, w, h);
+        if(desc->depth.samples > P_SAMPLE_COUNT_1 && target->depth_resolve == NULL)
         {
             goto ERROR;
         }
@@ -148,13 +164,19 @@ void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target)
         for(uint32_t i = 0; i < target->color_count; i++)
         {
             pigment_destroy_image(pigment, target->colors[i]);
+            if(target->color_resolves != NULL)
+            {
+                pigment_destroy_image(pigment, target->color_resolves[i]);
+            }
         }
         free(target->colors);
+        free(target->color_resolves);
         free(target->color_scales);
         free(target->color_aspect_ratios);
     }
 
     pigment_destroy_image(pigment, target->depth);
+    pigment_destroy_image(pigment, target->depth_resolve);
     free(target);
 }
 
@@ -171,6 +193,25 @@ uint32_t pigment_std_render_target_color_count(PRenderTarget* target)
 PImage* pigment_std_render_target_depth(PRenderTarget* target)
 {
     return (target != NULL) ? target->depth : NULL;
+}
+
+PImage* pigment_std_render_target_color_sampled(PRenderTarget* target, uint32_t index)
+{
+    if(target == NULL || index >= target->color_count)
+    {
+        return NULL;
+    }
+
+    return (target->color_resolves[index] != NULL) ? target->color_resolves[index] : target->colors[index];
+}
+
+PImage* pigment_std_render_target_depth_sampled(PRenderTarget* target)
+{
+    if(target == NULL)
+    {
+        return NULL;
+    }
+    return (target->depth_resolve != NULL) ? target->depth_resolve : target->depth;
 }
 
 uint32_t pigment_std_render_target_width(PRenderTarget* target)
@@ -196,7 +237,8 @@ PAttachmentRef pigment_std_render_target_color_ref(PRenderTarget* target, uint32
     }
 
     return (PAttachmentRef) {
-        .image = target->colors[index]
+        .image         = target->colors[index],
+        .resolve_image = target->color_resolves[index],
     };
 }
 
@@ -208,7 +250,8 @@ PAttachmentRef pigment_std_render_target_depth_ref(PRenderTarget* target)
     }
 
     return (PAttachmentRef) {
-        .image = target->depth
+        .image         = target->depth,
+        .resolve_image = target->depth_resolve,
     };
 }
 
@@ -220,9 +263,11 @@ PAttachmentRef pigment_std_render_target_color_layer_ref(PRenderTarget* target, 
     }
 
     return (PAttachmentRef) {
-        .image       = target->colors[index],
-        .base_layer  = base_layer,
-        .layer_count = layer_count,
+        .image              = target->colors[index],
+        .base_layer         = base_layer,
+        .layer_count        = layer_count,
+        .resolve_image      = target->color_resolves[index],
+        .resolve_base_layer = base_layer,
     };
 }
 
@@ -234,9 +279,11 @@ PAttachmentRef pigment_std_render_target_depth_layer_ref(PRenderTarget* target, 
     }
 
     return (PAttachmentRef) {
-        .image       = target->depth,
-        .base_layer  = base_layer,
-        .layer_count = layer_count,
+        .image              = target->depth,
+        .base_layer         = base_layer,
+        .layer_count        = layer_count,
+        .resolve_image      = target->depth_resolve,
+        .resolve_base_layer = base_layer,
     };
 }
 
@@ -268,17 +315,19 @@ static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, 
 {
     compute_attachment_size(desc->scale, desc->width, desc->height, desc->aspect_ratio, fallback_w, fallback_h, out_w, out_h);
 
+    PBool is_msaa     = (desc->samples > P_SAMPLE_COUNT_1);
     PImageUsage usage = attachment_usage | desc->extra_usage;
-    if(attachment_usage == P_IMAGE_USAGE_RENDER_COLOR)
+    if(attachment_usage == P_IMAGE_USAGE_RENDER_COLOR && !is_msaa)
     {
         usage |= P_IMAGE_USAGE_SAMPLED;
     }
 
     PImageDesc image_desc = {
-        .width  = *out_w,
-        .height = *out_h,
-        .format = desc->format,
-        .usage  = usage,
+        .width   = *out_w,
+        .height  = *out_h,
+        .format  = desc->format,
+        .usage   = usage,
+        .samples = desc->samples,
     };
 
     PImage* image = pigment_create_image(pigment, &image_desc);
@@ -288,6 +337,30 @@ static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, 
     }
 
     return image;
+}
+
+static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h)
+{
+    if(desc->samples <= P_SAMPLE_COUNT_1)
+    {
+        return NULL;
+    }
+
+    PImageUsage usage = attachment_usage | desc->extra_usage;
+    if(attachment_usage == P_IMAGE_USAGE_RENDER_COLOR)
+    {
+        usage |= P_IMAGE_USAGE_SAMPLED;
+    }
+
+    PImageDesc image_desc = {
+        .width   = w,
+        .height  = h,
+        .format  = desc->format,
+        .usage   = usage,
+        .samples = P_SAMPLE_COUNT_1,
+    };
+
+    return pigment_create_image(pigment, &image_desc);
 }
 
 static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data)
@@ -301,11 +374,13 @@ static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* e
     for(uint32_t i = 0; i < target->color_count; i++)
     {
         resize_attachment(pigment, target->colors[i], target->color_scales[i], target->color_aspect_ratios[i], event->width, event->height);
+        resize_attachment(pigment, target->color_resolves[i], target->color_scales[i], target->color_aspect_ratios[i], event->width, event->height);
     }
 
     if(target->depth != NULL)
     {
         resize_attachment(pigment, target->depth, target->depth_scale, target->depth_aspect_ratio, event->width, event->height);
+        resize_attachment(pigment, target->depth_resolve, target->depth_scale, target->depth_aspect_ratio, event->width, event->height);
     }
 
     PBool any_tracked = (target->depth_scale > 0.0f);

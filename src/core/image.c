@@ -367,28 +367,28 @@ uint32_t pigment_image_height(PImage* image)
     return (image != NULL) ? image->height : 0;
 }
 
-PResult create_vk_image(Pigment* pigment, VkImage* image, PVkAllocation** allocation, VkImageType image_type, uint32_t width, uint32_t height, uint32_t depth, uint32_t mip_levels, uint32_t array_layers, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkImageCreateFlags flags, VkMemoryPropertyFlags properties)
+PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, VkMemoryPropertyFlags properties)
 {
     VkImageCreateInfo image_create_info = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType     = image_type,
+        .imageType     = image->vk_image_type,
         .extent.width  = width,
         .extent.height = height,
-        .extent.depth  = depth,
-        .mipLevels     = mip_levels,
-        .arrayLayers   = array_layers,
-        .format        = format,
+        .extent.depth  = image->depth,
+        .mipLevels     = image->mip_levels,
+        .arrayLayers   = image->array_layers,
+        .format        = image->vk_format,
         .tiling        = tiling,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage         = usage,
-        .samples       = VK_SAMPLE_COUNT_1_BIT,
+        .usage         = image->vk_usage,
+        .samples       = image->vk_samples ? image->vk_samples : VK_SAMPLE_COUNT_1_BIT,
         .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
-        .flags         = flags,
+        .flags         = image->vk_create_flags,
     };
 
     PVkAllocator* alloc = pigment->allocator;
 
-    VkResult result = alloc->create_image(alloc->user_data, &image_create_info, properties, image, allocation);
+    VkResult result = alloc->create_image(alloc->user_data, &image_create_info, properties, &image->image, &image->image_allocation);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (result: %d)", result);
@@ -601,7 +601,7 @@ static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage)
 
 static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
 {
-    if(create_vk_image(pigment, &image->image, &image->image_allocation, image->vk_image_type, width, height, image->depth, image->mip_levels, image->array_layers, image->vk_format, VK_IMAGE_TILING_OPTIMAL, image->vk_usage, image->vk_create_flags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    if(create_vk_image(pigment, image, width, height, VK_IMAGE_TILING_OPTIMAL, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR_VULKAN;
     }

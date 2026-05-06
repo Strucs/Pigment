@@ -34,6 +34,9 @@ static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsK
 static PFormat pick_depth_format(Pigment* pigment);
 static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
+static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain);
+static void destroy_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain);
+static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount requested);
 static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space);
 static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space);
 static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface);
@@ -196,6 +199,17 @@ void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace color_space)
     renderer->needs_recreate   = P_TRUE;
 }
 
+void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples)
+{
+    if(renderer == NULL)
+    {
+        return;
+    }
+
+    renderer->desc.samples   = samples;
+    renderer->needs_recreate = P_TRUE;
+}
+
 static void destroy_surface(Pigment* pigment, PSurface* surface)
 {
     if(surface == NULL)
@@ -234,6 +248,16 @@ PColorSpace pigment_get_color_space(PWindowRenderer* renderer)
     }
 
     return color_space_from_vk(renderer->swapchain->color_space);
+}
+
+PSampleCount pigment_get_sample_count(PWindowRenderer* renderer)
+{
+    if(renderer == NULL || renderer->swapchain == NULL)
+    {
+        return P_SAMPLE_COUNT_1;
+    }
+
+    return (PSampleCount) renderer->swapchain->samples;
 }
 
 void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height)
@@ -687,6 +711,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     swapchain->image_format         = surface_format.format;
     swapchain->color_space          = surface_format.colorSpace;
     swapchain->extent               = extent;
+    swapchain->samples              = clamp_sample_count(pigment, desc->samples);
     swapchain->present_queue        = present_queue;
     swapchain->present_family_index = present_family_index;
 
@@ -695,6 +720,10 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
     if(create_swapchain_depth(pigment, swapchain) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+    if(create_swapchain_color_multisample(pigment, swapchain) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -718,6 +747,7 @@ static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
     if(swapchain != NULL)
     {
         PDevice* device = pigment->device;
+        destroy_swapchain_color_multisample(pigment, swapchain);
         destroy_swapchain_depth(pigment, swapchain);
         destroy_swapchain_image_views(swapchain, device);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
@@ -751,7 +781,7 @@ static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
         .height     = swapchain->extent.height,
         .format     = pick_depth_format(pigment),
         .usage      = P_IMAGE_USAGE_RENDER_DEPTH,
-        .samples    = P_SAMPLE_COUNT_1,
+        .samples    = (PSampleCount) swapchain->samples,
         .mip_levels = 1,
     };
 
@@ -767,6 +797,72 @@ static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
         pigment_destroy_image(pigment, swapchain->depth);
         swapchain->depth = NULL;
     }
+}
+
+static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain)
+{
+    if(swapchain->samples == VK_SAMPLE_COUNT_1_BIT)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    PImageDesc desc = {
+        .width      = swapchain->extent.width,
+        .height     = swapchain->extent.height,
+        .format     = (PFormat) swapchain->image_format,
+        .usage      = P_IMAGE_USAGE_RENDER_COLOR,
+        .samples    = (PSampleCount) swapchain->samples,
+        .mip_levels = 1,
+    };
+
+    swapchain->color_multisample = pigment_create_image(pigment, &desc);
+
+    return (swapchain->color_multisample != NULL) ? PIGMENT_SUCCESS : PIGMENT_ERROR;
+}
+
+static void destroy_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain)
+{
+    if(swapchain->color_multisample != NULL)
+    {
+        pigment_destroy_image(pigment, swapchain->color_multisample);
+        swapchain->color_multisample = NULL;
+    }
+}
+
+VkSampleCountFlags supported_sample_counts(Pigment* pigment)
+{
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(pigment->device->physical_device, &props);
+    return props.limits.framebufferColorSampleCounts & props.limits.framebufferDepthSampleCounts;
+}
+
+static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount requested)
+{
+    if(requested == 0 || requested == P_SAMPLE_COUNT_1)
+    {
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+
+    VkSampleCountFlags supported = supported_sample_counts(pigment);
+    VkSampleCountFlagBits req    = (VkSampleCountFlagBits) requested;
+
+    if(supported & req)
+    {
+        return req;
+    }
+
+    VkSampleCountFlagBits fallback = VK_SAMPLE_COUNT_1_BIT;
+    for(VkSampleCountFlagBits bit = VK_SAMPLE_COUNT_64_BIT; bit > VK_SAMPLE_COUNT_1_BIT; bit >>= 1)
+    {
+        if((supported & bit) && bit < req)
+        {
+            fallback = bit;
+            break;
+        }
+    }
+
+    PLOG_WARN(pigment, "Requested %dx MSAA not supported, falling back to %dx", (int) requested, (int) fallback);
+    return fallback;
 }
 
 static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain)

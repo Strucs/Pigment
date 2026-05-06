@@ -131,9 +131,10 @@ int main(void)
 
     PFormat color_format = pigment_get_color_format(renderer);
     PFormat depth_format = pigment_get_depth_format(renderer);
+    PSampleCount samples = pigment_get_sample_count(renderer);
 
-    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
-    PPipelineDesc desc_additive = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format);
+    PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, samples);
+    PPipelineDesc desc_additive = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, samples);
 
     PBlendMode additive_blend      = P_BLEND_MODE_ADDITIVE;
     desc_additive.blend_modes      = &additive_blend;

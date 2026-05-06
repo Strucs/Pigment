@@ -45,6 +45,8 @@ typedef struct PAttachmentDesc {
      *                                      otherwise height = desc->height
      */
     float aspect_ratio;
+
+    PSampleCount samples;
 } PAttachmentDesc;
 
 typedef struct PRenderTargetDesc {
@@ -60,6 +62,8 @@ void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target);
 PImage** pigment_std_render_target_colors(PRenderTarget* target);
 uint32_t pigment_std_render_target_color_count(PRenderTarget* target);
 PImage* pigment_std_render_target_depth(PRenderTarget* target);
+PImage* pigment_std_render_target_color_sampled(PRenderTarget* target, uint32_t index);
+PImage* pigment_std_render_target_depth_sampled(PRenderTarget* target);
 uint32_t pigment_std_render_target_width(PRenderTarget* target);
 uint32_t pigment_std_render_target_height(PRenderTarget* target);
 uint32_t pigment_std_render_target_generation(PRenderTarget* target);

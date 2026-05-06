@@ -136,7 +136,8 @@ int main(void)
     SDL_SetWindowRelativeMouseMode(window, P_TRUE);
 
     PFormat color_format        = pigment_get_color_format(renderer);
-    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer));
+    PSampleCount samples        = pigment_get_sample_count(renderer);
+    PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer), samples);
     PPipelineBuild* build       = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
     if(build == NULL)
     {
@@ -149,7 +150,7 @@ int main(void)
         goto FREE;
     }
 
-    PPipelineDesc gizmo_desc    = default_light_gizmo_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer));
+    PPipelineDesc gizmo_desc    = default_light_gizmo_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer), samples);
     PPipelineBuild* gizmo_build = pigment_pipeline_build_from_desc(pigment, &gizmo_desc);
     if(gizmo_build == NULL || pigment_create_graphic_pipelines(pigment, &gizmo_build, 1, &gizmo_pipeline) != PIGMENT_SUCCESS)
     {

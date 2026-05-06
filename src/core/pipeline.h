@@ -100,6 +100,9 @@ typedef struct PPipelineDesc {
 
     PSampleCount sample_count;
 
+    PBool sample_shading_enable;
+    float min_sample_shading;
+
     /**
      * Multiview view mask. Must match the view_mask of the render pass this pipeline is bound in.
      * 0 = single-view (default). e.g. 0b111111 = 6 views simultaneously (cubemap shadow).
