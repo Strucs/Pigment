@@ -45,7 +45,10 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
-    PVkAllocationCreateInfo alloc_info = {0};
+    PVkAllocationCreateInfo alloc_info = {
+        .debug_name = desc->name,
+    };
+
     if(desc->memory == P_MEMORY_HOST_VISIBLE)
     {
         alloc_info.required_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;

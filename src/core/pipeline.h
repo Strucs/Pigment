@@ -108,6 +108,8 @@ typedef struct PPipelineDesc {
      * 0 = single-view (default). e.g. 0b111111 = 6 views simultaneously (cubemap shadow).
      */
     uint32_t view_mask;
+
+    const char* name;
 } PPipelineDesc;
 
 typedef struct PLayoutDesc {
@@ -115,6 +117,7 @@ typedef struct PLayoutDesc {
     uint32_t set_layout_count;
     uint32_t push_size;
     PShaderStageFlags push_stages;
+    const char* name;
 } PLayoutDesc;
 
 PPipelineList* create_pipeline_list(void);

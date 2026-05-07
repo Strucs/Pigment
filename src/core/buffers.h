@@ -44,6 +44,7 @@ typedef struct PBufferDesc {
     uint64_t size;
     PBufferUsage usage;
     PMemoryType memory;
+    const char* name;
 } PBufferDesc;
 
 PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc);

@@ -227,6 +227,7 @@ struct PPipelineBuild {
     uint32_t color_format_count;
     VkPipelineRenderingCreateInfoKHR rendering;
     PLayout* layout;
+    const char* name;
 };
 
 struct PCommandPool {
@@ -276,6 +277,7 @@ typedef struct PImageViewDesc {
     uint32_t layer_count;    // 0 = remaining
     uint32_t base_mip;
     uint32_t mip_count;    // 0 = remaining
+    const char* name;
 } PImageViewDesc;
 
 struct PImageView {
@@ -304,6 +306,8 @@ struct PImage {
     VkImageCreateFlags vk_create_flags;
     VkSampleCountFlagBits vk_samples;
     VkImageAspectFlags aspect;
+
+    const char* name;
 
     PImageViewCache view_cache;
 };

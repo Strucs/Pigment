@@ -265,6 +265,44 @@ void pigment_end_single_use_cmd(Pigment* pigment, PCommandBuffer* cmd)
     free(cmd);
 }
 
+void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name)
+{
+    (void) pigment;
+    if(cmd == NULL || name == NULL || vkCmdBeginDebugUtilsLabelEXT == NULL)
+    {
+        return;
+    }
+    VkDebugUtilsLabelEXT label = {
+        .sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pLabelName = name,
+    };
+    vkCmdBeginDebugUtilsLabelEXT(cmd->buffer, &label);
+}
+
+void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd)
+{
+    (void) pigment;
+    if(cmd == NULL || vkCmdEndDebugUtilsLabelEXT == NULL)
+    {
+        return;
+    }
+    vkCmdEndDebugUtilsLabelEXT(cmd->buffer);
+}
+
+void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name)
+{
+    (void) pigment;
+    if(cmd == NULL || name == NULL || vkCmdInsertDebugUtilsLabelEXT == NULL)
+    {
+        return;
+    }
+    VkDebugUtilsLabelEXT label = {
+        .sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pLabelName = name,
+    };
+    vkCmdInsertDebugUtilsLabelEXT(cmd->buffer, &label);
+}
+
 static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc)
 {
     PDevice* device             = pigment->device;
@@ -294,6 +332,8 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
     command_pool->queue_flags        = desc->queue_flags;
     command_pool->queue_family_index = queue_family_index;
     command_pool->flags              = desc->flags;
+
+    set_object_name(device->logical_device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) pool, desc->name);
 
     return command_pool;
 

@@ -96,6 +96,7 @@ typedef enum PCommandPoolFlags {
 typedef struct PCommandPoolDesc {
     PQueueFlags queue_flags;
     PCommandPoolFlags flags;
+    const char* name;
 } PCommandPoolDesc;
 
 typedef enum PWindowHandleType {

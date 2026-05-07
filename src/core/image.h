@@ -46,6 +46,7 @@ typedef struct PImageDesc {
     PSampleCount samples;    // 0 or P_SAMPLE_COUNT_1 for no MSAA
     uint32_t mip_levels;     // 0 = single mip, otherwise full chain
     PImageType type;         // 0 = 2D
+    const char* name;
 } PImageDesc;
 
 typedef struct PBufferImageCopy {

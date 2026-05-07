@@ -16,6 +16,7 @@
 
 #include "sampler.h"
 #include "structs.h"
+#include "internal.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
@@ -69,6 +70,8 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
         free(sampler);
         return NULL;
     }
+
+    set_object_name(device->logical_device, VK_OBJECT_TYPE_SAMPLER, (uint64_t) sampler->sampler, desc->name);
 
     return sampler;
 }

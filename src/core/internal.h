@@ -72,6 +72,23 @@ static inline VkResolveModeFlagBits resolve_mode_to_vk(PResolveMode mode, PBool 
     return (VkResolveModeFlagBits) mode;
 }
 
+static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t handle, const char* name)
+{
+    if(name == NULL || handle == 0 || vkSetDebugUtilsObjectNameEXT == NULL)
+    {
+        return;
+    }
+
+    VkDebugUtilsObjectNameInfoEXT info = {
+        .sType        = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType   = type,
+        .objectHandle = handle,
+        .pObjectName  = name,
+    };
+
+    vkSetDebugUtilsObjectNameEXT(device, &info);
+}
+
 // device.c
 PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family);
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);

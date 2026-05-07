@@ -17,6 +17,7 @@
 #include "pigment_vk.h"
 
 #include "structs.h"
+#include "internal.h"
 #include "log_internal.h"
 
 #define DEFAULT_BLOCK_SIZE (64ULL * 1024 * 1024)    // 64 MiB
@@ -528,6 +529,11 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     }
     pigment_rwlock_wrunlock(&alloc->lock);
 
+    if(alloc_info != NULL)
+    {
+        set_object_name(alloc->device, VK_OBJECT_TYPE_BUFFER, (uint64_t) *out_buffer, alloc_info->debug_name);
+    }
+
     *out_allocation = allocation;
     return VK_SUCCESS;
 
@@ -607,6 +613,11 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
         goto ERROR;
     }
     pigment_rwlock_wrunlock(&alloc->lock);
+
+    if(alloc_info != NULL)
+    {
+        set_object_name(alloc->device, VK_OBJECT_TYPE_IMAGE, (uint64_t) *out_image, alloc_info->debug_name);
+    }
 
     *out_allocation = allocation;
     return VK_SUCCESS;

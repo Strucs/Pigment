@@ -35,6 +35,8 @@ struct PSamplerDesc {
     float max_anisotropy;    // 0 = off, otherwise clamped to device max
     PBool compare_enable;    // depth-compare sampler (shadow maps)
     PCompareOp compare_op;
+
+    const char* name;
 };
 
 PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc);

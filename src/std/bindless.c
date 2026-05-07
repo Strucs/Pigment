@@ -180,7 +180,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     for(uint32_t i = 0; i < frames; i++)
     {
-        bindless->sets[i] = pigment_allocate_descriptor_set(pigment, bindless->pool, bindless->layout, max_images);
+        bindless->sets[i] = pigment_allocate_descriptor_set(pigment, bindless->pool, bindless->layout, max_images, "pigment_bindless_set");
         if(bindless->sets[i] == NULL)
         {
             goto ERROR;

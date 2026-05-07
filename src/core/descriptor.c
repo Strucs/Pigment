@@ -82,6 +82,8 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         goto ERROR;
     }
 
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t) layout->layout, desc->name);
+
     free(bindings);
     free(binding_flags);
     return layout;
@@ -140,6 +142,8 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
         goto ERROR;
     }
 
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t) pool->pool, desc->name);
+
     free(sizes);
     return pool;
 
@@ -164,7 +168,7 @@ void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
     free(pool);
 }
 
-PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count)
+PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name)
 {
     if(pigment == NULL || pool == NULL || layout == NULL)
     {
@@ -198,6 +202,8 @@ PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPoo
         free(set);
         return NULL;
     }
+
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t) set->set, name);
 
     if(pool_append_set(pool, set) != PIGMENT_SUCCESS)
     {

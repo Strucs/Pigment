@@ -54,6 +54,7 @@ typedef struct PDescriptorBinding {
 typedef struct PDescriptorSetLayoutDesc {
     const PDescriptorBinding* bindings;
     uint32_t binding_count;
+    const char* name;
 } PDescriptorSetLayoutDesc;
 
 typedef struct PDescriptorPoolSize {
@@ -66,6 +67,7 @@ typedef struct PDescriptorPoolDesc {
     uint32_t pool_size_count;
     uint32_t max_sets;
     PBool allow_update_after_bind;
+    const char* name;
 } PDescriptorPoolDesc;
 
 typedef struct PDescriptorImageInfo {
@@ -96,7 +98,7 @@ void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayou
 PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc);
 void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
 
-PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count);
+PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name);
 
 void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count);
 

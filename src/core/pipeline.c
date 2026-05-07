@@ -196,6 +196,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         goto ERROR;
     }
     build->layout = desc->layout;
+    build->name   = desc->name;
 
     build->rendering = (VkPipelineRenderingCreateInfoKHR) {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
@@ -341,6 +342,8 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
         temp_pipelines[i]->layout      = builds[i]->layout;
         list->pipelines[list->count++] = temp_pipelines[i];
         out[i]                         = temp_pipelines[i];
+
+        set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
 
     temp_pipelines_allocated = 0;
@@ -721,6 +724,8 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
         memcpy(layout->set_layouts, desc->set_layouts, desc->set_layout_count * sizeof(*layout->set_layouts));
         layout->set_layout_count = desc->set_layout_count;
     }
+
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t) vk_layout, desc->name);
 
     list->layouts[list->count++] = layout;
 

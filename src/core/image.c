@@ -31,6 +31,7 @@ static void free_resources(Pigment* pigment, PImage* image);
 static PImageViewType derive_view_type(PImage* image, uint32_t layer_count);
 static VkImageAspectFlags aspect_to_vk(PImageAspect aspect, PImage* image);
 static VkImageViewType view_type_to_vk(PImageViewType type);
+static const char* resolve_view_name(const PImageViewDesc* view_desc, const PImage* image, char* buffer, size_t buffer_size);
 
 uint32_t pigment_format_pixel_size(PFormat format)
 {
@@ -315,6 +316,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
     image->aspect       = compute_aspect(image->vk_format, desc->usage);
     image->depth        = (desc->depth == 0) ? 1 : desc->depth;
     image->array_layers = (desc->array_layers == 0) ? 1 : desc->array_layers;
+    image->name         = desc->name;
     translate_image_type(desc->type, &image->vk_image_type, &image->vk_create_flags);
 
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
@@ -503,6 +505,9 @@ PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PIma
     view->desc = view_desc;
     view->view = new_handle;
 
+    char auto_name[160];
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t) new_handle, resolve_view_name(&view_desc, image, auto_name, sizeof(auto_name)));
+
     cache->views[cache->count++] = view;
     return view;
 }
@@ -603,6 +608,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
 {
     PVkAllocationCreateInfo alloc_info = {
         .required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        .debug_name     = image->name,
     };
 
     if(create_vk_image(pigment, image, width, height, VK_IMAGE_TILING_OPTIMAL, &alloc_info) != PIGMENT_SUCCESS)
@@ -703,4 +709,46 @@ static VkImageViewType view_type_to_vk(PImageViewType type)
         default:
             return VK_IMAGE_VIEW_TYPE_2D;
     }
+}
+
+static const char* resolve_view_name(const PImageViewDesc* view_desc, const PImage* image, char* buffer, size_t buffer_size)
+{
+    if(view_desc->name != NULL)
+    {
+        return view_desc->name;
+    }
+    if(image->name == NULL)
+    {
+        return NULL;
+    }
+
+    char mip_part[32]   = {0};
+    char layer_part[32] = {0};
+
+    if(view_desc->base_mip != 0 || view_desc->mip_count != image->mip_levels)
+    {
+        if(view_desc->mip_count == 1)
+        {
+            snprintf(mip_part, sizeof(mip_part), "_mip%u", view_desc->base_mip);
+        }
+        else
+        {
+            snprintf(mip_part, sizeof(mip_part), "_mip%u-%u", view_desc->base_mip, view_desc->base_mip + view_desc->mip_count - 1);
+        }
+    }
+
+    if(view_desc->base_layer != 0 || view_desc->layer_count != image->array_layers)
+    {
+        if(view_desc->layer_count == 1)
+        {
+            snprintf(layer_part, sizeof(layer_part), "_layer%u", view_desc->base_layer);
+        }
+        else
+        {
+            snprintf(layer_part, sizeof(layer_part), "_layer%u-%u", view_desc->base_layer, view_desc->base_layer + view_desc->layer_count - 1);
+        }
+    }
+
+    snprintf(buffer, buffer_size, "%s:view%s%s", image->name, mip_part, layer_part);
+    return buffer;
 }

@@ -31,4 +31,8 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers,
 PCommandBuffer* pigment_begin_single_use_cmd(Pigment* pigment, PCommandPool* pool);
 void pigment_end_single_use_cmd(Pigment* pigment, PCommandBuffer* cmd);
 
+void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
+void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
+void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
+
 #endif
