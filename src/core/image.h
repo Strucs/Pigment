@@ -18,7 +18,6 @@
 #define PIGMENT_IMAGE_H
 
 #include "defines.h"
-#include "sampler.h"
 
 typedef enum PImageUsage {
     P_IMAGE_USAGE_SAMPLED      = 1 << 0,

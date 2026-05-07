@@ -23,6 +23,20 @@
 typedef struct PVkAllocation PVkAllocation;
 typedef struct PVkAllocator PVkAllocator;
 
+typedef enum PVkAllocationFlagBits {
+    P_VK_ALLOCATION_HOST_RANDOM_BIT     = 1 << 0,
+    P_VK_ALLOCATION_DEDICATED_BIT       = 1 << 1,
+    P_VK_ALLOCATION_PERSISTENT_MAP_BIT  = 1 << 2,
+} PVkAllocationFlagBits;
+typedef VkFlags PVkAllocationFlags;
+
+typedef struct PVkAllocationCreateInfo {
+    PVkAllocationFlags    flags;
+    VkMemoryPropertyFlags required_flags;
+    VkMemoryPropertyFlags preferred_flags;
+    const char*           debug_name;
+} PVkAllocationCreateInfo;
+
 /**
  * @brief Vulkan-specific initialization info. All fields are optional.
  *
@@ -75,10 +89,10 @@ typedef struct PVkInitInfo {
 struct PVkAllocator {
     void* user_data;
 
-    VkResult (*create_buffer)(void* user_data, const VkBufferCreateInfo* info, VkMemoryPropertyFlags properties, VkBuffer* out_buffer, PVkAllocation** out_allocation);
+    VkResult (*create_buffer)(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation);
     void (*destroy_buffer)(void* user_data, VkBuffer buffer, PVkAllocation* allocation);
 
-    VkResult (*create_image)(void* user_data, const VkImageCreateInfo* info, VkMemoryPropertyFlags properties, VkImage* out_image, PVkAllocation** out_allocation);
+    VkResult (*create_image)(void* user_data, const VkImageCreateInfo* image_info, const PVkAllocationCreateInfo* alloc_info, VkImage* out_image, PVkAllocation** out_allocation);
     void (*destroy_image)(void* user_data, VkImage image, PVkAllocation* allocation);
 
     VkResult (*map)(void* user_data, PVkAllocation* allocation, void** out_data);

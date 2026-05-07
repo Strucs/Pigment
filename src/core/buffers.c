@@ -36,9 +36,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         return NULL;
     }
 
-    VkBufferUsageFlags vk_usage    = translate_usage(desc->usage);
-    VkMemoryPropertyFlags vk_props = (desc->memory == P_MEMORY_HOST_VISIBLE) ? (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-                                                                             : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VkBufferUsageFlags vk_usage = translate_usage(desc->usage);
 
     VkBufferCreateInfo buffer_create_info = {
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -47,8 +45,19 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
+    PVkAllocationCreateInfo alloc_info = {0};
+    if(desc->memory == P_MEMORY_HOST_VISIBLE)
+    {
+        alloc_info.required_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        alloc_info.flags          = P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
+    }
+    else
+    {
+        alloc_info.required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    }
+
     PVkAllocator* alloc = pigment->allocator;
-    VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, vk_props, &buffer->buffer, &buffer->allocation);
+    VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, &alloc_info, &buffer->buffer, &buffer->allocation);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);

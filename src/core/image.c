@@ -367,7 +367,7 @@ uint32_t pigment_image_height(PImage* image)
     return (image != NULL) ? image->height : 0;
 }
 
-PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, VkMemoryPropertyFlags properties)
+PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, const PVkAllocationCreateInfo* alloc_info)
 {
     VkImageCreateInfo image_create_info = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -388,7 +388,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
 
     PVkAllocator* alloc = pigment->allocator;
 
-    VkResult result = alloc->create_image(alloc->user_data, &image_create_info, properties, &image->image, &image->image_allocation);
+    VkResult result = alloc->create_image(alloc->user_data, &image_create_info, alloc_info, &image->image, &image->image_allocation);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (result: %d)", result);
@@ -601,7 +601,11 @@ static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage)
 
 static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
 {
-    if(create_vk_image(pigment, image, width, height, VK_IMAGE_TILING_OPTIMAL, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != PIGMENT_SUCCESS)
+    PVkAllocationCreateInfo alloc_info = {
+        .required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+
+    if(create_vk_image(pigment, image, width, height, VK_IMAGE_TILING_OPTIMAL, &alloc_info) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR_VULKAN;
     }

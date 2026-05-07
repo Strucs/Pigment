@@ -457,6 +457,29 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
     return first_slot;
 }
 
+uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt)
+{
+    if(pigment == NULL || bindless == NULL || rt == NULL)
+    {
+        return UINT32_MAX;
+    }
+
+    PImage* sampled = pigment_std_render_target_depth_sampled(rt);
+    if(sampled == NULL)
+    {
+        return UINT32_MAX;
+    }
+
+    uint32_t slot = bindless->render_targets.count;
+    if(image_list_append(&bindless->render_targets, sampled) != PIGMENT_SUCCESS)
+    {
+        return UINT32_MAX;
+    }
+    write_render_target_descriptor(pigment, bindless, slot, sampled);
+
+    return slot;
+}
+
 PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless)
 {
     return (bindless != NULL) ? bindless->layout : NULL;

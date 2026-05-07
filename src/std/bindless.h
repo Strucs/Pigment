@@ -40,6 +40,7 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
 uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
 uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
+uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
 
 PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
 PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, uint32_t current_frame);

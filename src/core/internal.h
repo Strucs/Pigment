@@ -88,7 +88,7 @@ PCommandPool* pigment_default_pool(Pigment* pigment);
 
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
-PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, VkMemoryPropertyFlags properties);
+PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, const PVkAllocationCreateInfo* alloc_info);
 VkImageLayout image_layout_to_vk(PImageLayout layout);
 PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
 void image_destroy_view_cache(Pigment* pigment, PImage* image);

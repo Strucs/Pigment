@@ -74,9 +74,9 @@ static PVkAllocation* create_allocation(VkDeviceMemory memory, VkDeviceSize offs
 static PVkAllocation* allocate_pooled(DefaultAllocator* alloc, VkDeviceSize size, VkDeviceSize alignment, uint32_t memory_type_index);
 static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize size, uint32_t memory_type_index);
 static void release_allocation(DefaultAllocator* alloc, PVkAllocation* allocation);
-static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* info, VkMemoryPropertyFlags properties, VkBuffer* out_buffer, PVkAllocation** out_allocation);
+static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation);
 static void default_destroy_buffer(void* user_data, VkBuffer buffer, PVkAllocation* allocation);
-static VkResult default_create_image(void* user_data, const VkImageCreateInfo* info, VkMemoryPropertyFlags properties, VkImage* out_image, PVkAllocation** out_allocation);
+static VkResult default_create_image(void* user_data, const VkImageCreateInfo* image_info, const PVkAllocationCreateInfo* alloc_info, VkImage* out_image, PVkAllocation** out_allocation);
 static void default_destroy_image(void* user_data, VkImage image, PVkAllocation* allocation);
 static VkResult default_map(void* user_data, PVkAllocation* allocation, void** out_data);
 static void default_unmap(void* user_data, PVkAllocation* allocation);
@@ -470,13 +470,13 @@ static void release_allocation(DefaultAllocator* allocator, PVkAllocation* alloc
     free(allocation);
 }
 
-static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* info, VkMemoryPropertyFlags properties, VkBuffer* out_buffer, PVkAllocation** out_allocation)
+static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation)
 {
     DefaultAllocator* alloc = (DefaultAllocator*) user_data;
     *out_buffer             = VK_NULL_HANDLE;
     *out_allocation         = NULL;
 
-    VkResult result = vkCreateBuffer(alloc->device, info, NULL, out_buffer);
+    VkResult result = vkCreateBuffer(alloc->device, buffer_info, NULL, out_buffer);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(alloc->pigment, "vkCreateBuffer failed (result=%d)", result);
@@ -486,7 +486,19 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     VkMemoryRequirements requirements;
     vkGetBufferMemoryRequirements(alloc->device, *out_buffer, &requirements);
 
-    uint32_t memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, properties);
+    VkMemoryPropertyFlags required_flags  = (alloc_info != NULL) ? alloc_info->required_flags : 0;
+    VkMemoryPropertyFlags preferred_flags = (alloc_info != NULL) ? alloc_info->preferred_flags : 0;
+    PVkAllocationFlags allocation_flags   = (alloc_info != NULL) ? alloc_info->flags : 0;
+
+    uint32_t memory_type_index = UINT32_MAX;
+    if(preferred_flags != 0)
+    {
+        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags | preferred_flags);
+    }
+    if(memory_type_index == UINT32_MAX)
+    {
+        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags);
+    }
     if(memory_type_index == UINT32_MAX)
     {
         PLOG_ERROR(alloc->pigment, "Failed to find suitable memory type for buffer");
@@ -494,7 +506,8 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
         goto ERROR;
     }
 
-    PBool needs_dedicated = requirements.size > alloc->dedicated_threshold;
+    PBool needs_dedicated = (allocation_flags & P_VK_ALLOCATION_DEDICATED_BIT) != 0
+                            || requirements.size > alloc->dedicated_threshold;
 
     pigment_rwlock_wrlock(&alloc->lock);
     PVkAllocation* allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, memory_type_index)
@@ -537,13 +550,13 @@ static void default_destroy_buffer(void* user_data, VkBuffer buffer, PVkAllocati
     pigment_rwlock_wrunlock(&alloc->lock);
 }
 
-static VkResult default_create_image(void* user_data, const VkImageCreateInfo* info, VkMemoryPropertyFlags properties, VkImage* out_image, PVkAllocation** out_allocation)
+static VkResult default_create_image(void* user_data, const VkImageCreateInfo* image_info, const PVkAllocationCreateInfo* alloc_info, VkImage* out_image, PVkAllocation** out_allocation)
 {
     DefaultAllocator* alloc = (DefaultAllocator*) user_data;
     *out_image              = VK_NULL_HANDLE;
     *out_allocation         = NULL;
 
-    VkResult result = vkCreateImage(alloc->device, info, NULL, out_image);
+    VkResult result = vkCreateImage(alloc->device, image_info, NULL, out_image);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(alloc->pigment, "vkCreateImage failed (result=%d)", result);
@@ -553,7 +566,19 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     VkMemoryRequirements requirements;
     vkGetImageMemoryRequirements(alloc->device, *out_image, &requirements);
 
-    uint32_t memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, properties);
+    VkMemoryPropertyFlags required_flags  = (alloc_info != NULL) ? alloc_info->required_flags : 0;
+    VkMemoryPropertyFlags preferred_flags = (alloc_info != NULL) ? alloc_info->preferred_flags : 0;
+    PVkAllocationFlags allocation_flags   = (alloc_info != NULL) ? alloc_info->flags : 0;
+
+    uint32_t memory_type_index = UINT32_MAX;
+    if(preferred_flags != 0)
+    {
+        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags | preferred_flags);
+    }
+    if(memory_type_index == UINT32_MAX)
+    {
+        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags);
+    }
     if(memory_type_index == UINT32_MAX)
     {
         PLOG_ERROR(alloc->pigment, "Failed to find suitable memory type for image");
@@ -561,7 +586,8 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
         goto ERROR;
     }
 
-    PBool needs_dedicated = requirements.size > alloc->dedicated_threshold;
+    PBool needs_dedicated = (allocation_flags & P_VK_ALLOCATION_DEDICATED_BIT) != 0
+                            || requirements.size > alloc->dedicated_threshold;
 
     pigment_rwlock_wrlock(&alloc->lock);
     PVkAllocation* allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, memory_type_index)

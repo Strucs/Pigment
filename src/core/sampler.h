@@ -19,11 +19,6 @@
 
 #include "defines.h"
 
-typedef enum PFilteringMode {
-    P_FILTERING_MODE_NEAREST = 0,
-    P_FILTERING_MODE_LINEAR  = 1,
-} PFilteringMode;
-
 typedef enum PAddressMode {
     P_ADDRESS_MODE_REPEAT          = 0,
     P_ADDRESS_MODE_MIRRORED_REPEAT = 1,

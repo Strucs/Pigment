@@ -213,6 +213,11 @@ typedef enum PShaderStageFlags {
     P_SHADER_STAGE_ALL          = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT | P_SHADER_STAGE_COMPUTE_BIT,
 } PShaderStageFlags;
 
+typedef enum PFilteringMode {
+    P_FILTERING_MODE_NEAREST = 0,
+    P_FILTERING_MODE_LINEAR  = 1,
+} PFilteringMode;
+
 typedef enum PSampleCount {
     P_SAMPLE_COUNT_1  = 1,
     P_SAMPLE_COUNT_2  = 2,
