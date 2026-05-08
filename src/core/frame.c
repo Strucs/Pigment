@@ -81,7 +81,7 @@ PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_ima
         return P_FALSE;
     }
 
-    vkResetFences(device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame]);
+    renderer->sync->active_target_value = renderer->sync->next_value + 1;
 
     VkCommandBuffer cmd = renderer->command_buffers[current_frame]->buffer;
 
@@ -626,33 +626,58 @@ void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index
         return;
     }
 
-    VkSemaphore wait_semaphores[]      = {renderer->sync->image_available_semaphores[current_frame]};
-    VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    VkSemaphore signal_semaphores[]    = {renderer->sync->render_finished_semaphores[image_index]};
+    uint64_t signal_value = ++renderer->sync->next_value;
 
-    VkSubmitInfo submit_info = {
-        .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount   = sizeof(wait_semaphores) / sizeof(wait_semaphores[0]),
-        .pWaitSemaphores      = wait_semaphores,
-        .pWaitDstStageMask    = wait_stages,
-        .commandBufferCount   = 1,
-        .pCommandBuffers      = &cmd,
-        .signalSemaphoreCount = sizeof(signal_semaphores) / sizeof(signal_semaphores[0]),
-        .pSignalSemaphores    = signal_semaphores
+    renderer->sync->per_slot_value[current_frame] = signal_value;
+
+    VkSemaphoreSubmitInfo wait_info = {
+        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = renderer->sync->image_available_semaphores[current_frame],
+        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     };
 
-    if((result = vkQueueSubmit(device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0)->queue, 1, &submit_info, renderer->sync->in_flight_fences[current_frame])) != VK_SUCCESS)
+    VkSemaphoreSubmitInfo signal_infos[2] = {
+        {
+         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+         .semaphore = renderer->sync->render_finished_semaphores[image_index],
+         .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+         },
+        {
+         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+         .semaphore = renderer->sync->timeline,
+         .value     = signal_value,
+         .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+         },
+    };
+
+    VkCommandBufferSubmitInfo cmd_info = {
+        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+        .commandBuffer = cmd,
+    };
+
+    VkSubmitInfo2 submit_info = {
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount   = 1,
+        .pWaitSemaphoreInfos      = &wait_info,
+        .commandBufferInfoCount   = 1,
+        .pCommandBufferInfos      = &cmd_info,
+        .signalSemaphoreInfoCount = 2,
+        .pSignalSemaphoreInfos    = signal_infos,
+    };
+
+    if((result = vkQueueSubmit2(device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0)->queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return;
     }
 
+    VkSemaphore present_wait[]  = {renderer->sync->render_finished_semaphores[image_index]};
     VkSwapchainKHR swapchains[] = {renderer->swapchain->swapchain};
 
     VkPresentInfoKHR present_info = {
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = sizeof(signal_semaphores) / sizeof(signal_semaphores[0]),
-        .pWaitSemaphores    = signal_semaphores,
+        .waitSemaphoreCount = sizeof(present_wait) / sizeof(present_wait[0]),
+        .pWaitSemaphores    = present_wait,
         .swapchainCount     = sizeof(swapchains) / sizeof(swapchains[0]),
         .pSwapchains        = swapchains,
         .pImageIndices      = &image_index

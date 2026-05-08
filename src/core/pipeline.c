@@ -16,6 +16,7 @@
 
 #include "pipeline.h"
 #include "structs.h"
+#include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
 
@@ -32,6 +33,7 @@ static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_in
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
 static PBool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count);
 static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline);
+static void destroy_pipeline_immediate(Pigment* pigment, void* resource);
 
 #define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
 #define PIGMENT_LAYOUT_LIST_INITIAL_CAPACITY 4
@@ -381,8 +383,12 @@ void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
         return;
     }
 
-    vkDeviceWaitIdle(pigment->device->logical_device);
-    pipeline_list_destroy(pigment, pigment->pipelines, pipeline);
+    pigment_defer_destroy(pigment, destroy_pipeline_immediate, pipeline);
+}
+
+static void destroy_pipeline_immediate(Pigment* pigment, void* resource)
+{
+    pipeline_list_destroy(pigment, pigment->pipelines, (PPipeline*) resource);
 }
 
 void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline)

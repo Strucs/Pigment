@@ -93,6 +93,7 @@ static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t 
 PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family);
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
 PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden);
+void device_wait_idle(Pigment* pigment);
 
 // surface.c
 PRendererList* create_renderer_list(void);
@@ -114,5 +115,10 @@ void image_destroy_view_cache(Pigment* pigment, PImage* image);
 PResizeCallbackList* create_resize_callback_list(void);
 void destroy_resize_callback_list(PResizeCallbackList* list);
 void dispatch_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event);
+
+// deletion.c
+PDeletionQueue* create_deletion_queue(void);
+void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
+void drain_deletion_queue(Pigment* pigment);
 
 #endif

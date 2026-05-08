@@ -21,6 +21,5 @@
 
 PDevice* create_device(Pigment* pigment);
 void destroy_device(Pigment* pigment);
-void device_wait_idle(Pigment* pigment);
 
 #endif

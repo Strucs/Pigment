@@ -15,6 +15,7 @@
  */
 
 #include "image.h"
+#include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
 
@@ -23,6 +24,8 @@
 
 #define PIGMENT_VIEW_CACHE_INITIAL_CAPACITY 4
 
+static void destroy_image_immediate(Pigment* pigment, void* resource);
+static void destroy_image_resources(Pigment* pigment, void* resource);
 static void translate_image_type(PImageType type, VkImageType* out_image_type, VkImageCreateFlags* out_flags);
 static VkImageUsageFlags translate_usage(PImageUsage usage);
 static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage);
@@ -52,6 +55,12 @@ uint32_t pigment_format_pixel_size(PFormat format)
             return 0;
     }
 }
+
+typedef struct PImageResources {
+    VkImage image;
+    PVkAllocation* allocation;
+    PImageViewCache view_cache;
+} PImageResources;
 
 PBool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format)
 {
@@ -335,6 +344,13 @@ void pigment_destroy_image(Pigment* pigment, PImage* image)
     {
         return;
     }
+
+    pigment_defer_destroy(pigment, destroy_image_immediate, image);
+}
+
+static void destroy_image_immediate(Pigment* pigment, void* resource)
+{
+    PImage* image = (PImage*) resource;
     free_resources(pigment, image);
     free(image);
 }
@@ -350,13 +366,57 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
         return;
     }
 
-    vkDeviceWaitIdle(pigment->device->logical_device);
-    free_resources(pigment, image);
+    PImageResources* old = malloc(sizeof(*old));
+    if(old == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to allocate old resource bundle for resize, falling back to blocking path");
+        device_wait_idle(pigment);
+        free_resources(pigment, image);
+        if(allocate_resources(pigment, image, width, height) != PIGMENT_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
+        }
+        return;
+    }
+
+    old->image      = image->image;
+    old->allocation = image->image_allocation;
+    old->view_cache = image->view_cache;
+
+    image->image            = VK_NULL_HANDLE;
+    image->image_allocation = NULL;
+    image->view_cache       = (PImageViewCache) {0};
 
     if(allocate_resources(pigment, image, width, height) != PIGMENT_SUCCESS)
     {
+        image->image            = old->image;
+        image->image_allocation = old->allocation;
+        image->view_cache       = old->view_cache;
+        free(old);
         PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
+        return;
     }
+
+    pigment_defer_destroy(pigment, destroy_image_resources, old);
+}
+
+static void destroy_image_resources(Pigment* pigment, void* resource)
+{
+    PImageResources* res = (PImageResources*) resource;
+    PVkAllocator* alloc  = pigment->allocator;
+
+    for(uint32_t i = 0; i < res->view_cache.count; i++)
+    {
+        vkDestroyImageView(pigment->device->logical_device, res->view_cache.views[i]->view, NULL);
+        free(res->view_cache.views[i]);
+    }
+    free(res->view_cache.views);
+
+    if(res->image != VK_NULL_HANDLE)
+    {
+        alloc->destroy_image(alloc->user_data, res->image, res->allocation);
+    }
+    free(res);
 }
 
 uint32_t pigment_image_width(PImage* image)

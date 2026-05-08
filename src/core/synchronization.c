@@ -19,7 +19,7 @@
 #include "log_internal.h"
 
 static VkSemaphore create_semaphore(Pigment* pigment);
-static VkFence create_fence(Pigment* pigment);
+static VkSemaphore create_timeline_semaphore(Pigment* pigment, uint64_t initial_value);
 
 PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t swapchain_image_count)
 {
@@ -44,8 +44,14 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         goto ERROR;
     }
 
-    sync->in_flight_fences = calloc(max_frame, sizeof(*sync->in_flight_fences));
-    if(sync->in_flight_fences == NULL)
+    sync->per_slot_value = calloc(max_frame, sizeof(*sync->per_slot_value));
+    if(sync->per_slot_value == NULL)
+    {
+        goto ERROR;
+    }
+
+    sync->timeline = create_timeline_semaphore(pigment, 0);
+    if(sync->timeline == NULL)
     {
         goto ERROR;
     }
@@ -53,9 +59,8 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
     for(size_t i = 0; i < max_frame; i++)
     {
         sync->image_available_semaphores[i] = create_semaphore(pigment);
-        sync->in_flight_fences[i]           = create_fence(pigment);
 
-        if(sync->image_available_semaphores[i] == NULL || sync->in_flight_fences[i] == NULL)
+        if(sync->image_available_semaphores[i] == NULL)
         {
             PLOG_ERROR(pigment, "Failed to create synchronization objects");
             goto ERROR;
@@ -85,13 +90,6 @@ ERROR:
                 vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
             }
         }
-        if(sync->in_flight_fences != NULL)
-        {
-            for(size_t i = 0; i < max_frame; i++)
-            {
-                vkDestroyFence(device->logical_device, sync->in_flight_fences[i], NULL);
-            }
-        }
         if(sync->render_finished_semaphores != NULL)
         {
             for(size_t i = 0; i < swapchain_image_count; i++)
@@ -99,7 +97,11 @@ ERROR:
                 vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
             }
         }
-        free(sync->in_flight_fences);
+        if(sync->timeline != NULL)
+        {
+            vkDestroySemaphore(device->logical_device, sync->timeline, NULL);
+        }
+        free(sync->per_slot_value);
         free(sync->render_finished_semaphores);
         free(sync->image_available_semaphores);
         free(sync);
@@ -118,7 +120,6 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     for(size_t i = 0; i < max_frame; i++)
     {
         vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
-        vkDestroyFence(device->logical_device, sync->in_flight_fences[i], NULL);
     }
 
     for(size_t i = 0; i < swapchain->image_count; i++)
@@ -126,7 +127,9 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
         vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
     }
 
-    free(sync->in_flight_fences);
+    vkDestroySemaphore(device->logical_device, sync->timeline, NULL);
+
+    free(sync->per_slot_value);
     free(sync->render_finished_semaphores);
     free(sync->image_available_semaphores);
     free(sync);
@@ -212,21 +215,26 @@ static VkSemaphore create_semaphore(Pigment* pigment)
     return semaphore;
 }
 
-static VkFence create_fence(Pigment* pigment)
+static VkSemaphore create_timeline_semaphore(Pigment* pigment, uint64_t initial_value)
 {
-    VkFence fence;
-
-    VkFenceCreateInfo fence_create_info = {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT
+    VkSemaphoreTypeCreateInfo type_info = {
+        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue  = initial_value,
     };
 
+    VkSemaphoreCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &type_info,
+    };
+
+    VkSemaphore semaphore;
     VkResult result;
-    if((result = vkCreateFence(pigment->device->logical_device, &fence_create_info, NULL, &fence)) != VK_SUCCESS)
+    if((result = vkCreateSemaphore(pigment->device->logical_device, &create_info, NULL, &semaphore)) != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create fence (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create timeline semaphore (result: %d)", result);
         return NULL;
     }
 
-    return fence;
+    return semaphore;
 }

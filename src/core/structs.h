@@ -100,6 +100,8 @@ struct Pigment {
     PRendererList* renderers;
     PResizeCallbackList* resize_callbacks;
 
+    PDeletionQueue* deletions;
+
     PRuntimeConfig config;
     PLogState* log;
 };
@@ -251,7 +253,12 @@ struct PCommandBuffer {
 struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
-    VkFence* in_flight_fences;
+
+    VkSemaphore timeline;
+    uint64_t next_value;
+    uint64_t* per_slot_value;
+
+    uint64_t active_target_value;
 };
 
 struct PDescriptorSetLayout {

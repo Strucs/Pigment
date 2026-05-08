@@ -110,6 +110,16 @@ void pigment_vk_destroy_allocator(PVkAllocator* allocator);
 
 VkBuffer pigment_vk_buffer(PBuffer* buffer);
 
+/**
+ * @brief Same as pigment_defer_destroy, but gated on a custom VkFence.
+ *
+ * @param pigment Pigment instance.
+ * @param destroy_fn The function to call to destroy the resource.
+ * @param resource The resource to destroy. Passed as the second argument to destroy_fn.
+ * @param fence The fence whose signaling will release the destroy.
+ */
+void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence);
+
 static inline void pigment_vk_append_pnext(void* head, void* tail)
 {
     if(head == NULL || tail == NULL)

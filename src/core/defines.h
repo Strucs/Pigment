@@ -188,6 +188,8 @@ typedef struct PResizeCallbackList PResizeCallbackList;
 
 typedef struct PRendererList PRendererList;
 
+typedef struct PDeletionQueue PDeletionQueue;
+
 typedef struct PBuffer PBuffer;
 
 typedef struct PSamplerDesc PSamplerDesc;

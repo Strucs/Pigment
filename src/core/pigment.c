@@ -20,10 +20,6 @@
 #include "log_internal.h"
 #include "instance.h"
 #include "device.h"
-#include "frame.h"
-#include "commands.h"
-#include "buffers.h"
-#include "pipeline.h"
 
 Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
 {
@@ -112,6 +108,12 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         goto ERROR;
     }
 
+    pigment->deletions = create_deletion_queue();
+    if(pigment->deletions == NULL)
+    {
+        goto ERROR;
+    }
+
     return pigment;
 
 ERROR:
@@ -130,6 +132,8 @@ void destroy_pigment(Pigment* pigment)
     device_wait_idle(pigment);
 
     destroy_renderer_list(pigment, pigment->renderers);
+
+    destroy_deletion_queue(pigment, pigment->deletions);
 
     destroy_pipeline_list(pigment, pigment->pipelines);
     destroy_layout_list(pigment, pigment->layouts);
@@ -164,7 +168,19 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
     }
 
     uint32_t current_frame = renderer->swapchain->current_frame;
-    vkWaitForFences(pigment->device->logical_device, 1, &renderer->sync->in_flight_fences[current_frame], VK_TRUE, UINT64_MAX);
+    uint64_t wait_value    = renderer->sync->per_slot_value[current_frame];
+    if(wait_value == 0)
+    {
+        return;
+    }
+
+    VkSemaphoreWaitInfo wait_info = {
+        .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores    = &renderer->sync->timeline,
+        .pValues        = &wait_value,
+    };
+    vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
 }
 
 PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
@@ -173,6 +189,8 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
     {
         return NULL;
     }
+
+    drain_deletion_queue(pigment);
 
     if(!begin_frame(pigment, renderer, &renderer->current_image_index))
     {

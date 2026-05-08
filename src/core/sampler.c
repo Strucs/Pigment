@@ -16,10 +16,13 @@
 
 #include "sampler.h"
 #include "structs.h"
+#include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
+
+static void destroy_sampler_immediate(Pigment* pigment, void* resource);
 
 PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
 {
@@ -83,6 +86,12 @@ void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler)
         return;
     }
 
+    pigment_defer_destroy(pigment, destroy_sampler_immediate, sampler);
+}
+
+static void destroy_sampler_immediate(Pigment* pigment, void* resource)
+{
+    PSampler* sampler = (PSampler*) resource;
     vkDestroySampler(pigment->device->logical_device, sampler->sampler, NULL);
     free(sampler);
 }

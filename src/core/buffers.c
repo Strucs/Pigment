@@ -16,11 +16,13 @@
 
 #include "buffers.h"
 #include "commands.h"
+#include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
 
 #include <stdlib.h>
 
+static void destroy_buffer_immediate(Pigment* pigment, void* resource);
 static VkBufferUsageFlags translate_usage(PBufferUsage usage);
 
 PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
@@ -100,7 +102,12 @@ void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer)
     {
         return;
     }
+    pigment_defer_destroy(pigment, destroy_buffer_immediate, buffer);
+}
 
+static void destroy_buffer_immediate(Pigment* pigment, void* resource)
+{
+    PBuffer* buffer     = (PBuffer*) resource;
     PVkAllocator* alloc = pigment->allocator;
     if(buffer->mapped != NULL)
     {

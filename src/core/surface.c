@@ -42,7 +42,7 @@ static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space);
 static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface);
 static void destroy_support_details(SwapChainSupportDetails* details);
 static void destroy_surface(Pigment* pigment, PSurface* surface);
-static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface);
+static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
 static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer);
 static PResult renderer_list_append(PRendererList* list, PWindowRenderer* renderer);
@@ -105,7 +105,7 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
     renderer->desc.width  = width;
     renderer->desc.height = height;
 
-    renderer->swapchain = create_swapchain(pigment, &renderer->desc, surface);
+    renderer->swapchain = create_swapchain(pigment, &renderer->desc, surface, NULL);
     if(renderer->swapchain == NULL)
     {
         goto ERROR;
@@ -162,7 +162,7 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer)
         return;
     }
 
-    vkDeviceWaitIdle(pigment->device->logical_device);
+    device_wait_idle(pigment);
 
     renderer_list_remove(pigment->renderers, renderer);
     destroy_renderer_internal(pigment, renderer);
@@ -322,26 +322,19 @@ void destroy_renderer_list(Pigment* pigment, PRendererList* list)
 
 PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
 {
-    PDevice* device           = pigment->device;
-    PSwapchain* new_swapchain = NULL;
+    device_wait_idle(pigment);
 
-    vkDeviceWaitIdle(device->logical_device);
-
-    destroy_swapchain(pigment, renderer->swapchain);
-
-    new_swapchain = create_swapchain(pigment, &renderer->desc, renderer->surface);
+    PSwapchain* old_swapchain = renderer->swapchain;
+    PSwapchain* new_swapchain = create_swapchain(pigment, &renderer->desc, renderer->surface, old_swapchain);
     if(new_swapchain == NULL)
     {
-        goto ERROR;
+        PLOG_ERROR(pigment, "Failed to recreate swapchain.");
+        return PIGMENT_ERROR;
     }
 
     renderer->swapchain = new_swapchain;
+    destroy_swapchain(pigment, old_swapchain);
     return PIGMENT_SUCCESS;
-
-ERROR:
-    PLOG_ERROR(pigment, "Failed to recreate swapchain.");
-    destroy_swapchain(pigment, new_swapchain);
-    return PIGMENT_ERROR;
 }
 
 static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface)
@@ -574,7 +567,7 @@ static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsK
     return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 }
 
-static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface)
+static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain)
 {
     PDevice* device                          = pigment->device;
     PSwapchain* swapchain                    = NULL;
@@ -684,7 +677,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     create_info.presentMode    = present_mode;
     create_info.clipped        = VK_TRUE;
 
-    create_info.oldSwapchain = VK_NULL_HANDLE;
+    create_info.oldSwapchain = (old_swapchain != NULL) ? old_swapchain->swapchain : VK_NULL_HANDLE;
 
     VkResult result;
     if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain))) != VK_SUCCESS)

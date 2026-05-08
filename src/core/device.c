@@ -49,6 +49,7 @@ static inline VkPhysicalDeviceVulkan12Features pigment_req_features_12(void)
         .descriptorBindingPartiallyBound           = VK_TRUE,
         .runtimeDescriptorArray                    = VK_TRUE,
         .bufferDeviceAddress                       = VK_TRUE,
+        .timelineSemaphore                         = VK_TRUE,
     };
 }
 
@@ -645,4 +646,5 @@ void device_wait_idle(Pigment* pigment)
         return;
     }
     vkDeviceWaitIdle(pigment->device->logical_device);
+    drain_deletion_queue(pigment);
 }

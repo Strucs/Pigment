@@ -15,11 +15,14 @@
  */
 
 #include "descriptor.h"
+#include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
 
 #define PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY 4
 
+static void destroy_descriptor_set_layout_immediate(Pigment* pigment, void* resource);
+static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource);
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
 static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
@@ -101,6 +104,13 @@ void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayou
     {
         return;
     }
+
+    pigment_defer_destroy(pigment, destroy_descriptor_set_layout_immediate, layout);
+}
+
+static void destroy_descriptor_set_layout_immediate(Pigment* pigment, void* resource)
+{
+    PDescriptorSetLayout* layout = (PDescriptorSetLayout*) resource;
     vkDestroyDescriptorSetLayout(pigment->device->logical_device, layout->layout, NULL);
     free(layout);
 }
@@ -159,6 +169,13 @@ void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
     {
         return;
     }
+
+    pigment_defer_destroy(pigment, destroy_descriptor_pool_immediate, pool);
+}
+
+static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource)
+{
+    PDescriptorPool* pool = (PDescriptorPool*) resource;
     vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, NULL);
     for(uint32_t i = 0; i < pool->set_count; i++)
     {

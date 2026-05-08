@@ -15,9 +15,11 @@
  */
 
 #include "commands.h"
+#include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
 
+static void destroy_command_pool_immediate(Pigment* pigment, void* resource);
 static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc);
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
@@ -135,9 +137,12 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
         return;
     }
 
-    vkDeviceWaitIdle(pigment->device->logical_device);
+    pigment_defer_destroy(pigment, destroy_command_pool_immediate, pool);
+}
 
-    command_pools_destroy(pigment, pigment->command_pools, pool);
+static void destroy_command_pool_immediate(Pigment* pigment, void* resource)
+{
+    command_pools_destroy(pigment, pigment->command_pools, (PCommandPool*) resource);
 }
 
 PCommandPool* pigment_default_pool(Pigment* pigment)
