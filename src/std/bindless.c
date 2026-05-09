@@ -310,9 +310,12 @@ uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless
         goto FREE;
     }
 
-    PCommandBuffer* cmd = pigment_begin_single_use_cmd(pigment, NULL);
-    PResult result      = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
-    pigment_end_single_use_cmd(pigment, cmd);
+    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, NULL);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    PResult result = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
+    pigment_end_recording(pigment, cmd);
+    pigment_queue_submit(pigment, &cmd, 1);
+    pigment_destroy_command_buffer(pigment, cmd);
 
     if(result == PIGMENT_SUCCESS)
     {
@@ -393,9 +396,12 @@ uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, co
 
     uint64_t face_size = (uint64_t) face_width * face_height * pigment_format_pixel_size(format);
 
-    PCommandBuffer* cmd = pigment_begin_single_use_cmd(pigment, NULL);
+    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, NULL);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     record_image_upload(pigment, cmd, image, staging, face_width, face_height, 6, face_size);
-    pigment_end_single_use_cmd(pigment, cmd);
+    pigment_end_recording(pigment, cmd);
+    pigment_queue_submit(pigment, &cmd, 1);
+    pigment_destroy_command_buffer(pigment, cmd);
     pigment_destroy_buffer(pigment, staging);
 
     uint32_t slot = bindless->cubemaps.count;
@@ -610,9 +616,12 @@ static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, c
         goto ERROR;
     }
 
-    PCommandBuffer* cmd = pigment_begin_single_use_cmd(pigment, NULL);
+    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, NULL);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     record_image_upload(pigment, cmd, image, staging, width, height, 1, 0);
-    pigment_end_single_use_cmd(pigment, cmd);
+    pigment_end_recording(pigment, cmd);
+    pigment_queue_submit(pigment, &cmd, 1);
+    pigment_destroy_command_buffer(pigment, cmd);
 
     pigment_destroy_buffer(pigment, staging);
 

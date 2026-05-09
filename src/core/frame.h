@@ -32,7 +32,7 @@ typedef struct PDrawIndexedIndirectCommand {
     uint32_t index_count;
     uint32_t instance_count;
     uint32_t first_index;
-    int32_t  vertex_offset;
+    int32_t vertex_offset;
     uint32_t first_instance;
 } PDrawIndexedIndirectCommand;
 
@@ -41,7 +41,7 @@ typedef struct PAttachmentRef {
     uint32_t base_layer;
     uint32_t layer_count;
     uint32_t mip_level;
-    PImage* resolve_image;          // NULL = no MSAA resolve. Otherwise, must be a 1-sample image with matching format/extent.
+    PImage* resolve_image;    // NULL = no MSAA resolve. Otherwise, must be a 1-sample image with matching format/extent.
     uint32_t resolve_base_layer;
     uint32_t resolve_mip_level;
     PResolveMode resolve_mode;
@@ -58,10 +58,89 @@ struct PRenderPassDesc {
     uint32_t view_mask;
 };
 
-PBool begin_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t* out_image_index);
-void end_frame(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index, uint32_t max_frame);
-void begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, uint32_t image_index);
-void end_swapchain_pass(PWindowRenderer* renderer, uint32_t image_index);
+/**
+ * @brief Block until the next frame slot's previous GPU work has completed.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer whose next frame slot to wait on.
+ */
+void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
+
+/**
+ * @brief Begin a new frame and return the command buffer ready for recording.
+ *
+ * Drains the deletion queue at entry. Must be called after
+ * pigment_wait_frame_ready to ensure the previous frame's resources
+ * are freed before potentially reusing them.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer to begin a frame on.
+ *
+ * @return The frame command buffer ready for recording, or NULL if the swapchain is being recreated.
+ */
+PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer);
+
+/**
+ * @brief End recording on the current frame's command buffer.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer whose current frame command buffer to close.
+ */
+void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer);
+
+/**
+ * @brief Return the current frame slot index of the renderer.
+ *
+ * @param renderer The renderer to query.
+ *
+ * @return The current frame slot index in [0, max_frames_in_flight).
+ */
+uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
+
+/**
+ * @brief Return the current frame's command buffer (same one returned by pigment_begin_frame).
+ *
+ * @param renderer The renderer to query.
+ *
+ * @return The current frame's command buffer, or NULL if no frame in progress.
+ */
+PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
+
+/**
+ * @brief Begin a render pass targeting the swapchain image.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer whose swapchain image to render to.
+ */
+void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
+
+/**
+ * @brief End the swapchain render pass.
+ *
+ * @param renderer The renderer whose swapchain pass to close.
+ */
+void pigment_end_swapchain_pass(PWindowRenderer* renderer);
+
+/**
+ * @brief Submit the current frame's command buffer to the GPU.
+ *
+ * Caller guarantees external sync on the queue (single-thread, submission
+ * thread, or external mutex).
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer whose current frame to submit.
+ *
+ * @return PSubmitHandle tracking the GPU completion of this frame's submit.
+ */
+PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer);
+
+/**
+ * @brief Present the swapchain image and cycle to the next slot.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer to present.
+ */
+void pigment_present(Pigment* pigment, PWindowRenderer* renderer);
 
 void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);

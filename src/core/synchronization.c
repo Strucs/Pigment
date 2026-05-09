@@ -150,7 +150,7 @@ PResult recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32
     return PIGMENT_SUCCESS;
 }
 
-PResult resize_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
+PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
 {
     PResult result              = PIGMENT_ERROR_OUT_OF_MEMORY;
     PDevice* device             = pigment->device;
@@ -181,7 +181,7 @@ PResult resize_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_
     return PIGMENT_SUCCESS;
 
 ERROR:
-    PLOG_ERROR(pigment, "Failed to resize render_finished_semaphores, keeping previous ones");
+    PLOG_ERROR(pigment, "Failed to recreate render_finished_semaphores, keeping previous ones");
     if(new_semaphores == NULL)
     {
         return result;

@@ -40,6 +40,10 @@ typedef struct PAppInfo {
     uint32_t app_version;
 } PAppInfo;
 
+typedef struct PSubmitHandle {
+    uint64_t value;
+} PSubmitHandle;
+
 typedef enum PigmentLogSeverity {
     PIGMENT_LOG_TRACE_BIT = 1 << 0,
     PIGMENT_LOG_DEBUG_BIT = 1 << 1,
@@ -93,6 +97,12 @@ typedef enum PCommandPoolFlags {
     P_COMMAND_POOL_FLAG_RESET_BUFFER = 1 << 1,
 } PCommandPoolFlags;
 
+typedef enum PCommandBufferUsage {
+    P_CMD_BUFFER_USAGE_DEFAULT              = 0,
+    P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT  = 1 << 0,
+    P_CMD_BUFFER_USAGE_SIMULTANEOUS_USE_BIT = 1 << 1,
+} PCommandBufferUsage;
+
 typedef struct PCommandPoolDesc {
     PQueueFlags queue_flags;
     PCommandPoolFlags flags;
@@ -110,26 +120,32 @@ typedef enum PWindowHandleType {
 
 typedef struct PWindowHandles {
     PWindowHandleType type;
+
     union {
         struct {
             void* hwnd;
             void* hinstance;
         } win32;
+
         struct {
             void* display;
             unsigned long window;
         } xlib;
+
         struct {
             void* connection;
             uint32_t window;
         } xcb;
+
         struct {
             void* display;
             void* surface;
         } wayland;
+
         struct {
             void* ca_metal_layer;
         } metal;
+
         struct {
             void* a_native_window;
         } android;
@@ -184,7 +200,7 @@ typedef struct PImageView PImageView;
 
 typedef struct PSampler PSampler;
 
-typedef struct PResizeCallbackList PResizeCallbackList;
+typedef struct PSwapchainCallbackList PSwapchainCallbackList;
 
 typedef struct PRendererList PRendererList;
 
@@ -200,13 +216,13 @@ typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
 
 typedef struct PigmentLogger PigmentLogger;
 
-typedef struct PSwapchainResizeEvent {
+typedef struct PSwapchainRecreateEvent {
     PWindowRenderer* renderer;
     uint32_t width;
     uint32_t height;
-} PSwapchainResizeEvent;
+} PSwapchainRecreateEvent;
 
-typedef void (*PSwapchainResizeFn)(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data);
+typedef void (*PSwapchainRecreateFn)(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data);
 
 typedef enum PShaderStageFlags {
     P_SHADER_STAGE_VERTEX_BIT   = 1 << 0,
@@ -261,7 +277,7 @@ typedef struct PSwapchainDesc {
     uint32_t height;            // 0 = query from surface
     PColorSpace color_space;    // 0 = SRGB. Fallback to compatible if HDR format requested but not supported.
     PPresentMode present_mode;
-    PSampleCount samples;       // 0 or P_SAMPLE_COUNT_1 = no MSAA. Falls back to 1x if hardware does not support requested count.
+    PSampleCount samples;    // 0 or P_SAMPLE_COUNT_1 = no MSAA. Falls back to 1x if hardware does not support requested count.
     uint32_t image_count;
     PBool transparent;
 } PSwapchainDesc;

@@ -132,23 +132,23 @@ VkBuffer pigment_vk_buffer(PBuffer* buffer)
     return (buffer != NULL) ? buffer->buffer : VK_NULL_HANDLE;
 }
 
-void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset)
+PSubmitHandle pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset)
 {
     if(pigment == NULL || dst == NULL || data == NULL || size == 0)
     {
-        return;
+        return (PSubmitHandle) {0};
     }
 
     if(offset + size > dst->size)
     {
         PLOG_ERROR(pigment, "Buffer upload out of range (offset=%llu, size=%llu, buffer size=%llu)", (unsigned long long) offset, (unsigned long long) size, (unsigned long long) dst->size);
-        return;
+        return (PSubmitHandle) {0};
     }
 
     if(dst->mapped != NULL)
     {
         memcpy((unsigned char*) dst->mapped + offset, data, (size_t) size);
-        return;
+        return (PSubmitHandle) {0};
     }
 
     PBufferDesc staging_desc = {
@@ -160,20 +160,29 @@ void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uin
     PBuffer* staging = pigment_create_buffer(pigment, &staging_desc);
     if(staging == NULL)
     {
-        return;
+        return (PSubmitHandle) {0};
     }
 
     memcpy(staging->mapped, data, (size_t) size);
 
-    PCommandBuffer* cmd = pigment_begin_single_use_cmd(pigment, NULL);
-    if(cmd != NULL)
+    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, NULL);
+    if(cmd == NULL)
     {
-        VkBufferCopy copy_region = {.srcOffset = 0, .dstOffset = (VkDeviceSize) offset, .size = (VkDeviceSize) size};
-        vkCmdCopyBuffer(cmd->buffer, staging->buffer, dst->buffer, 1, &copy_region);
-        pigment_end_single_use_cmd(pigment, cmd);
+        pigment_destroy_buffer(pigment, staging);
+        return (PSubmitHandle) {0};
     }
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
+    VkBufferCopy copy_region = {.srcOffset = 0, .dstOffset = (VkDeviceSize) offset, .size = (VkDeviceSize) size};
+    vkCmdCopyBuffer(cmd->buffer, staging->buffer, dst->buffer, 1, &copy_region);
+    pigment_end_recording(pigment, cmd);
+
+    PSubmitHandle handle = pigment_queue_submit(pigment, &cmd, 1);
+
+    pigment_destroy_command_buffer(pigment, cmd);
     pigment_destroy_buffer(pigment, staging);
+
+    return handle;
 }
 
 static VkBufferUsageFlags translate_usage(PBufferUsage usage)

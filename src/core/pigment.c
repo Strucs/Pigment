@@ -96,8 +96,8 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         goto ERROR;
     }
 
-    pigment->resize_callbacks = create_resize_callback_list();
-    if(pigment->resize_callbacks == NULL)
+    pigment->swapchain_callbacks = create_swapchain_callback_list();
+    if(pigment->swapchain_callbacks == NULL)
     {
         goto ERROR;
     }
@@ -108,7 +108,7 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         goto ERROR;
     }
 
-    pigment->deletions = create_deletion_queue();
+    pigment->deletions = create_deletion_queue(pigment);
     if(pigment->deletions == NULL)
     {
         goto ERROR;
@@ -137,7 +137,7 @@ void destroy_pigment(Pigment* pigment)
 
     destroy_pipeline_list(pigment, pigment->pipelines);
     destroy_layout_list(pigment, pigment->layouts);
-    destroy_resize_callback_list(pigment->resize_callbacks);
+    destroy_swapchain_callback_list(pigment->swapchain_callbacks);
     destroy_command_pools(pigment, pigment->command_pools);
     if(pigment->owns_allocator)
     {
@@ -158,95 +158,6 @@ void pigment_wait_idle(Pigment* pigment)
     }
 
     device_wait_idle(pigment);
-}
-
-void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
-{
-    if(pigment == NULL || renderer == NULL)
-    {
-        return;
-    }
-
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    uint64_t wait_value    = renderer->sync->per_slot_value[current_frame];
-    if(wait_value == 0)
-    {
-        return;
-    }
-
-    VkSemaphoreWaitInfo wait_info = {
-        .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-        .semaphoreCount = 1,
-        .pSemaphores    = &renderer->sync->timeline,
-        .pValues        = &wait_value,
-    };
-    vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
-}
-
-PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
-{
-    if(pigment == NULL || renderer == NULL)
-    {
-        return NULL;
-    }
-
-    drain_deletion_queue(pigment);
-
-    if(!begin_frame(pigment, renderer, &renderer->current_image_index))
-    {
-        return NULL;
-    }
-
-    return renderer->command_buffers[renderer->swapchain->current_frame];
-}
-
-void pigment_end_frame(Pigment* pigment, PWindowRenderer* renderer)
-{
-    if(pigment == NULL || renderer == NULL)
-    {
-        return;
-    }
-
-    end_frame(pigment, renderer, renderer->current_image_index, pigment->config.max_frames_in_flight);
-}
-
-uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer)
-{
-    if(renderer == NULL || renderer->swapchain == NULL)
-    {
-        return 0;
-    }
-
-    return renderer->swapchain->current_frame;
-}
-
-PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer)
-{
-    if(renderer == NULL || renderer->swapchain == NULL)
-    {
-        return NULL;
-    }
-    return renderer->command_buffers[renderer->swapchain->current_frame];
-}
-
-void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer)
-{
-    if(pigment == NULL || renderer == NULL)
-    {
-        return;
-    }
-
-    begin_swapchain_pass(pigment, renderer, renderer->current_image_index);
-}
-
-void pigment_end_swapchain_pass(PWindowRenderer* renderer)
-{
-    if(renderer == NULL)
-    {
-        return;
-    }
-
-    end_swapchain_pass(renderer, renderer->current_image_index);
 }
 
 PBool pigment_supports(Pigment* pigment, PFeature feature)

@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-#include "resize.h"
+#include "swapchain_event.h"
 #include "internal.h"
 
 #include <stdlib.h>
 
-#define PIGMENT_RESIZE_INITIAL_CAPACITY 4
+#define PIGMENT_SWAPCHAIN_CALLBACK_INITIAL_CAPACITY 4
 
-PResizeCallbackList* create_resize_callback_list(void)
+PSwapchainCallbackList* create_swapchain_callback_list(void)
 {
-    PResizeCallbackList* list = calloc(1, sizeof(*list));
+    PSwapchainCallbackList* list = calloc(1, sizeof(*list));
     if(list == NULL)
     {
         return NULL;
@@ -34,7 +34,7 @@ PResizeCallbackList* create_resize_callback_list(void)
     return list;
 }
 
-void destroy_resize_callback_list(PResizeCallbackList* list)
+void destroy_swapchain_callback_list(PSwapchainCallbackList* list)
 {
     if(list == NULL)
     {
@@ -46,15 +46,15 @@ void destroy_resize_callback_list(PResizeCallbackList* list)
     free(list);
 }
 
-uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn func, void* user_data)
+uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PSwapchainRecreateFn func, void* user_data)
 {
-    if(pigment == NULL || pigment->resize_callbacks == NULL || func == NULL)
+    if(pigment == NULL || pigment->swapchain_callbacks == NULL || func == NULL)
     {
         return UINT32_MAX;
     }
 
-    PResizeCallbackList* list = pigment->resize_callbacks;
-    uint32_t handle           = atomic_fetch_add(&list->next_handle, 1);
+    PSwapchainCallbackList* list = pigment->swapchain_callbacks;
+    uint32_t handle              = atomic_fetch_add(&list->next_handle, 1);
 
     pigment_rwlock_wrlock(&list->lock);
 
@@ -72,8 +72,8 @@ uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn 
     {
         if(list->count >= list->capacity)
         {
-            uint32_t new_capacity      = (list->capacity == 0) ? PIGMENT_RESIZE_INITIAL_CAPACITY : list->capacity * 2;
-            PResizeCallback* new_array = realloc(list->callbacks, new_capacity * sizeof(*new_array));
+            uint32_t new_capacity         = (list->capacity == 0) ? PIGMENT_SWAPCHAIN_CALLBACK_INITIAL_CAPACITY : list->capacity * 2;
+            PSwapchainCallback* new_array = realloc(list->callbacks, new_capacity * sizeof(*new_array));
             if(new_array == NULL)
             {
                 pigment_rwlock_wrunlock(&list->lock);
@@ -85,7 +85,7 @@ uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn 
         reuse_index = list->count++;
     }
 
-    list->callbacks[reuse_index] = (PResizeCallback) {
+    list->callbacks[reuse_index] = (PSwapchainCallback) {
         .func      = func,
         .user_data = user_data,
         .handle    = handle,
@@ -96,14 +96,14 @@ uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn 
     return handle;
 }
 
-void pigment_unregister_swapchain_resize(Pigment* pigment, uint32_t handle)
+void pigment_unregister_swapchain_recreate(Pigment* pigment, uint32_t handle)
 {
-    if(pigment == NULL || pigment->resize_callbacks == NULL || handle == 0 || handle == UINT32_MAX)
+    if(pigment == NULL || pigment->swapchain_callbacks == NULL || handle == 0 || handle == UINT32_MAX)
     {
         return;
     }
 
-    PResizeCallbackList* list = pigment->resize_callbacks;
+    PSwapchainCallbackList* list = pigment->swapchain_callbacks;
 
     pigment_rwlock_wrlock(&list->lock);
     for(uint32_t i = 0; i < list->count; i++)
@@ -118,23 +118,46 @@ void pigment_unregister_swapchain_resize(Pigment* pigment, uint32_t handle)
     pigment_rwlock_wrunlock(&list->lock);
 }
 
-void dispatch_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event)
+void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event)
 {
-    if(pigment == NULL || pigment->resize_callbacks == NULL || event == NULL)
+    if(pigment == NULL || pigment->swapchain_callbacks == NULL || event == NULL)
     {
         return;
     }
 
-    PResizeCallbackList* list = pigment->resize_callbacks;
+    PSwapchainCallbackList* list = pigment->swapchain_callbacks;
+
+    PSwapchainCallback stack_buffer[16];
+    PSwapchainCallback* callbacks_to_call = stack_buffer;
+    PSwapchainCallback* heap_buffer       = NULL;
 
     pigment_rwlock_rdlock(&list->lock);
+
+    if(list->count > sizeof(stack_buffer) / sizeof(stack_buffer[0]))
+    {
+        heap_buffer = malloc(list->count * sizeof(*heap_buffer));
+        if(heap_buffer == NULL)
+        {
+            pigment_rwlock_rdunlock(&list->lock);
+            return;
+        }
+        callbacks_to_call = heap_buffer;
+    }
+
+    uint32_t count = 0;
     for(uint32_t i = 0; i < list->count; i++)
     {
-        PResizeCallback callback = list->callbacks[i];
-        if(callback.alive && callback.func != NULL)
+        if(list->callbacks[i].alive)
         {
-            callback.func(pigment, event, callback.user_data);
+            callbacks_to_call[count++] = list->callbacks[i];
         }
     }
     pigment_rwlock_rdunlock(&list->lock);
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        callbacks_to_call[i].func(pigment, event, callbacks_to_call[i].user_data);
+    }
+
+    free(heap_buffer);
 }

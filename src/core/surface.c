@@ -133,17 +133,9 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
 ERROR:
     if(renderer != NULL)
     {
-        if(renderer->command_buffers != NULL)
-        {
-            destroy_command_buffers(pigment, renderer->command_buffers, pigment->config.max_frames_in_flight);
-        }
-        if(renderer->swapchain != NULL)
-        {
-            destroy_swapchain(pigment, renderer->swapchain);
-        }
-        free(renderer);
+        destroy_renderer_internal(pigment, renderer);
     }
-    if(surface != NULL)
+    else if(surface != NULL)
     {
         destroy_surface(pigment, surface);
     }

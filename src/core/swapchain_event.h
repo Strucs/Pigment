@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_RESIZE_H
-#define PIGMENT_RESIZE_H
+#ifndef PIGMENT_SWAPCHAIN_EVENT_H
+#define PIGMENT_SWAPCHAIN_EVENT_H
 
 #include "defines.h"
 
-uint32_t pigment_register_swapchain_resize(Pigment* pigment, PSwapchainResizeFn func, void* user_data);
-void pigment_unregister_swapchain_resize(Pigment* pigment, uint32_t handle);
+uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PSwapchainRecreateFn func, void* user_data);
+void pigment_unregister_swapchain_recreate(Pigment* pigment, uint32_t handle);
 
 #endif

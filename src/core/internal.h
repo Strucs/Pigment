@@ -103,6 +103,8 @@ VkSampleCountFlags supported_sample_counts(Pigment* pigment);
 
 // commands.c
 PCommandPool* pigment_default_pool(Pigment* pigment);
+PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count);
+void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count);
 
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
@@ -111,14 +113,17 @@ VkImageLayout image_layout_to_vk(PImageLayout layout);
 PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
 void image_destroy_view_cache(Pigment* pigment, PImage* image);
 
-// resize.c
-PResizeCallbackList* create_resize_callback_list(void);
-void destroy_resize_callback_list(PResizeCallbackList* list);
-void dispatch_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event);
+// swapchain_event.c
+PSwapchainCallbackList* create_swapchain_callback_list(void);
+void destroy_swapchain_callback_list(PSwapchainCallbackList* list);
+void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event);
 
 // deletion.c
-PDeletionQueue* create_deletion_queue(void);
+PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
+
+VkSemaphore deletion_queue_submit_timeline(Pigment* pigment);
+uint64_t deletion_queue_acquire_submit_value(Pigment* pigment);
 
 #endif

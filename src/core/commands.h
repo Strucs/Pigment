@@ -25,11 +25,67 @@ void destroy_command_pools(Pigment* pigment, PCommandPoolList* pools);
 PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc);
 void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
 
-PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count);
-void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count);
+/**
+ * @brief Allocate a command buffer from a pool. Call pigment_begin_recording before recording into it.
+ *
+ * @param pigment Pigment instance.
+ * @param pool Pool to allocate from. NULL = default graphics pool.
+ *
+ * @return Newly allocated command buffer, or NULL on failure.
+ */
+PCommandBuffer* pigment_create_command_buffer(Pigment* pigment, PCommandPool* pool);
 
-PCommandBuffer* pigment_begin_single_use_cmd(Pigment* pigment, PCommandPool* pool);
-void pigment_end_single_use_cmd(Pigment* pigment, PCommandBuffer* cmd);
+/**
+ * @brief Defer destruction of a command buffer until the GPU is done with it.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to destroy.
+ */
+void pigment_destroy_command_buffer(Pigment* pigment, PCommandBuffer* cmd);
+
+/**
+ * @brief Open a command buffer for recording. Required before any pigment_cmd_* function.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to record into.
+ * @param flags Usage flags for this recording session.
+ */
+void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags);
+
+/**
+ * @brief Close a command buffer recording. The buffer becomes submittable via pigment_queue_submit.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to finalize.
+ */
+void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
+
+/**
+ * @brief Submit command buffers to the GPU. Does not wait for completion.
+ *
+ * @param pigment Pigment instance.
+ * @param cmds Command buffers to submit, executed in array order.
+ * @param count Number of command buffers in the array.
+ *
+ * @return Handle to query or wait for GPU completion of this submit.
+ */
+PSubmitHandle pigment_queue_submit(Pigment* pigment, PCommandBuffer** cmds, uint32_t count);
+
+/**
+ * @brief Returns P_TRUE if the GPU has completed all work tracked by this handle.
+ *
+ * @param pigment Pigment instance.
+ * @param handle Submit handle returned by pigment_queue_submit.
+ */
+PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle);
+
+/**
+ * @brief Block until the GPU has completed all work tracked by this handle.
+ *
+ * @param pigment Pigment instance.
+ * @param handle Submit handle returned by pigment_queue_submit.
+ */
+void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
 
 void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
 void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);

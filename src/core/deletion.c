@@ -53,14 +53,18 @@ struct PDeletionQueue {
     PDeletionEntry* entries;
     uint32_t count;
     uint32_t capacity;
+
+    VkSemaphore submit_timeline;
+    uint64_t submit_next_value;
 };
 
 static PResult deletion_queue_push(PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
 static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_targets, uint32_t* out_count);
 static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
 static PBool target_signaled(VkDevice device, const PWaitTarget* target);
+static VkSemaphore create_submit_timeline(Pigment* pigment);
 
-PDeletionQueue* create_deletion_queue(void)
+PDeletionQueue* create_deletion_queue(Pigment* pigment)
 {
     PDeletionQueue* queue = calloc(1, sizeof(*queue));
     if(queue == NULL)
@@ -68,6 +72,14 @@ PDeletionQueue* create_deletion_queue(void)
         return NULL;
     }
     (void) pigment_rwlock_init(&queue->lock);
+
+    queue->submit_timeline = create_submit_timeline(pigment);
+    if(queue->submit_timeline == VK_NULL_HANDLE)
+    {
+        pigment_rwlock_destroy(&queue->lock);
+        free(queue);
+        return NULL;
+    }
     return queue;
 }
 
@@ -85,9 +97,38 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
         free(entry->targets);
     }
 
+    if(queue->submit_timeline != VK_NULL_HANDLE && pigment != NULL && pigment->device != NULL)
+    {
+        vkDestroySemaphore(pigment->device->logical_device, queue->submit_timeline, NULL);
+    }
+
     free(queue->entries);
     pigment_rwlock_destroy(&queue->lock);
     free(queue);
+}
+
+VkSemaphore deletion_queue_submit_timeline(Pigment* pigment)
+{
+    if(pigment == NULL || pigment->deletions == NULL)
+    {
+        return VK_NULL_HANDLE;
+    }
+
+    return pigment->deletions->submit_timeline;
+}
+
+uint64_t deletion_queue_acquire_submit_value(Pigment* pigment)
+{
+    if(pigment == NULL || pigment->deletions == NULL)
+    {
+        return 0;
+    }
+
+    PDeletionQueue* queue = pigment->deletions;
+    pigment_rwlock_wrlock(&queue->lock);
+    uint64_t value = ++queue->submit_next_value;
+    pigment_rwlock_wrunlock(&queue->lock);
+    return value;
 }
 
 void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource)
@@ -244,40 +285,79 @@ static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_target
     *out_targets = NULL;
     *out_count   = 0;
 
-    PRendererList* list = pigment->renderers;
-    if(list == NULL || list->count == 0)
+    PRendererList* list       = pigment->renderers;
+    PDeletionQueue* deletions = pigment->deletions;
+    uint32_t renderer_count   = (list != NULL) ? list->count : 0;
+    PBool has_submit      = (deletions != NULL && deletions->submit_timeline != VK_NULL_HANDLE && deletions->submit_next_value > 0);
+
+    uint32_t target_count = has_submit ? 1 : 0;
+    for(uint32_t i = 0; i < renderer_count; i++)
+    {
+        PSync* sync = list->renderers[i]->sync;
+        if(sync != NULL && sync->timeline != VK_NULL_HANDLE && sync->active_target_value > 0)
+        {
+            target_count++;
+        }
+    }
+
+    if(target_count == 0)
     {
         return PIGMENT_SUCCESS;
     }
 
-    PWaitTarget* targets = malloc(list->count * sizeof(*targets));
+    PWaitTarget* targets = malloc(target_count * sizeof(*targets));
     if(targets == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
-    uint32_t count = 0;
-    for(uint32_t i = 0; i < list->count; i++)
+    uint32_t fill = 0;
+    for(uint32_t i = 0; i < renderer_count; i++)
     {
         PSync* sync = list->renderers[i]->sync;
         if(sync != NULL && sync->timeline != VK_NULL_HANDLE && sync->active_target_value > 0)
         {
-            targets[count++] = (PWaitTarget) {
+            targets[fill++] = (PWaitTarget) {
                 .kind     = P_WAIT_TIMELINE,
                 .timeline = {.semaphore = sync->timeline, .value = sync->active_target_value},
             };
         }
     }
 
-    if(count == 0)
+    if(has_submit)
     {
-        free(targets);
-        return PIGMENT_SUCCESS;
+        targets[fill++] = (PWaitTarget) {
+            .kind     = P_WAIT_TIMELINE,
+            .timeline = {.semaphore = deletions->submit_timeline, .value = deletions->submit_next_value},
+        };
     }
 
     *out_targets = targets;
-    *out_count   = count;
+    *out_count   = target_count;
     return PIGMENT_SUCCESS;
+}
+
+static VkSemaphore create_submit_timeline(Pigment* pigment)
+{
+    VkSemaphoreTypeCreateInfo type_info = {
+        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+        .initialValue  = 0,
+    };
+
+    VkSemaphoreCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = &type_info,
+    };
+
+    VkSemaphore semaphore;
+    VkResult result = vkCreateSemaphore(pigment->device->logical_device, &create_info, NULL, &semaphore);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to create submit timeline semaphore (result: %d)", result);
+        return VK_NULL_HANDLE;
+    }
+    return semaphore;
 }
 
 static PBool target_signaled(VkDevice device, const PWaitTarget* target)

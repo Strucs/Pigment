@@ -53,6 +53,6 @@ void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
 void* pigment_buffer_mapped(PBuffer* buffer);
 uint64_t pigment_buffer_address(PBuffer* buffer);
 
-void pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset);
+PSubmitHandle pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset);
 
 #endif

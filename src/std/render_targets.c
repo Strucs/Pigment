@@ -19,7 +19,7 @@
 #include "image.h"
 #include "log_internal.h"
 #include "pigment.h"
-#include "resize.h"
+#include "swapchain_event.h"
 #include "surface.h"
 
 #include <stdlib.h>
@@ -38,12 +38,12 @@ struct PRenderTarget {
     uint32_t width;
     uint32_t height;
     uint32_t generation;
-    uint32_t resize_handle;
+    uint32_t recreate_handle;
 };
 
 static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
 static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h);
-static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data);
+static void on_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data);
 static void resize_attachment(Pigment* pigment, PImage* image, float scale, float aspect_ratio, uint32_t base_w, uint32_t base_h);
 static void compute_attachment_size(float scale, uint32_t base_w, uint32_t base_h, float aspect_ratio, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
 static PBool any_attachment_tracked(const PRenderTargetDesc* desc);
@@ -138,7 +138,7 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
 
     if(any_attachment_tracked(desc))
     {
-        target->resize_handle = pigment_register_swapchain_resize(pigment, on_swapchain_resize, target);
+        target->recreate_handle = pigment_register_swapchain_recreate(pigment, on_swapchain_recreate, target);
     }
 
     return target;
@@ -155,9 +155,9 @@ void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target)
     {
         return;
     }
-    if(target->resize_handle != 0)
+    if(target->recreate_handle != 0)
     {
-        pigment_unregister_swapchain_resize(pigment, target->resize_handle);
+        pigment_unregister_swapchain_recreate(pigment, target->recreate_handle);
     }
     if(target->colors != NULL)
     {
@@ -363,7 +363,7 @@ static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc
     return pigment_create_image(pigment, &image_desc);
 }
 
-static void on_swapchain_resize(Pigment* pigment, const PSwapchainResizeEvent* event, void* user_data)
+static void on_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data)
 {
     PRenderTarget* target = (PRenderTarget*) user_data;
     if(event->renderer != target->renderer)

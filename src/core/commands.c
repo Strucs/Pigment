@@ -20,15 +20,13 @@
 #include "log_internal.h"
 
 static void destroy_command_pool_immediate(Pigment* pigment, void* resource);
+static void destroy_command_buffer_immediate(Pigment* pigment, void* resource);
 static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc);
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
 static PResult command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
 static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool);
-static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool command_pool, const uint32_t command_buffers_numbers);
-static VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool);
-static void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool);
 
 #define PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY 4
 
@@ -162,44 +160,28 @@ PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, ui
         return NULL;
     }
 
-    VkCommandBuffer* vk_buffers      = NULL;
     PCommandBuffer** command_buffers = calloc(count, sizeof(*command_buffers));
     if(command_buffers == NULL)
     {
-        goto ERROR;
-    }
-
-    vk_buffers = allocate_command_buffers(pigment, pool->pool, count);
-    if(vk_buffers == NULL)
-    {
-        goto ERROR;
+        return NULL;
     }
 
     for(uint32_t i = 0; i < count; i++)
     {
-        command_buffers[i] = calloc(1, sizeof(**command_buffers));
+        command_buffers[i] = pigment_create_command_buffer(pigment, pool);
         if(command_buffers[i] == NULL)
         {
-            goto ERROR;
+            for(uint32_t j = 0; j < i; j++)
+            {
+                vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, 1, &command_buffers[j]->buffer);
+                free(command_buffers[j]);
+            }
+            free(command_buffers);
+            return NULL;
         }
-        command_buffers[i]->buffer      = vk_buffers[i];
-        command_buffers[i]->source_pool = pool->pool;
     }
 
-    free(vk_buffers);
     return command_buffers;
-
-ERROR:
-    free(vk_buffers);
-    if(command_buffers != NULL)
-    {
-        for(uint32_t i = 0; i < count; i++)
-        {
-            free(command_buffers[i]);
-        }
-        free(command_buffers);
-    }
-    return NULL;
 }
 
 void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count)
@@ -227,7 +209,7 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers,
     free(command_buffers);
 }
 
-PCommandBuffer* pigment_begin_single_use_cmd(Pigment* pigment, PCommandPool* pool)
+PCommandBuffer* pigment_create_command_buffer(Pigment* pigment, PCommandPool* pool)
 {
     if(pigment == NULL)
     {
@@ -243,9 +225,18 @@ PCommandBuffer* pigment_begin_single_use_cmd(Pigment* pigment, PCommandPool* poo
         }
     }
 
-    VkCommandBuffer vk_cmd = start_single_usage_commands(pigment, pool->pool);
-    if(vk_cmd == VK_NULL_HANDLE)
+    VkCommandBufferAllocateInfo alloc_info = {
+        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandPool        = pool->pool,
+        .commandBufferCount = 1,
+    };
+
+    VkCommandBuffer vk_cmd = VK_NULL_HANDLE;
+    VkResult result        = vkAllocateCommandBuffers(pigment->device->logical_device, &alloc_info, &vk_cmd);
+    if(result != VK_SUCCESS)
     {
+        PLOG_ERROR(pigment, "Failed to allocate command buffer (result: %d)", result);
         return NULL;
     }
 
@@ -260,14 +251,164 @@ PCommandBuffer* pigment_begin_single_use_cmd(Pigment* pigment, PCommandPool* poo
     return cmd;
 }
 
-void pigment_end_single_use_cmd(Pigment* pigment, PCommandBuffer* cmd)
+void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags)
 {
     if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    end_single_usage_commands(pigment, &cmd->buffer, cmd->source_pool);
+
+    VkCommandBufferUsageFlags vk_flags = 0;
+    if(flags & P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+    {
+        vk_flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    }
+    if(flags & P_CMD_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)
+    {
+        vk_flags |= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+    }
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = vk_flags,
+    };
+
+    VkResult result = vkBeginCommandBuffer(cmd->buffer, &begin_info);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to begin command buffer recording (result: %d)", result);
+    }
+}
+
+void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    VkResult result = vkEndCommandBuffer(cmd->buffer);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to end command buffer recording (result: %d)", result);
+    }
+}
+
+PSubmitHandle pigment_queue_submit(Pigment* pigment, PCommandBuffer** cmds, uint32_t count)
+{
+    if(pigment == NULL || cmds == NULL || count == 0)
+    {
+        return (PSubmitHandle) {0};
+    }
+
+    VkSemaphore timeline = deletion_queue_submit_timeline(pigment);
+    uint64_t value       = deletion_queue_acquire_submit_value(pigment);
+    if(timeline == VK_NULL_HANDLE || value == 0)
+    {
+        PLOG_ERROR(pigment, "Submit timeline unavailable; submit aborted.");
+        return (PSubmitHandle) {0};
+    }
+
+    VkCommandBufferSubmitInfo* cmd_infos = malloc(count * sizeof(*cmd_infos));
+    if(cmd_infos == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to allocate command info array for queue submit.");
+        return (PSubmitHandle) {0};
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        cmd_infos[i] = (VkCommandBufferSubmitInfo) {
+            .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = cmds[i]->buffer,
+        };
+    }
+
+    VkSemaphoreSubmitInfo signal = {
+        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+        .semaphore = timeline,
+        .value     = value,
+        .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+    };
+    VkSubmitInfo2 submit_info = {
+        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .commandBufferInfoCount   = count,
+        .pCommandBufferInfos      = cmd_infos,
+        .signalSemaphoreInfoCount = 1,
+        .pSignalSemaphoreInfos    = &signal,
+    };
+
+    VkQueue graphics_queue = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0)->queue;
+    VkResult result        = vkQueueSubmit2(graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+    free(cmd_infos);
+
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to submit command buffers (result: %d)", result);
+        return (PSubmitHandle) {0};
+    }
+
+    return (PSubmitHandle) {.value = value};
+}
+
+PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle)
+{
+    if(pigment == NULL || handle.value == 0)
+    {
+        return P_TRUE;
+    }
+
+    VkSemaphore timeline = deletion_queue_submit_timeline(pigment);
+    if(timeline == VK_NULL_HANDLE)
+    {
+        return P_TRUE;
+    }
+
+    uint64_t current = 0;
+    if(vkGetSemaphoreCounterValue(pigment->device->logical_device, timeline, &current) != VK_SUCCESS)
+    {
+        return P_FALSE;
+    }
+
+    return current >= handle.value;
+}
+
+void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle)
+{
+    if(pigment == NULL || handle.value == 0)
+    {
+        return;
+    }
+
+    VkSemaphore timeline = deletion_queue_submit_timeline(pigment);
+    if(timeline == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
+    VkSemaphoreWaitInfo wait_info = {
+        .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores    = &timeline,
+        .pValues        = &handle.value,
+    };
+    vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
+}
+
+static void destroy_command_buffer_immediate(Pigment* pigment, void* resource)
+{
+    PCommandBuffer* cmd = (PCommandBuffer*) resource;
+    vkFreeCommandBuffers(pigment->device->logical_device, cmd->source_pool, 1, &cmd->buffer);
     free(cmd);
+}
+
+void pigment_destroy_command_buffer(Pigment* pigment, PCommandBuffer* cmd)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+
+    pigment_defer_destroy(pigment, destroy_command_buffer_immediate, cmd);
 }
 
 void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name)
@@ -431,93 +572,4 @@ static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCo
             return;
         }
     }
-}
-
-static VkCommandBuffer* allocate_command_buffers(Pigment* pigment, VkCommandPool command_pool, const uint32_t command_buffers_numbers)
-{
-    VkCommandBuffer* command_buffers = malloc(command_buffers_numbers * sizeof(*command_buffers));
-    if(command_buffers == NULL)
-    {
-        goto ERROR;
-    }
-
-    VkCommandBufferAllocateInfo command_buffer_allocate_info = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool        = command_pool,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = command_buffers_numbers
-    };
-
-    VkResult result;
-    if((result = vkAllocateCommandBuffers(pigment->device->logical_device, &command_buffer_allocate_info, command_buffers)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to allocate command buffers! (result: %d)", result);
-        goto ERROR;
-    }
-
-    return command_buffers;
-
-ERROR:
-    free(command_buffers);
-    return NULL;
-}
-
-static VkCommandBuffer start_single_usage_commands(Pigment* pigment, VkCommandPool command_pool)
-{
-    PDevice* device                        = pigment->device;
-    VkCommandBufferAllocateInfo alloc_info = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandPool        = command_pool,
-        .commandBufferCount = 1
-    };
-
-    VkCommandBuffer command_buffer;
-
-    VkResult result;
-    if((result = vkAllocateCommandBuffers(device->logical_device, &alloc_info, &command_buffer)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to allocate single usage command buffer! (result: %d)", result);
-        return VK_NULL_HANDLE;
-    }
-
-    VkCommandBufferBeginInfo begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-    };
-
-    if((result = vkBeginCommandBuffer(command_buffer, &begin_info)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to begin single usage command buffer! (result: %d)", result);
-        vkFreeCommandBuffers(device->logical_device, command_pool, 1, &command_buffer);
-        return VK_NULL_HANDLE;
-    }
-
-    return command_buffer;
-}
-
-static void end_single_usage_commands(Pigment* pigment, VkCommandBuffer* command_buffer, VkCommandPool command_pool)
-{
-    PDevice* device = pigment->device;
-    VkResult result;
-    if((result = vkEndCommandBuffer(*command_buffer)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to end single usage command buffer! (result: %d)", result);
-    }
-
-    VkSubmitInfo submit_info = {
-        .sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers    = command_buffer
-    };
-
-    VkQueue graphics_queue = device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0)->queue;
-    if((result = vkQueueSubmit(graphics_queue, 1, &submit_info, VK_NULL_HANDLE)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to submit single usage command buffer! (result: %d)", result);
-    }
-
-    vkQueueWaitIdle(graphics_queue);
-
-    vkFreeCommandBuffers(device->logical_device, command_pool, 1, command_buffer);
 }

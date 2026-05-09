@@ -25,7 +25,7 @@
 #include "surface.h"
 #include "buffers.h"
 #include "image.h"
-#include "resize.h"
+#include "swapchain_event.h"
 #include "commands.h"
 #include "cmd_sync.h"
 #include "deletion.h"
@@ -33,15 +33,6 @@
 Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);
 void pigment_wait_idle(Pigment* pigment);
-
-void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
-PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer);
-void pigment_end_frame(Pigment* pigment, PWindowRenderer* renderer);
-uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
-PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
-
-void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
-void pigment_end_swapchain_pass(PWindowRenderer* renderer);
 
 PBool pigment_supports(Pigment* pigment, PFeature feature);
 

@@ -98,7 +98,7 @@ struct Pigment {
     PLayoutList* layouts;
 
     PRendererList* renderers;
-    PResizeCallbackList* resize_callbacks;
+    PSwapchainCallbackList* swapchain_callbacks;
 
     PDeletionQueue* deletions;
 
@@ -323,16 +323,16 @@ struct PSampler {
     VkSampler sampler;
 };
 
-typedef struct PResizeCallback {
-    PSwapchainResizeFn func;
+typedef struct PSwapchainCallback {
+    PSwapchainRecreateFn func;
     void* user_data;
     uint32_t handle;
     PBool alive;
-} PResizeCallback;
+} PSwapchainCallback;
 
-struct PResizeCallbackList {
+struct PSwapchainCallbackList {
     pigment_rwlock_t lock;
-    PResizeCallback* callbacks;
+    PSwapchainCallback* callbacks;
     uint32_t count;
     uint32_t capacity;
     _Atomic uint32_t next_handle;
