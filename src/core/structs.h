@@ -31,6 +31,7 @@
     #include <pthread.h>
 
 typedef pthread_rwlock_t pigment_rwlock_t;
+typedef pthread_key_t pigment_tsd_t;
 
     #define pigment_rwlock_init(l) pthread_rwlock_init((l), NULL)
     #define pigment_rwlock_destroy(l) pthread_rwlock_destroy(l)
@@ -38,6 +39,11 @@ typedef pthread_rwlock_t pigment_rwlock_t;
     #define pigment_rwlock_rdunlock(l) pthread_rwlock_unlock(l)
     #define pigment_rwlock_wrlock(l) pthread_rwlock_wrlock(l)
     #define pigment_rwlock_wrunlock(l) pthread_rwlock_unlock(l)
+
+    #define pigment_tsd_init(tsd, destructor) pthread_key_create((tsd), (destructor))
+    #define pigment_tsd_destroy(tsd) pthread_key_delete(tsd)
+    #define pigment_tsd_get(tsd) pthread_getspecific(tsd)
+    #define pigment_tsd_set(tsd, value) pthread_setspecific((tsd), (value))
 
 #else
     #ifndef WIN32_LEAN_AND_MEAN
@@ -57,6 +63,7 @@ typedef pthread_rwlock_t pigment_rwlock_t;
     #endif
 
 typedef SRWLOCK pigment_rwlock_t;
+typedef DWORD pigment_tsd_t;
 
     #define pigment_rwlock_init(l) (InitializeSRWLock(l), 0)
     #define pigment_rwlock_destroy(l) ((void) (l))
@@ -64,6 +71,11 @@ typedef SRWLOCK pigment_rwlock_t;
     #define pigment_rwlock_rdunlock(l) ReleaseSRWLockShared(l)
     #define pigment_rwlock_wrlock(l) AcquireSRWLockExclusive(l)
     #define pigment_rwlock_wrunlock(l) ReleaseSRWLockExclusive(l)
+
+    #define pigment_tsd_init(tsd, destructor) (((*(tsd)) = FlsAlloc((PFLS_CALLBACK_FUNCTION) (destructor))) == FLS_OUT_OF_INDEXES ? -1 : 0)
+    #define pigment_tsd_destroy(tsd) (FlsFree(tsd) ? 0 : -1)
+    #define pigment_tsd_get(tsd) FlsGetValue(tsd)
+    #define pigment_tsd_set(tsd, value) (FlsSetValue((tsd), (value)) ? 0 : -1)
 
 #endif
 
