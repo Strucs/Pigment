@@ -18,6 +18,7 @@
 #define PIGMENT_DEFINES_H
 
 #include <stdint.h>
+#include <stdatomic.h>
 
 typedef unsigned char PBool;
 #define P_TRUE 1
@@ -40,9 +41,16 @@ typedef struct PAppInfo {
     uint32_t app_version;
 } PAppInfo;
 
+typedef struct PDeviceQueue PDeviceQueue;
+
 typedef struct PSubmitHandle {
+    PDeviceQueue* queue;
     uint64_t value;
 } PSubmitHandle;
+
+typedef struct PResourceTracker {
+    _Atomic uint64_t last_used_submit;
+} PResourceTracker;
 
 typedef enum PigmentLogSeverity {
     PIGMENT_LOG_TRACE_BIT = 1 << 0,

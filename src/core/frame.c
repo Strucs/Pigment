@@ -17,6 +17,7 @@
 #include "frame.h"
 #include "cmd_sync.h"
 #include "commands.h"
+#include "deletion.h"
 #include "image.h"
 #include "internal.h"
 #include "surface.h"
@@ -39,10 +40,16 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
         return;
     }
 
+    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
+    if(graphics == NULL || graphics->timeline == VK_NULL_HANDLE)
+    {
+        return;
+    }
+
     VkSemaphoreWaitInfo wait_info = {
         .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
-        .pSemaphores    = &renderer->sync->timeline,
+        .pSemaphores    = &graphics->timeline,
         .pValues        = &wait_value,
     };
     vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
@@ -111,8 +118,6 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
         PLOG_ERROR(pigment, "Failed to acquire swapchain image!");
         return NULL;
     }
-
-    renderer->sync->active_target_value = renderer->sync->next_value + 1;
 
     PCommandBuffer* cmd = renderer->command_buffers[current_frame];
 
@@ -687,13 +692,21 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
         return (PSubmitHandle) {0};
     }
 
-    PDevice* device        = pigment->device;
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    uint32_t image_index   = renderer->current_image_index;
-    VkCommandBuffer cmd    = renderer->command_buffers[current_frame]->buffer;
+    uint32_t current_frame    = renderer->swapchain->current_frame;
+    uint32_t image_index      = renderer->current_image_index;
+    PCommandBuffer* frame_cmd = renderer->command_buffers[current_frame];
 
-    uint64_t signal_value                         = ++renderer->sync->next_value;
-    renderer->sync->per_slot_value[current_frame] = signal_value;
+    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
+    if(graphics == NULL || graphics->timeline == VK_NULL_HANDLE)
+    {
+        PLOG_ERROR(pigment, "Graphics queue timeline unavailable, frame submit aborted.");
+        return (PSubmitHandle) {0};
+    }
+
+    uint64_t submit_value                         = device_queue_acquire_value(graphics);
+    renderer->sync->per_slot_value[current_frame] = submit_value;
+
+    stamp_uses_submit(&frame_cmd, 1, submit_value);
 
     VkSemaphoreSubmitInfo wait_info = {
         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -709,15 +722,15 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
          },
         {
          .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-         .semaphore = renderer->sync->timeline,
-         .value     = signal_value,
+         .semaphore = graphics->timeline,
+         .value     = submit_value,
          .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
          },
     };
 
     VkCommandBufferSubmitInfo cmd_info = {
         .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = cmd,
+        .commandBuffer = frame_cmd->buffer,
     };
 
     VkSubmitInfo2 submit_info = {
@@ -730,14 +743,14 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
         .pSignalSemaphoreInfos    = signal_infos,
     };
 
-    VkResult result = vkQueueSubmit2(device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0)->queue, 1, &submit_info, VK_NULL_HANDLE);
+    VkResult result = vkQueueSubmit2(graphics->queue, 1, &submit_info, VK_NULL_HANDLE);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return (PSubmitHandle) {0};
     }
 
-    return (PSubmitHandle) {.value = signal_value};
+    return (PSubmitHandle) {.queue = graphics, .value = submit_value};
 }
 
 void pigment_present(Pigment* pigment, PWindowRenderer* renderer)
@@ -924,6 +937,7 @@ void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* in
     {
         return;
     }
+    pigment_cmd_use_buffer(pigment, cmd, index_buffer);
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_buffer_offset, vk_index_type);
     vkCmdDrawIndexed(cmd->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
@@ -935,6 +949,7 @@ void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* i
     {
         return;
     }
+    pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     vkCmdDrawIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
 }
 
@@ -944,6 +959,8 @@ void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PB
     {
         return;
     }
+    pigment_cmd_use_buffer(pigment, cmd, index_buffer);
+    pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
     vkCmdDrawIndexedIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
@@ -955,6 +972,8 @@ void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuf
     {
         return;
     }
+    pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
+    pigment_cmd_use_buffer(pigment, cmd, count_buffer);
     vkCmdDrawIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
 }
 
@@ -964,6 +983,9 @@ void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* c
     {
         return;
     }
+    pigment_cmd_use_buffer(pigment, cmd, index_buffer);
+    pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
+    pigment_cmd_use_buffer(pigment, cmd, count_buffer);
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
     vkCmdDrawIndexedIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);

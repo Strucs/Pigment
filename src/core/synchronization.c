@@ -19,7 +19,6 @@
 #include "log_internal.h"
 
 static VkSemaphore create_semaphore(Pigment* pigment);
-static VkSemaphore create_timeline_semaphore(Pigment* pigment, uint64_t initial_value);
 
 PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t swapchain_image_count)
 {
@@ -46,12 +45,6 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 
     sync->per_slot_value = calloc(max_frame, sizeof(*sync->per_slot_value));
     if(sync->per_slot_value == NULL)
-    {
-        goto ERROR;
-    }
-
-    sync->timeline = create_timeline_semaphore(pigment, 0);
-    if(sync->timeline == NULL)
     {
         goto ERROR;
     }
@@ -97,10 +90,6 @@ ERROR:
                 vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
             }
         }
-        if(sync->timeline != NULL)
-        {
-            vkDestroySemaphore(device->logical_device, sync->timeline, NULL);
-        }
         free(sync->per_slot_value);
         free(sync->render_finished_semaphores);
         free(sync->image_available_semaphores);
@@ -126,8 +115,6 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     {
         vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
     }
-
-    vkDestroySemaphore(device->logical_device, sync->timeline, NULL);
 
     free(sync->per_slot_value);
     free(sync->render_finished_semaphores);
@@ -209,30 +196,6 @@ static VkSemaphore create_semaphore(Pigment* pigment)
     if((result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, NULL, &semaphore)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create semaphore (result: %d)", result);
-        return NULL;
-    }
-
-    return semaphore;
-}
-
-static VkSemaphore create_timeline_semaphore(Pigment* pigment, uint64_t initial_value)
-{
-    VkSemaphoreTypeCreateInfo type_info = {
-        .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-        .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
-        .initialValue  = initial_value,
-    };
-
-    VkSemaphoreCreateInfo create_info = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = &type_info,
-    };
-
-    VkSemaphore semaphore;
-    VkResult result;
-    if((result = vkCreateSemaphore(pigment->device->logical_device, &create_info, NULL, &semaphore)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to create timeline semaphore (result: %d)", result);
         return NULL;
     }
 

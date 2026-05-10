@@ -102,7 +102,7 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         goto ERROR;
     }
 
-    pigment->renderers = create_renderer_list();
+    pigment->renderers = create_renderer_list(pigment);
     if(pigment->renderers == NULL)
     {
         goto ERROR;

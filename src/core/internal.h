@@ -95,8 +95,18 @@ PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, Vk
 PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden);
 void device_wait_idle(Pigment* pigment);
 
+static inline uint64_t device_queue_acquire_value(PDeviceQueue* queue)
+{
+    return atomic_fetch_add_explicit(&queue->next_value, 1, memory_order_relaxed) + 1;
+}
+
+static inline uint64_t device_queue_current_value(PDeviceQueue* queue)
+{
+    return atomic_load_explicit(&queue->next_value, memory_order_relaxed);
+}
+
 // surface.c
-PRendererList* create_renderer_list(void);
+PRendererList* create_renderer_list(Pigment* pigment);
 void destroy_renderer_list(Pigment* pigment, PRendererList* list);
 PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
 VkSampleCountFlags supported_sample_counts(Pigment* pigment);
@@ -105,6 +115,7 @@ VkSampleCountFlags supported_sample_counts(Pigment* pigment);
 PCommandPool* pigment_default_pool(Pigment* pigment);
 PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count);
 void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count);
+void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint64_t value);
 
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
@@ -122,8 +133,5 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
 PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
-
-VkSemaphore deletion_queue_submit_timeline(Pigment* pigment);
-uint64_t deletion_queue_acquire_submit_value(Pigment* pigment);
 
 #endif

@@ -145,11 +145,13 @@ struct ExtensionList {
     uint32_t size;
 };
 
-typedef struct PDeviceQueue {
+struct PDeviceQueue {
     VkQueue queue;
     uint32_t family_index;
     PQueueFlags flags;
-} PDeviceQueue;
+    VkSemaphore timeline;
+    _Atomic uint64_t next_value;
+};
 
 struct PDevice {
     VkPhysicalDevice physical_device;
@@ -249,6 +251,9 @@ struct PCommandPool {
     PQueueFlags queue_flags;
     uint32_t queue_family_index;
     PCommandPoolFlags flags;
+    PCommandBuffer** buffers;
+    uint32_t buffer_count;
+    uint32_t buffer_capacity;
 };
 
 struct PCommandPoolList {
@@ -259,18 +264,16 @@ struct PCommandPoolList {
 
 struct PCommandBuffer {
     VkCommandBuffer buffer;
-    VkCommandPool source_pool;
+    PCommandPool* source_pool;
+    PResourceTracker** uses;
+    uint32_t use_count;
+    uint32_t use_capacity;
 };
 
 struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
-
-    VkSemaphore timeline;
-    uint64_t next_value;
     uint64_t* per_slot_value;
-
-    uint64_t active_target_value;
 };
 
 struct PDescriptorSetLayout {
@@ -329,10 +332,12 @@ struct PImage {
     const char* name;
 
     PImageViewCache view_cache;
+    PResourceTracker tracker;
 };
 
 struct PSampler {
     VkSampler sampler;
+    PResourceTracker tracker;
 };
 
 typedef struct PSwapchainCallback {
@@ -356,6 +361,7 @@ struct PBuffer {
     VkDeviceAddress address;
     void* mapped;
     uint64_t size;
+    PResourceTracker tracker;
 };
 
 #endif

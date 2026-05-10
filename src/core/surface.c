@@ -45,7 +45,7 @@ static void destroy_surface(Pigment* pigment, PSurface* surface);
 static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
 static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer);
-static PResult renderer_list_append(PRendererList* list, PWindowRenderer* renderer);
+static PResult renderer_list_append(Pigment* pigment, PWindowRenderer* renderer);
 static void renderer_list_remove(PRendererList* list, PWindowRenderer* renderer);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
@@ -123,7 +123,7 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
-    if(renderer_list_append(pigment->renderers, renderer) != PIGMENT_SUCCESS)
+    if(renderer_list_append(pigment, renderer) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -278,8 +278,9 @@ void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, 
     }
 }
 
-PRendererList* create_renderer_list(void)
+PRendererList* create_renderer_list(Pigment* pigment)
 {
+    (void) pigment;
     PRendererList* list = calloc(1, sizeof(*list));
     if(list == NULL)
     {
@@ -895,17 +896,18 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     free(renderer);
 }
 
-static PResult renderer_list_append(PRendererList* list, PWindowRenderer* renderer)
+static PResult renderer_list_append(Pigment* pigment, PWindowRenderer* renderer)
 {
+    PRendererList* list = pigment->renderers;
     if(list->count >= list->capacity)
     {
-        uint32_t new_capacity       = list->capacity * 2;
-        PWindowRenderer** new_array = realloc(list->renderers, new_capacity * sizeof(*list->renderers));
-        if(new_array == NULL)
+        uint32_t new_capacity      = list->capacity * 2;
+        PWindowRenderer** new_ptr  = realloc(list->renderers, new_capacity * sizeof(*new_ptr));
+        if(new_ptr == NULL)
         {
             return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
-        list->renderers = new_array;
+        list->renderers = new_ptr;
         list->capacity  = new_capacity;
     }
 

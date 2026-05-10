@@ -488,7 +488,30 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     {
         device->queues[i].family_index = selected_families[i];
         device->queues[i].flags        = (PQueueFlags) (queue_families[selected_families[i]].queueFlags & useful_flags);
+        atomic_store_explicit(&device->queues[i].next_value, 0, memory_order_relaxed);
         vkGetDeviceQueue(device->logical_device, selected_families[i], 0, &device->queues[i].queue);
+
+        VkSemaphoreTypeCreateInfo type_info = {
+            .sType         = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+            .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+            .initialValue  = 0,
+        };
+        VkSemaphoreCreateInfo sem_info = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            .pNext = &type_info,
+        };
+        if(vkCreateSemaphore(device->logical_device, &sem_info, NULL, &device->queues[i].timeline) != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Failed to create timeline semaphore for queue family %u", selected_families[i]);
+            for(uint32_t j = 0; j < i; j++)
+            {
+                vkDestroySemaphore(device->logical_device, device->queues[j].timeline, NULL);
+            }
+            free(device->queues);
+            device->queues = NULL;
+            result         = PIGMENT_ERROR_VULKAN;
+            goto ERROR;
+        }
     }
 
     free(queue_infos);
@@ -628,6 +651,16 @@ void destroy_device(Pigment* pigment)
     if(device == NULL)
     {
         return;
+    }
+    if(device->queues != NULL)
+    {
+        for(uint32_t i = 0; i < device->queue_count; i++)
+        {
+            if(device->queues[i].timeline != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(device->logical_device, device->queues[i].timeline, NULL);
+            }
+        }
     }
     vkDestroyDevice(device->logical_device, NULL);
     if(device->extensions != NULL)

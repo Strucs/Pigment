@@ -15,6 +15,7 @@
  */
 
 #include "image.h"
+#include "commands.h"
 #include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
@@ -105,6 +106,8 @@ void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBu
     {
         return;
     }
+    pigment_cmd_use_buffer(pigment, cmd, src);
+    pigment_cmd_use_image(pigment, cmd, dst);
 
     VkBufferImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
     if(vk_regions == NULL)
@@ -139,6 +142,8 @@ void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PIm
     {
         return;
     }
+    pigment_cmd_use_image(pigment, cmd, src);
+    pigment_cmd_use_buffer(pigment, cmd, dst);
 
     VkBufferImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
     if(vk_regions == NULL)
@@ -173,6 +178,8 @@ void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
     {
         return;
     }
+    pigment_cmd_use_image(pigment, cmd, src);
+    pigment_cmd_use_image(pigment, cmd, dst);
 
     VkImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
     if(vk_regions == NULL)
@@ -203,6 +210,8 @@ void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
     {
         return;
     }
+    pigment_cmd_use_image(pigment, cmd, src);
+    pigment_cmd_use_image(pigment, cmd, dst);
 
     VkImageBlit* vk_regions = calloc(region_count, sizeof(*vk_regions));
     if(vk_regions == NULL)
@@ -345,7 +354,7 @@ void pigment_destroy_image(Pigment* pigment, PImage* image)
         return;
     }
 
-    pigment_defer_destroy(pigment, destroy_image_immediate, image);
+    pigment_defer_destroy_tracked(pigment, destroy_image_immediate, image, &image->tracker);
 }
 
 static void destroy_image_immediate(Pigment* pigment, void* resource)

@@ -15,6 +15,7 @@
  */
 
 #include "cmd_sync.h"
+#include "commands.h"
 #include "internal.h"
 #include "log_internal.h"
 
@@ -37,6 +38,7 @@ void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PIm
     for(uint32_t i = 0; i < count; i++)
     {
         const PImageBarrier* b = &barriers[i];
+        pigment_cmd_use_image(pigment, cmd, b->image);
 
         uint32_t mip_count   = (b->mip_count == 0) ? VK_REMAINING_MIP_LEVELS : b->mip_count;
         uint32_t layer_count = (b->layer_count == 0) ? VK_REMAINING_ARRAY_LAYERS : b->layer_count;
@@ -84,6 +86,7 @@ void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PB
     for(uint32_t i = 0; i < count; i++)
     {
         const PBufferBarrier* b = &barriers[i];
+        pigment_cmd_use_buffer(pigment, cmd, b->buffer);
 
         PBool transfer = (b->src_queue_family != b->dst_queue_family);
         vk_barriers[i] = (VkBufferMemoryBarrier2) {

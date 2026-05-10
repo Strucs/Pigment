@@ -102,7 +102,7 @@ void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer)
     {
         return;
     }
-    pigment_defer_destroy(pigment, destroy_buffer_immediate, buffer);
+    pigment_defer_destroy_tracked(pigment, destroy_buffer_immediate, buffer, &buffer->tracker);
 }
 
 static void destroy_buffer_immediate(Pigment* pigment, void* resource)
@@ -172,6 +172,8 @@ PSubmitHandle pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* 
         return (PSubmitHandle) {0};
     }
     pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    pigment_cmd_use_buffer(pigment, cmd, staging);
+    pigment_cmd_use_buffer(pigment, cmd, dst);
 
     VkBufferCopy copy_region = {.srcOffset = 0, .dstOffset = (VkDeviceSize) offset, .size = (VkDeviceSize) size};
     vkCmdCopyBuffer(cmd->buffer, staging->buffer, dst->buffer, 1, &copy_region);

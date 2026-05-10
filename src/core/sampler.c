@@ -16,6 +16,7 @@
 
 #include "sampler.h"
 #include "structs.h"
+#include "commands.h"
 #include "deletion.h"
 #include "internal.h"
 #include "log_internal.h"
@@ -86,7 +87,7 @@ void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler)
         return;
     }
 
-    pigment_defer_destroy(pigment, destroy_sampler_immediate, sampler);
+    pigment_defer_destroy_tracked(pigment, destroy_sampler_immediate, sampler, &sampler->tracker);
 }
 
 static void destroy_sampler_immediate(Pigment* pigment, void* resource)
