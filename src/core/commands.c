@@ -498,7 +498,7 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
         goto ERROR;
     }
 
-    command_pool = malloc(sizeof(*command_pool));
+    command_pool = calloc(1, sizeof(*command_pool));
     if(command_pool == NULL)
     {
         goto ERROR;

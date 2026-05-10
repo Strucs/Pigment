@@ -116,6 +116,22 @@ def build_example(config: powermake.Config, example_name: str):
 
     print(f"{example_name} :", powermake.link_files(config, objects, archives, executable_name=example_name))
 
+def build_test(config: powermake.Config, test_name: str):
+    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
+    lib_dir     = os.path.join(os.path.dirname(config.lib_build_directory), "lib")
+    config.add_includedirs(include_dir)
+
+    test_files = powermake.get_files(f"./tests/{test_name}/**/*.c")
+
+    objects = powermake.compile_files(config, test_files)
+
+    archives = [
+        os.path.join(lib_dir, "libpigment.a"),
+        os.path.join(lib_dir, "libpigment_sdl.a"),
+    ]
+
+    print(f"{test_name} :", powermake.link_files(config, objects, archives, executable_name=test_name))
+
 def on_build(config: powermake.Config):
 
     config.add_c_flags("-std=c23")
@@ -135,20 +151,29 @@ def on_build(config: powermake.Config):
     build_pigment(config)
     build_sdl_integration(config)
 
-    if any(getattr(args_parsed, example) for example in dir_list):
+    needs_sdl = any(getattr(args_parsed, example) for example in dir_list) or any(getattr(args_parsed, test) for test in test_list)
+    if needs_sdl:
         config.add_shared_libs("SDL3")
         for example in dir_list:
             if getattr(args_parsed, example):
                 build_example(config, example)
+        for test in test_list:
+            if getattr(args_parsed, test):
+                build_test(config, test)
 
 parser = powermake.ArgumentParser()
 
 examples_dir = "./examples"
+tests_dir    = "./tests"
 
-dir_list = [f for f in os.listdir(examples_dir) if not os.path.isfile(os.path.join(examples_dir, f))]
+dir_list  = [f for f in os.listdir(examples_dir) if not os.path.isfile(os.path.join(examples_dir, f))]
+test_list = [f for f in os.listdir(tests_dir) if not os.path.isfile(os.path.join(tests_dir, f))] if os.path.isdir(tests_dir) else []
 
 for example in dir_list:
     parser.add_argument(f"--{example}", help=f"build {example} example", action="store_true")
+
+for test in test_list:
+    parser.add_argument(f"--{test}", help=f"build {test} test", action="store_true")
 
 args_parsed = parser.parse_args()
 
