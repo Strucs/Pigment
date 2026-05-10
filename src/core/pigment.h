@@ -24,6 +24,7 @@
 #include "pipeline.h"
 #include "surface.h"
 #include "buffers.h"
+#include "descriptor.h"
 #include "image.h"
 #include "swapchain_event.h"
 #include "commands.h"

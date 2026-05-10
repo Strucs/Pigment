@@ -405,12 +405,16 @@ FREE:
             pigment_std_destroy_mesh(pigment, gpu_quad);
         }
     }
+    pigment_destroy_pipeline(pigment, pipeline);
+    pigment_destroy_pipeline(pigment, skybox_pipeline);
+    pigment_destroy_pipeline(pigment, crt_pipeline);
+    pigment_renderer_destroy(pigment, renderer);
+    pigment_std_destroy_render_target(pigment, rt);
     pigment_std_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     pigment_std_destroy_bindless(pigment, bindless);
-    pigment_std_destroy_render_target(pigment, rt);
     destroy_pigment(pigment);
 
     if(window != NULL)

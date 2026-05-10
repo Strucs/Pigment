@@ -331,6 +331,9 @@ FREE:
     free(instance_storage2);
     free_mesh_asset(asset);
     free_mesh_asset(asset2);
+    pigment_destroy_pipeline(pigment, pipeline);
+    pigment_destroy_pipeline(pigment, gizmo_pipeline);
+    pigment_renderer_destroy(pigment, renderer);
     pigment_std_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);

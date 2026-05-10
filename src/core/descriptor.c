@@ -21,12 +21,13 @@
 
 #define PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY 4
 
-static void destroy_descriptor_set_layout_immediate(Pigment* pigment, void* resource);
 static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource);
+static void destroy_descriptor_set_immediate(Pigment* pigment, void* resource);
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
 static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
 static PResult pool_append_set(PDescriptorPool* pool, PDescriptorSet* set);
+static void pool_remove_set(PDescriptorPool* pool, PDescriptorSet* set);
 static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override);
 
 PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc)
@@ -105,12 +106,6 @@ void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayou
         return;
     }
 
-    pigment_defer_destroy(pigment, destroy_descriptor_set_layout_immediate, layout);
-}
-
-static void destroy_descriptor_set_layout_immediate(Pigment* pigment, void* resource)
-{
-    PDescriptorSetLayout* layout = (PDescriptorSetLayout*) resource;
     vkDestroyDescriptorSetLayout(pigment->device->logical_device, layout->layout, NULL);
     free(layout);
 }
@@ -137,12 +132,22 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
         };
     }
 
+    VkDescriptorPoolCreateFlags vk_flags = 0;
+    if(desc->allow_update_after_bind)
+    {
+        vk_flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    }
+    if(desc->allow_free_set)
+    {
+        vk_flags |= VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    }
+
     VkDescriptorPoolCreateInfo pool_info = {
         .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = desc->pool_size_count,
         .pPoolSizes    = sizes,
         .maxSets       = desc->max_sets,
-        .flags         = desc->allow_update_after_bind ? VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT : 0,
+        .flags         = vk_flags,
     };
 
     VkResult result = vkCreateDescriptorPool(pigment->device->logical_device, &pool_info, NULL, &pool->pool);
@@ -151,6 +156,8 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
         PLOG_ERROR(pigment, "Failed to create descriptor pool (result: %d)", result);
         goto ERROR;
     }
+
+    pool->allow_free_set = desc->allow_free_set;
 
     set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t) pool->pool, desc->name);
 
@@ -185,7 +192,52 @@ static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource)
     free(pool);
 }
 
-PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name)
+void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
+{
+    if(pigment == NULL || pool == NULL)
+    {
+        return;
+    }
+
+    VkResult result = vkResetDescriptorPool(pigment->device->logical_device, pool->pool, 0);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to reset descriptor pool (result: %d)", result);
+        return;
+    }
+
+    for(uint32_t i = 0; i < pool->set_count; i++)
+    {
+        free(pool->sets[i]);
+    }
+    pool->set_count = 0;
+}
+
+void pigment_destroy_descriptor_set(Pigment* pigment, PDescriptorSet* set)
+{
+    if(pigment == NULL || set == NULL)
+    {
+        return;
+    }
+
+    if(!set->source_pool->allow_free_set)
+    {
+        PLOG_ERROR(pigment, "Source pool was not created with allow_free_set.");
+        return;
+    }
+
+    pool_remove_set(set->source_pool, set);
+    pigment_defer_destroy(pigment, destroy_descriptor_set_immediate, set);
+}
+
+static void destroy_descriptor_set_immediate(Pigment* pigment, void* resource)
+{
+    PDescriptorSet* set = (PDescriptorSet*) resource;
+    vkFreeDescriptorSets(pigment->device->logical_device, set->source_pool->pool, 1, &set->set);
+    free(set);
+}
+
+PDescriptorSet* pigment_create_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name)
 {
     if(pigment == NULL || pool == NULL || layout == NULL)
     {
@@ -221,6 +273,8 @@ PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPoo
     }
 
     set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t) set->set, name);
+
+    set->source_pool = pool;
 
     if(pool_append_set(pool, set) != PIGMENT_SUCCESS)
     {
@@ -348,6 +402,7 @@ void pigment_cmd_bind_descriptor_set(Pigment* pigment, PCommandBuffer* cmd, PPip
     {
         return;
     }
+    pigment_cmd_use(pigment, cmd, &set->tracker);
     vkCmdBindDescriptorSets(cmd->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout->layout, set_index, 1, &set->set, 0, NULL);
 }
 
@@ -422,6 +477,18 @@ static PResult pool_append_set(PDescriptorPool* pool, PDescriptorSet* set)
     pool->sets[pool->set_count++] = set;
 
     return PIGMENT_SUCCESS;
+}
+
+static void pool_remove_set(PDescriptorPool* pool, PDescriptorSet* set)
+{
+    for(uint32_t i = 0; i < pool->set_count; i++)
+    {
+        if(pool->sets[i] == set)
+        {
+            pool->sets[i] = pool->sets[--pool->set_count];
+            return;
+        }
+    }
 }
 
 static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override)

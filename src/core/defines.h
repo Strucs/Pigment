@@ -180,17 +180,11 @@ typedef struct PSwapchain PSwapchain;
 
 typedef struct PPipeline PPipeline;
 
-typedef struct PPipelineList PPipelineList;
-
 typedef struct PLayout PLayout;
-
-typedef struct PLayoutList PLayoutList;
 
 typedef struct PPipelineBuild PPipelineBuild;
 
 typedef struct PCommandPool PCommandPool;
-
-typedef struct PCommandPoolList PCommandPoolList;
 
 typedef struct PCommandBuffer PCommandBuffer;
 
@@ -209,8 +203,6 @@ typedef struct PImageView PImageView;
 typedef struct PSampler PSampler;
 
 typedef struct PSwapchainCallbackList PSwapchainCallbackList;
-
-typedef struct PRendererList PRendererList;
 
 typedef struct PDeletionQueue PDeletionQueue;
 

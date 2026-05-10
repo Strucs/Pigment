@@ -28,9 +28,12 @@
 #define PIGMENT_DEFAULT_MAX_RENDER_TARGETS 16
 
 typedef struct PStdBindless PStdBindless;
+typedef struct PStdPipelineLayouts PStdPipelineLayouts;
 
 PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
 void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless);
+
+PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* bindless);
 
 uint32_t pigment_std_upload_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
 uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);

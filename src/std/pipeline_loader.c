@@ -130,8 +130,35 @@ ERROR:
     return NULL;
 }
 
+static PStdPipelineLayouts* pipeline_layouts_get(PStdBindless* bindless)
+{
+    PStdPipelineLayouts** slot = pigment_std_bindless_pipeline_layouts_slot(bindless);
+    if(slot == NULL)
+    {
+        return NULL;
+    }
+
+    if(*slot == NULL)
+    {
+        *slot = calloc(1, sizeof(**slot));
+    }
+
+    return *slot;
+}
+
 PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    if(layouts == NULL)
+    {
+        return NULL;
+    }
+
+    if(layouts->default_layout != NULL)
+    {
+        return layouts->default_layout;
+    }
+
     PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
     PLayoutDesc desc                     = {
         .set_layouts      = set_layouts,
@@ -140,7 +167,8 @@ PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
         .push_stages      = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     };
 
-    return pigment_create_layout(pigment, &desc);
+    layouts->default_layout = pigment_create_layout(pigment, &desc);
+    return layouts->default_layout;
 }
 
 PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
@@ -168,6 +196,17 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
 
 PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    if(layouts == NULL)
+    {
+        return NULL;
+    }
+
+    if(layouts->gizmo_layout != NULL)
+    {
+        return layouts->gizmo_layout;
+    }
+
     PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
     PLayoutDesc desc                     = {
         .set_layouts      = set_layouts,
@@ -176,7 +215,8 @@ PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bin
         .push_stages      = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     };
 
-    return pigment_create_layout(pigment, &desc);
+    layouts->gizmo_layout = pigment_create_layout(pigment, &desc);
+    return layouts->gizmo_layout;
 }
 
 PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
@@ -204,6 +244,17 @@ PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* 
 
 PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    if(layouts == NULL)
+    {
+        return NULL;
+    }
+
+    if(layouts->skybox_layout != NULL)
+    {
+        return layouts->skybox_layout;
+    }
+
     PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
     PLayoutDesc desc                     = {
         .set_layouts      = set_layouts,
@@ -211,7 +262,8 @@ PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless
         .push_size        = sizeof(PStdSkyboxPushConstants),
         .push_stages      = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     };
-    return pigment_create_layout(pigment, &desc);
+    layouts->skybox_layout = pigment_create_layout(pigment, &desc);
+    return layouts->skybox_layout;
 }
 
 PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)
@@ -239,6 +291,17 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
 
 static PLayout* default_crt_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    if(layouts == NULL)
+    {
+        return NULL;
+    }
+
+    if(layouts->crt_layout != NULL)
+    {
+        return layouts->crt_layout;
+    }
+
     PDescriptorSetLayout* set_layouts[1] = {pigment_std_bindless_layout(bindless)};
     PLayoutDesc desc                     = {
         .set_layouts      = set_layouts,
@@ -246,7 +309,8 @@ static PLayout* default_crt_pipeline_layout(Pigment* pigment, PStdBindless* bind
         .push_size        = sizeof(PStdCrtPushConstants),
         .push_stages      = P_SHADER_STAGE_FRAGMENT_BIT,
     };
-    return pigment_create_layout(pigment, &desc);
+    layouts->crt_layout = pigment_create_layout(pigment, &desc);
+    return layouts->crt_layout;
 }
 
 PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples)

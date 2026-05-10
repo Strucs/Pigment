@@ -59,6 +59,7 @@ static inline VkPhysicalDeviceVulkan13Features pigment_req_features_13(void)
         .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         .dynamicRendering = VK_TRUE,
         .synchronization2 = VK_TRUE,
+        .maintenance4     = VK_TRUE,
     };
 }
 

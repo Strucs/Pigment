@@ -25,91 +25,31 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
-static PResult command_pools_append(PCommandPoolList* pools, PCommandPool* pool);
-static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool);
 static PResult cmd_track_use(PCommandBuffer* cmd, PResourceTracker* tracker);
 static PResult pool_append_buffer(PCommandPool* pool, PCommandBuffer* cmd);
 static void pool_remove_buffer(PCommandPool* pool, PCommandBuffer* cmd);
 
-#define PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY 4
 #define PIGMENT_POOL_BUFFERS_INITIAL_CAPACITY 4
 #define PIGMENT_CMD_USES_INITIAL_CAPACITY 16
 
-PCommandPoolList* create_command_pools(Pigment* pigment)
+PCommandPool* create_default_command_pool(Pigment* pigment)
 {
-    PDevice* device            = pigment->device;
-    PCommandPoolList* pools    = NULL;
-    PCommandPool* default_pool = NULL;
-
-    pools = malloc(sizeof(*pools));
-    if(pools == NULL)
-    {
-        goto ERROR;
-    }
-
-    pools->capacity = PIGMENT_COMMAND_POOLS_INITIAL_CAPACITY;
-    pools->count    = 0;
-    pools->pools    = malloc(pools->capacity * sizeof(*pools->pools));
-    if(pools->pools == NULL)
-    {
-        goto ERROR;
-    }
-
     PCommandPoolDesc default_desc = {
         .queue_flags = P_QUEUE_GRAPHICS_BIT,
         .flags       = P_COMMAND_POOL_FLAG_RESET_BUFFER,
     };
 
-    default_pool = create_command_pool_internal(pigment, &default_desc);
-    if(default_pool == NULL)
-    {
-        goto ERROR;
-    }
-
-    if(command_pools_append(pools, default_pool) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-
-    return pools;
-
-ERROR:
-    PLOG_ERROR(pigment, "Failed to create command pools!");
-    if(default_pool != NULL)
-    {
-        vkDestroyCommandPool(device->logical_device, default_pool->pool, NULL);
-        free(default_pool);
-    }
-    if(pools != NULL)
-    {
-        free(pools->pools);
-        free(pools);
-    }
-    return NULL;
+    return create_command_pool_internal(pigment, &default_desc);
 }
 
-void destroy_command_pools(Pigment* pigment, PCommandPoolList* pools)
+void destroy_default_command_pool(Pigment* pigment)
 {
-    if(pools == NULL)
+    if(pigment == NULL || pigment->default_command_pool == NULL)
     {
         return;
     }
-
-    for(uint32_t i = 0; i < pools->count; i++)
-    {
-        PCommandPool* pool = pools->pools[i];
-        vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
-        for(uint32_t j = 0; j < pool->buffer_count; j++)
-        {
-            free(pool->buffers[j]->uses);
-            free(pool->buffers[j]);
-        }
-        free(pool->buffers);
-        free(pool);
-    }
-
-    free(pools->pools);
-    free(pools);
+    destroy_command_pool_immediate(pigment, pigment->default_command_pool);
+    pigment->default_command_pool = NULL;
 }
 
 PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc)
@@ -119,20 +59,7 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
         return NULL;
     }
 
-    PCommandPool* pool = create_command_pool_internal(pigment, desc);
-    if(pool == NULL)
-    {
-        return NULL;
-    }
-
-    if(command_pools_append(pigment->command_pools, pool) != PIGMENT_SUCCESS)
-    {
-        vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
-        free(pool);
-        return NULL;
-    }
-
-    return pool;
+    return create_command_pool_internal(pigment, desc);
 }
 
 void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
@@ -142,28 +69,45 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
         return;
     }
 
-    if(pool == pigment_default_pool(pigment))
-    {
-        PLOG_ERROR(pigment, "pigment_destroy_command_pool: cannot destroy the default pool.");
-        return;
-    }
-
     pigment_defer_destroy(pigment, destroy_command_pool_immediate, pool);
 }
 
 static void destroy_command_pool_immediate(Pigment* pigment, void* resource)
 {
-    command_pools_destroy(pigment, pigment->command_pools, (PCommandPool*) resource);
+    PCommandPool* pool = (PCommandPool*) resource;
+    vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
+    for(uint32_t i = 0; i < pool->buffer_count; i++)
+    {
+        free(pool->buffers[i]->uses);
+        free(pool->buffers[i]);
+    }
+    free(pool->buffers);
+    free(pool);
+}
+
+void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool)
+{
+    if(pigment == NULL || pool == NULL)
+    {
+        return;
+    }
+
+    VkResult result = vkResetCommandPool(pigment->device->logical_device, pool->pool, 0);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to reset command pool (result: %d)", result);
+        return;
+    }
+
+    for(uint32_t i = 0; i < pool->buffer_count; i++)
+    {
+        pool->buffers[i]->use_count = 0;
+    }
 }
 
 PCommandPool* pigment_default_pool(Pigment* pigment)
 {
-    if(pigment == NULL || pigment->command_pools == NULL || pigment->command_pools->count == 0)
-    {
-        return NULL;
-    }
-
-    return pigment->command_pools->pools[0];
+    return (pigment != NULL) ? pigment->default_command_pool : NULL;
 }
 
 PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count)
@@ -573,49 +517,6 @@ static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)
         result |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     }
     return result;
-}
-
-static PResult command_pools_append(PCommandPoolList* pools, PCommandPool* pool)
-{
-    if(pools->count >= pools->capacity)
-    {
-        uint32_t new_capacity  = pools->capacity * 2;
-        PCommandPool** new_ptr = realloc(pools->pools, new_capacity * sizeof(*new_ptr));
-
-        if(new_ptr == NULL)
-        {
-            return PIGMENT_ERROR_OUT_OF_MEMORY;
-        }
-
-        pools->pools    = new_ptr;
-        pools->capacity = new_capacity;
-    }
-
-    pools->pools[pools->count] = pool;
-    pools->count++;
-
-    return PIGMENT_SUCCESS;
-}
-
-static void command_pools_destroy(Pigment* pigment, PCommandPoolList* pools, PCommandPool* pool)
-{
-    for(uint32_t i = 0; i < pools->count; i++)
-    {
-        if(pools->pools[i] == pool)
-        {
-            pools->pools[i] = pools->pools[pools->count - 1];
-            pools->count--;
-            vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
-            for(uint32_t j = 0; j < pool->buffer_count; j++)
-            {
-                free(pool->buffers[j]->uses);
-                free(pool->buffers[j]);
-            }
-            free(pool->buffers);
-            free(pool);
-            return;
-        }
-    }
 }
 
 static PResult pool_append_buffer(PCommandPool* pool, PCommandBuffer* cmd)

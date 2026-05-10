@@ -52,4 +52,11 @@ typedef struct PStdCrtPushConstants {
     float resolution_y;
 } PStdCrtPushConstants;
 
+struct PStdPipelineLayouts {
+    PLayout* default_layout;
+    PLayout* gizmo_layout;
+    PLayout* skybox_layout;
+    PLayout* crt_layout;
+};
+
 #endif

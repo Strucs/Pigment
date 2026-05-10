@@ -23,8 +23,6 @@
 #include "native_surface.h"
 #include "synchronization.h"
 
-#define PIGMENT_RENDERERS_INITIAL_CAPACITY 4
-
 static void destroy_renderer_immediate(Pigment* pigment, void* resource);
 static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_swapchain_image_views(PSwapchain* swapchain, PDevice* device);
@@ -47,8 +45,6 @@ static void destroy_surface(Pigment* pigment, PSurface* surface);
 static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
 static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer);
-static PResult renderer_list_append(Pigment* pigment, PWindowRenderer* renderer);
-static void renderer_list_remove(PRendererList* list, PWindowRenderer* renderer);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
 {
@@ -125,11 +121,6 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
-    if(renderer_list_append(pigment, renderer) != PIGMENT_SUCCESS)
-    {
-        goto ERROR;
-    }
-
     return renderer;
 
 ERROR:
@@ -155,8 +146,6 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer)
     {
         return;
     }
-
-    renderer_list_remove(pigment->renderers, renderer);
 
     VkFence last_present_fence = VK_NULL_HANDLE;
     if(renderer->sync != NULL && renderer->sync->present_fences != NULL)
@@ -295,41 +284,6 @@ void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, 
     {
         *out_height = renderer->swapchain->extent.height;
     }
-}
-
-PRendererList* create_renderer_list(Pigment* pigment)
-{
-    (void) pigment;
-    PRendererList* list = calloc(1, sizeof(*list));
-    if(list == NULL)
-    {
-        return NULL;
-    }
-
-    list->capacity  = PIGMENT_RENDERERS_INITIAL_CAPACITY;
-    list->renderers = malloc(list->capacity * sizeof(*list->renderers));
-
-    if(list->renderers == NULL)
-    {
-        free(list);
-        return NULL;
-    }
-    return list;
-}
-
-void destroy_renderer_list(Pigment* pigment, PRendererList* list)
-{
-    if(list == NULL)
-    {
-        return;
-    }
-
-    for(uint32_t i = 0; i < list->count; i++)
-    {
-        destroy_renderer_internal(pigment, list->renderers[i]);
-    }
-    free(list->renderers);
-    free(list);
 }
 
 PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
@@ -913,35 +867,4 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     destroy_swapchain(pigment, renderer->swapchain);
     destroy_surface(pigment, renderer->surface);
     free(renderer);
-}
-
-static PResult renderer_list_append(Pigment* pigment, PWindowRenderer* renderer)
-{
-    PRendererList* list = pigment->renderers;
-    if(list->count >= list->capacity)
-    {
-        uint32_t new_capacity     = list->capacity * 2;
-        PWindowRenderer** new_ptr = realloc(list->renderers, new_capacity * sizeof(*new_ptr));
-        if(new_ptr == NULL)
-        {
-            return PIGMENT_ERROR_OUT_OF_MEMORY;
-        }
-        list->renderers = new_ptr;
-        list->capacity  = new_capacity;
-    }
-
-    list->renderers[list->count++] = renderer;
-    return PIGMENT_SUCCESS;
-}
-
-static void renderer_list_remove(PRendererList* list, PWindowRenderer* renderer)
-{
-    for(uint32_t i = 0; i < list->count; i++)
-    {
-        if(list->renderers[i] == renderer)
-        {
-            list->renderers[i] = list->renderers[--list->count];
-            return;
-        }
-    }
 }

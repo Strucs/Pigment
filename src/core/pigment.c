@@ -78,32 +78,14 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     {
         goto ERROR;
     }
-    pigment->command_pools = create_command_pools(pigment);
-    if(pigment->command_pools == NULL)
-    {
-        goto ERROR;
-    }
-
-    pigment->layouts = create_layout_list();
-    if(pigment->layouts == NULL)
-    {
-        goto ERROR;
-    }
-
-    pigment->pipelines = create_pipeline_list();
-    if(pigment->pipelines == NULL)
+    pigment->default_command_pool = create_default_command_pool(pigment);
+    if(pigment->default_command_pool == NULL)
     {
         goto ERROR;
     }
 
     pigment->swapchain_callbacks = create_swapchain_callback_list();
     if(pigment->swapchain_callbacks == NULL)
-    {
-        goto ERROR;
-    }
-
-    pigment->renderers = create_renderer_list(pigment);
-    if(pigment->renderers == NULL)
     {
         goto ERROR;
     }
@@ -131,14 +113,10 @@ void destroy_pigment(Pigment* pigment)
 
     device_wait_idle(pigment);
 
-    destroy_renderer_list(pigment, pigment->renderers);
-
     destroy_deletion_queue(pigment, pigment->deletions);
 
-    destroy_pipeline_list(pigment, pigment->pipelines);
-    destroy_layout_list(pigment, pigment->layouts);
     destroy_swapchain_callback_list(pigment->swapchain_callbacks);
-    destroy_command_pools(pigment, pigment->command_pools);
+    destroy_default_command_pool(pigment);
     if(pigment->owns_allocator)
     {
         pigment_vk_destroy_allocator(pigment->allocator);

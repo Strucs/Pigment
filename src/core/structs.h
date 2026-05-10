@@ -105,11 +105,8 @@ struct Pigment {
     PDevice* device;
     PVkAllocator* allocator;
     PBool owns_allocator;
-    PCommandPoolList* command_pools;
-    PPipelineList* pipelines;
-    PLayoutList* layouts;
+    PCommandPool* default_command_pool;
 
-    PRendererList* renderers;
     PSwapchainCallbackList* swapchain_callbacks;
 
     PDeletionQueue* deletions;
@@ -195,32 +192,13 @@ struct PSwapchain {
 struct PPipeline {
     VkPipeline pipeline;
     PLayout* layout;
-};
-
-struct PPipelineList {
-    PPipeline** pipelines;
-    uint32_t count;
-    uint32_t capacity;
-};
-
-struct PRendererList {
-    PWindowRenderer** renderers;
-    uint32_t count;
-    uint32_t capacity;
+    PResourceTracker tracker;
 };
 
 struct PLayout {
     VkPipelineLayout layout;
-    PDescriptorSetLayout** set_layouts;
-    uint32_t set_layout_count;
     uint32_t push_size;
     VkShaderStageFlags push_stages;
-};
-
-struct PLayoutList {
-    PLayout** layouts;
-    uint32_t count;
-    uint32_t capacity;
 };
 
 struct PPipelineBuild {
@@ -257,12 +235,6 @@ struct PCommandPool {
     uint32_t buffer_capacity;
 };
 
-struct PCommandPoolList {
-    PCommandPool** pools;
-    uint32_t count;
-    uint32_t capacity;
-};
-
 struct PCommandBuffer {
     VkCommandBuffer buffer;
     PCommandPool* source_pool;
@@ -287,10 +259,13 @@ struct PDescriptorPool {
     PDescriptorSet** sets;
     uint32_t set_count;
     uint32_t set_capacity;
+    PBool allow_free_set;
 };
 
 struct PDescriptorSet {
     VkDescriptorSet set;
+    PDescriptorPool* source_pool;
+    PResourceTracker tracker;
 };
 
 typedef struct PImageViewDesc {

@@ -21,6 +21,8 @@
 #include "descriptor.h"
 #include "image.h"
 #include "log_internal.h"
+#include "pipeline.h"
+#include "std_internal.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -63,6 +65,8 @@ struct PStdBindless {
     PImageList render_targets;
     PSamplerList samplers;
     PTrackedRTList tracked_rts;
+
+    PStdPipelineLayouts* pipeline_layouts;
 };
 
 #define PIGMENT_BINDLESS_BINDING_SAMPLERS 0
@@ -180,7 +184,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     for(uint32_t i = 0; i < frames; i++)
     {
-        bindless->sets[i] = pigment_allocate_descriptor_set(pigment, bindless->pool, bindless->layout, max_images, "pigment_bindless_set");
+        bindless->sets[i] = pigment_create_descriptor_set(pigment, bindless->pool, bindless->layout, max_images, "pigment_bindless_set");
         if(bindless->sets[i] == NULL)
         {
             goto ERROR;
@@ -272,7 +276,20 @@ void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless)
     free(bindless->sets);
     pigment_destroy_descriptor_pool(pigment, bindless->pool);
     pigment_destroy_descriptor_set_layout(pigment, bindless->layout);
+    if(bindless->pipeline_layouts != NULL)
+    {
+        pigment_destroy_layout(pigment, bindless->pipeline_layouts->default_layout);
+        pigment_destroy_layout(pigment, bindless->pipeline_layouts->gizmo_layout);
+        pigment_destroy_layout(pigment, bindless->pipeline_layouts->skybox_layout);
+        pigment_destroy_layout(pigment, bindless->pipeline_layouts->crt_layout);
+        free(bindless->pipeline_layouts);
+    }
     free(bindless);
+}
+
+PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* bindless)
+{
+    return (bindless != NULL) ? &bindless->pipeline_layouts : NULL;
 }
 
 uint32_t pigment_std_upload_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)

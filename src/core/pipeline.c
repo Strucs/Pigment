@@ -31,60 +31,8 @@ static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_creat
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
 static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
-static PBool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count);
-static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline);
 static void destroy_pipeline_immediate(Pigment* pigment, void* resource);
-
-#define PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY 4
-#define PIGMENT_LAYOUT_LIST_INITIAL_CAPACITY 4
-
-PPipelineList* create_pipeline_list(void)
-{
-    return calloc(1, sizeof(PPipelineList));
-}
-
-void destroy_pipeline_list(Pigment* pigment, PPipelineList* list)
-{
-    if(list == NULL)
-    {
-        return;
-    }
-
-    while(list->count > 0)
-    {
-        pipeline_list_destroy(pigment, list, list->pipelines[0]);
-    }
-    free(list->pipelines);
-    free(list);
-}
-
-PLayoutList* create_layout_list(void)
-{
-    return calloc(1, sizeof(PLayoutList));
-}
-
-void destroy_layout_list(Pigment* pigment, PLayoutList* list)
-{
-    if(list == NULL)
-    {
-        return;
-    }
-    for(uint32_t i = 0; i < list->count; i++)
-    {
-        PLayout* entry = list->layouts[i];
-        if(entry != NULL)
-        {
-            if(entry->layout != VK_NULL_HANDLE)
-            {
-                vkDestroyPipelineLayout(pigment->device->logical_device, entry->layout, NULL);
-            }
-            free(entry->set_layouts);
-            free(entry);
-        }
-    }
-    free(list->layouts);
-    free(list);
-}
+static void destroy_layout_immediate(Pigment* pigment, void* resource);
 
 PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc)
 {
@@ -264,28 +212,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
 
     status = PIGMENT_ERROR_OUT_OF_MEMORY;
 
-    VkDevice device     = pigment->device->logical_device;
-    PPipelineList* list = pigment->pipelines;
-    uint32_t needed     = list->count + count;
-
-    if(needed > list->capacity)
-    {
-        uint32_t new_capacity = list->capacity == 0 ? PIGMENT_PIPELINE_LIST_INITIAL_CAPACITY : list->capacity;
-        while(new_capacity < needed)
-        {
-            new_capacity *= 2;
-        }
-
-        PPipeline** new_ptr = realloc(list->pipelines, new_capacity * sizeof(*new_ptr));
-
-        if(new_ptr == NULL)
-        {
-            goto FREE;
-        }
-
-        list->pipelines = new_ptr;
-        list->capacity  = new_capacity;
-    }
+    VkDevice device = pigment->device->logical_device;
 
     vk_pipelines          = calloc(count, sizeof(*vk_pipelines));
     temp_pipelines        = calloc(count, sizeof(*temp_pipelines));
@@ -340,10 +267,9 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i]->pipeline    = vk_pipelines[i];
-        temp_pipelines[i]->layout      = builds[i]->layout;
-        list->pipelines[list->count++] = temp_pipelines[i];
-        out[i]                         = temp_pipelines[i];
+        temp_pipelines[i]->pipeline = vk_pipelines[i];
+        temp_pipelines[i]->layout   = builds[i]->layout;
+        out[i]                      = temp_pipelines[i];
 
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
@@ -383,12 +309,17 @@ void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
         return;
     }
 
-    pigment_defer_destroy(pigment, destroy_pipeline_immediate, pipeline);
+    pigment_defer_destroy_tracked(pigment, destroy_pipeline_immediate, pipeline, &pipeline->tracker);
 }
 
 static void destroy_pipeline_immediate(Pigment* pigment, void* resource)
 {
-    pipeline_list_destroy(pigment, pigment->pipelines, (PPipeline*) resource);
+    PPipeline* pipeline = (PPipeline*) resource;
+    if(pipeline->pipeline != VK_NULL_HANDLE)
+    {
+        vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, NULL);
+    }
+    free(pipeline);
 }
 
 void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline)
@@ -397,6 +328,8 @@ void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pip
     {
         return;
     }
+
+    pigment_cmd_use(pigment, cmd, &pipeline->tracker);
 
     vkCmdBindPipeline(cmd->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 
@@ -617,22 +550,6 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
     return dynamic_state_create_info;
 }
 
-static PBool layout_set_layouts_match(const PLayout* candidate, PDescriptorSetLayout** set_layouts, uint32_t set_layout_count)
-{
-    if(candidate->set_layout_count != set_layout_count)
-    {
-        return P_FALSE;
-    }
-    for(uint32_t i = 0; i < set_layout_count; i++)
-    {
-        if(candidate->set_layouts[i] != set_layouts[i])
-        {
-            return P_FALSE;
-        }
-    }
-    return P_TRUE;
-}
-
 PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
 {
     if(pigment == NULL || desc == NULL)
@@ -640,31 +557,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
         return NULL;
     }
 
-    PLayoutList* list            = pigment->layouts;
     VkShaderStageFlags vk_stages = (VkShaderStageFlags) desc->push_stages;
-
-    for(uint32_t i = 0; i < list->count; i++)
-    {
-        PLayout* candidate = list->layouts[i];
-        if(candidate->push_size == desc->push_size && candidate->push_stages == vk_stages && layout_set_layouts_match(candidate, desc->set_layouts, desc->set_layout_count))
-        {
-            return candidate;
-        }
-    }
-
-    if(list->count >= list->capacity)
-    {
-        uint32_t new_capacity = list->capacity == 0 ? PIGMENT_LAYOUT_LIST_INITIAL_CAPACITY : list->capacity * 2;
-        PLayout** new_ptr     = realloc(list->layouts, new_capacity * sizeof(*new_ptr));
-
-        if(new_ptr == NULL)
-        {
-            return NULL;
-        }
-
-        list->layouts  = new_ptr;
-        list->capacity = new_capacity;
-    }
 
     VkPushConstantRange range = {
         .stageFlags = vk_stages,
@@ -717,43 +610,27 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     layout->push_size   = desc->push_size;
     layout->push_stages = vk_stages;
 
-    if(desc->set_layout_count > 0)
-    {
-        layout->set_layouts = malloc(desc->set_layout_count * sizeof(*layout->set_layouts));
-        if(layout->set_layouts == NULL)
-        {
-            vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, NULL);
-            free(layout);
-            return NULL;
-        }
-
-        memcpy(layout->set_layouts, desc->set_layouts, desc->set_layout_count * sizeof(*layout->set_layouts));
-        layout->set_layout_count = desc->set_layout_count;
-    }
-
     set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t) vk_layout, desc->name);
-
-    list->layouts[list->count++] = layout;
 
     return layout;
 }
 
-static void pipeline_list_destroy(Pigment* pigment, PPipelineList* list, PPipeline* pipeline)
+void pigment_destroy_layout(Pigment* pigment, PLayout* layout)
 {
-    for(uint32_t i = 0; i < list->count; i++)
+    if(pigment == NULL || layout == NULL)
     {
-        if(list->pipelines[i] == pipeline)
-        {
-            list->pipelines[i] = list->pipelines[list->count - 1];
-            list->count--;
-
-            if(pipeline->pipeline != VK_NULL_HANDLE)
-            {
-                vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, NULL);
-            }
-
-            free(pipeline);
-            return;
-        }
+        return;
     }
+
+    pigment_defer_destroy(pigment, destroy_layout_immediate, layout);
+}
+
+static void destroy_layout_immediate(Pigment* pigment, void* resource)
+{
+    PLayout* layout = (PLayout*) resource;
+    if(layout->layout != VK_NULL_HANDLE)
+    {
+        vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, NULL);
+    }
+    free(layout);
 }

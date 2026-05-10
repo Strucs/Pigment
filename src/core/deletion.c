@@ -104,6 +104,17 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
     }
 
     PDeletionNode* node = atomic_exchange_explicit(&queue->head, NULL, memory_order_acquire);
+
+    PDeletionNode* fifo = NULL;
+    while(node != NULL)
+    {
+        PDeletionNode* next = node->next;
+        node->next          = fifo;
+        fifo                = node;
+        node                = next;
+    }
+    node = fifo;
+
     while(node != NULL)
     {
         PDeletionNode* next = node->next;
@@ -274,6 +285,16 @@ void drain_deletion_queue(Pigment* pigment)
     VkDevice device       = pigment->device->logical_device;
 
     PDeletionNode* node = atomic_exchange_explicit(&queue->head, NULL, memory_order_acquire);
+
+    PDeletionNode* fifo = NULL;
+    while(node != NULL)
+    {
+        PDeletionNode* next = node->next;
+        node->next          = fifo;
+        fifo                = node;
+        node                = next;
+    }
+    node = fifo;
 
     PDeletionNode* not_ready_head = NULL;
     PDeletionNode* not_ready_tail = NULL;

@@ -67,6 +67,7 @@ typedef struct PDescriptorPoolDesc {
     uint32_t pool_size_count;
     uint32_t max_sets;
     PBool allow_update_after_bind;
+    PBool allow_free_set;
     const char* name;
 } PDescriptorPoolDesc;
 
@@ -97,8 +98,10 @@ void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayou
 
 PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc);
 void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
+void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
 
-PDescriptorSet* pigment_allocate_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name);
+PDescriptorSet* pigment_create_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name);
+void pigment_destroy_descriptor_set(Pigment* pigment, PDescriptorSet* set);
 
 void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count);
 

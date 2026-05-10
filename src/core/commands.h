@@ -19,9 +19,15 @@
 
 #include "defines.h"
 
-PCommandPoolList* create_command_pools(Pigment* pigment);
-void destroy_command_pools(Pigment* pigment, PCommandPoolList* pools);
-
+/**
+ * @brief Create a command pool tied to a queue family. The pool is tracked by Pigment and freed
+ *        at shutdown if the user does not destroy it explicitly via pigment_destroy_command_pool.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Pool description (queue flags, transient / reset flags, debug name).
+ *
+ * @return Newly created command pool, or NULL on failure.
+ */
 PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc);
 
 /**
@@ -32,6 +38,19 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
  * @param pool Pool to destroy.
  */
 void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
+
+/**
+ * @brief Reset every command buffer in this pool to the initial state at once, ready to be
+ *        recorded again. Make sure the GPU is done with them first.
+ *
+ * If the pool was created without P_COMMAND_POOL_FLAG_RESET_BUFFER, this is the only way to
+ * reset its buffers (individual reset is forbidden on those). Otherwise, this is a faster
+ * alternative to resetting buffers one by one.
+ *
+ * @param pigment Pigment instance.
+ * @param pool Pool to reset.
+ */
+void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool);
 
 /**
  * @brief Allocate a command buffer from a pool. Call pigment_begin_recording before recording into it.
