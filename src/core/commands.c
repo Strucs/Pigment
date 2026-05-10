@@ -95,9 +95,17 @@ void destroy_command_pools(Pigment* pigment, PCommandPoolList* pools)
         return;
     }
 
-    while(pools->count > 0)
+    for(uint32_t i = 0; i < pools->count; i++)
     {
-        command_pools_destroy(pigment, pools, pools->pools[0]);
+        PCommandPool* pool = pools->pools[i];
+        vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
+        for(uint32_t j = 0; j < pool->buffer_count; j++)
+        {
+            free(pool->buffers[j]->uses);
+            free(pool->buffers[j]);
+        }
+        free(pool->buffers);
+        free(pool);
     }
 
     free(pools->pools);

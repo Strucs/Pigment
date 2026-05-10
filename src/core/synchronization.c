@@ -15,10 +15,12 @@
  */
 
 #include "synchronization.h"
+#include "internal.h"
 #include "structs.h"
 #include "log_internal.h"
 
 static VkSemaphore create_semaphore(Pigment* pigment);
+static VkFence create_fence(Pigment* pigment);
 
 PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t swapchain_image_count)
 {
@@ -49,6 +51,15 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         goto ERROR;
     }
 
+    if(pigment_has_swapchain_maintenance1(pigment))
+    {
+        sync->present_fences = calloc(max_frame, sizeof(*sync->present_fences));
+        if(sync->present_fences == NULL)
+        {
+            goto ERROR;
+        }
+    }
+
     for(size_t i = 0; i < max_frame; i++)
     {
         sync->image_available_semaphores[i] = create_semaphore(pigment);
@@ -57,6 +68,16 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         {
             PLOG_ERROR(pigment, "Failed to create synchronization objects");
             goto ERROR;
+        }
+
+        if(sync->present_fences != NULL)
+        {
+            sync->present_fences[i] = create_fence(pigment);
+            if(sync->present_fences[i] == NULL)
+            {
+                PLOG_ERROR(pigment, "Failed to create synchronization objects");
+                goto ERROR;
+            }
         }
     }
 
@@ -90,6 +111,17 @@ ERROR:
                 vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
             }
         }
+        if(sync->present_fences != NULL)
+        {
+            for(size_t i = 0; i < max_frame; i++)
+            {
+                if(sync->present_fences[i] != NULL)
+                {
+                    vkDestroyFence(device->logical_device, sync->present_fences[i], NULL);
+                }
+            }
+            free(sync->present_fences);
+        }
         free(sync->per_slot_value);
         free(sync->render_finished_semaphores);
         free(sync->image_available_semaphores);
@@ -109,6 +141,10 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     for(size_t i = 0; i < max_frame; i++)
     {
         vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
+        if(sync->present_fences != NULL)
+        {
+            vkDestroyFence(device->logical_device, sync->present_fences[i], NULL);
+        }
     }
 
     for(size_t i = 0; i < swapchain->image_count; i++)
@@ -116,6 +152,7 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
         vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
     }
 
+    free(sync->present_fences);
     free(sync->per_slot_value);
     free(sync->render_finished_semaphores);
     free(sync->image_available_semaphores);
@@ -200,4 +237,23 @@ static VkSemaphore create_semaphore(Pigment* pigment)
     }
 
     return semaphore;
+}
+
+static VkFence create_fence(Pigment* pigment)
+{
+    VkFence fence;
+
+    VkFenceCreateInfo fence_create_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+
+    VkResult result;
+    if((result = vkCreateFence(pigment->device->logical_device, &fence_create_info, NULL, &fence)) != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to create fence (result: %d)", result);
+        return NULL;
+    }
+
+    return fence;
 }

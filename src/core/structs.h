@@ -126,6 +126,7 @@ struct PWindowRenderer {
     uint32_t current_image_index;
     PBool needs_recreate;
     PSwapchainDesc desc;
+    PResourceTracker tracker;
 };
 
 struct PInstance {
@@ -274,6 +275,7 @@ struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
     uint64_t* per_slot_value;
+    VkFence* present_fences;
 };
 
 struct PDescriptorSetLayout {

@@ -16,6 +16,7 @@
 
 #include "surface.h"
 #include "commands.h"
+#include "deletion.h"
 #include "image.h"
 #include "internal.h"
 #include "log_internal.h"
@@ -24,6 +25,7 @@
 
 #define PIGMENT_RENDERERS_INITIAL_CAPACITY 4
 
+static void destroy_renderer_immediate(Pigment* pigment, void* resource);
 static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_swapchain_image_views(PSwapchain* swapchain, PDevice* device);
 static const VkFormat* preferred_formats_for_color_space(VkColorSpaceKHR color_space, uint32_t* out_count);
@@ -154,10 +156,27 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer)
         return;
     }
 
-    device_wait_idle(pigment);
-
     renderer_list_remove(pigment->renderers, renderer);
-    destroy_renderer_internal(pigment, renderer);
+
+    VkFence last_present_fence = VK_NULL_HANDLE;
+    if(renderer->sync != NULL && renderer->sync->present_fences != NULL)
+    {
+        uint32_t max_frame     = pigment->config.max_frames_in_flight;
+        uint32_t current_frame = renderer->swapchain->current_frame;
+        uint32_t last_slot     = current_frame > 0 ? current_frame - 1 : max_frame - 1;
+        last_present_fence     = renderer->sync->present_fences[last_slot];
+    }
+    else
+    {
+        device_wait_idle(pigment);
+    }
+
+    defer_destroy_renderer(pigment, destroy_renderer_immediate, renderer, &renderer->tracker, last_present_fence);
+}
+
+static void destroy_renderer_immediate(Pigment* pigment, void* resource)
+{
+    destroy_renderer_internal(pigment, (PWindowRenderer*) resource);
 }
 
 void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height)
@@ -901,8 +920,8 @@ static PResult renderer_list_append(Pigment* pigment, PWindowRenderer* renderer)
     PRendererList* list = pigment->renderers;
     if(list->count >= list->capacity)
     {
-        uint32_t new_capacity      = list->capacity * 2;
-        PWindowRenderer** new_ptr  = realloc(list->renderers, new_capacity * sizeof(*new_ptr));
+        uint32_t new_capacity     = list->capacity * 2;
+        PWindowRenderer** new_ptr = realloc(list->renderers, new_capacity * sizeof(*new_ptr));
         if(new_ptr == NULL)
         {
             return PIGMENT_ERROR_OUT_OF_MEMORY;

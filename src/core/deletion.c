@@ -185,6 +185,52 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
     enqueue_or_destroy(pigment, destroy_fn, resource, &target, 1);
 }
 
+void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker, VkFence present_fence)
+{
+    if(pigment == NULL || destroy_fn == NULL || resource == NULL)
+    {
+        return;
+    }
+
+    if(pigment->deletions == NULL)
+    {
+        destroy_fn(pigment, resource);
+        return;
+    }
+
+    PWaitTarget targets[2] = {0};
+    uint32_t target_count  = 0;
+
+    if(tracker != NULL)
+    {
+        uint64_t submit_value  = atomic_load_explicit(&tracker->last_used_submit, memory_order_relaxed);
+        PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
+        if(submit_value > 0 && graphics != NULL && graphics->timeline != VK_NULL_HANDLE)
+        {
+            targets[target_count++] = (PWaitTarget) {
+                .kind     = P_WAIT_TIMELINE,
+                .timeline = {.semaphore = graphics->timeline, .value = submit_value},
+            };
+        }
+    }
+
+    if(present_fence != VK_NULL_HANDLE)
+    {
+        targets[target_count++] = (PWaitTarget) {
+            .kind  = P_WAIT_FENCE,
+            .fence = present_fence,
+        };
+    }
+
+    if(target_count == 0)
+    {
+        destroy_fn(pigment, resource);
+        return;
+    }
+
+    enqueue_or_destroy(pigment, destroy_fn, resource, targets, target_count);
+}
+
 void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence)
 {
     if(pigment == NULL || destroy_fn == NULL || resource == NULL)

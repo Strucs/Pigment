@@ -105,6 +105,15 @@ static inline uint64_t device_queue_current_value(PDeviceQueue* queue)
     return atomic_load_explicit(&queue->next_value, memory_order_relaxed);
 }
 
+static inline PBool pigment_has_swapchain_maintenance1(Pigment* pigment)
+{
+    if(pigment == NULL || pigment->device == NULL || pigment->device->extensions == NULL)
+    {
+        return P_FALSE;
+    }
+    return name_in_list((const char* const*) pigment->device->extensions->names, pigment->device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+}
+
 // surface.c
 PRendererList* create_renderer_list(Pigment* pigment);
 void destroy_renderer_list(Pigment* pigment, PRendererList* list);
@@ -133,5 +142,6 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
 PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
+void defer_destroy_renderer(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const PResourceTracker* tracker, VkFence present_fence);
 
 #endif

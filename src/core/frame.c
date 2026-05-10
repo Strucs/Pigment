@@ -705,6 +705,7 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
 
     uint64_t submit_value                         = device_queue_acquire_value(graphics);
     renderer->sync->per_slot_value[current_frame] = submit_value;
+    atomic_store_explicit(&renderer->tracker.last_used_submit, submit_value, memory_order_relaxed);
 
     stamp_uses_submit(&frame_cmd, 1, submit_value);
 
@@ -767,8 +768,22 @@ void pigment_present(Pigment* pigment, PWindowRenderer* renderer)
     VkSemaphore present_wait[]  = {renderer->sync->render_finished_semaphores[image_index]};
     VkSwapchainKHR swapchains[] = {renderer->swapchain->swapchain};
 
+    VkSwapchainPresentFenceInfoEXT present_fence_info = {0};
+    void* present_pnext                               = NULL;
+    if(renderer->sync->present_fences != NULL)
+    {
+        VkFence fence = renderer->sync->present_fences[current_frame];
+        vkWaitForFences(pigment->device->logical_device, 1, &fence, VK_TRUE, UINT64_MAX);
+        vkResetFences(pigment->device->logical_device, 1, &fence);
+        present_fence_info.sType          = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
+        present_fence_info.swapchainCount = 1;
+        present_fence_info.pFences        = &renderer->sync->present_fences[current_frame];
+        present_pnext                     = &present_fence_info;
+    }
+
     VkPresentInfoKHR present_info = {
         .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext              = present_pnext,
         .waitSemaphoreCount = sizeof(present_wait) / sizeof(present_wait[0]),
         .pWaitSemaphores    = present_wait,
         .swapchainCount     = sizeof(swapchains) / sizeof(swapchains[0]),

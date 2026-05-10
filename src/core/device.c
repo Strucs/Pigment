@@ -403,14 +403,24 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         .multiview = VK_TRUE,
     };
     VkPhysicalDeviceVulkan12Features vk12_features = {
-        .sType              = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .pNext              = &vk11_features,
-        .drawIndirectCount  = device->features[P_FEATURE_DRAW_INDIRECT_COUNT] ? VK_TRUE : VK_FALSE,
+        .sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext             = &vk11_features,
+        .drawIndirectCount = device->features[P_FEATURE_DRAW_INDIRECT_COUNT] ? VK_TRUE : VK_FALSE,
     };
     VkPhysicalDeviceVulkan13Features vk13_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
         .pNext = &vk12_features,
     };
+
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchain_maint1_features = {0};
+    PBool enable_swapchain_maint1                                              = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    if(enable_swapchain_maint1)
+    {
+        swapchain_maint1_features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+        swapchain_maint1_features.swapchainMaintenance1 = VK_TRUE;
+        swapchain_maint1_features.pNext                 = &vk13_features;
+    }
+
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
@@ -419,7 +429,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
                      .multiDrawIndirect         = device->features[P_FEATURE_MULTI_DRAW_INDIRECT] ? VK_TRUE : VK_FALSE,
                      .drawIndirectFirstInstance = device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] ? VK_TRUE : VK_FALSE,
                      },
-        .pNext = &vk13_features,
+        .pNext = enable_swapchain_maint1 ? (void*) &swapchain_maint1_features : (void*) &vk13_features,
     };
 
     const VkPhysicalDeviceFeatures req         = pigment_req_features();
@@ -542,6 +552,16 @@ PDevice* create_device(Pigment* pigment)
     };
     const uint32_t default_req_count = sizeof(default_req_extensions) / sizeof(default_req_extensions[0]);
 
+    PBool instance_has_surface_maint1 = name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME)
+                                        && name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+
+    const char* default_opt_extensions[1] = {0};
+    uint32_t default_opt_count            = 0;
+    if(instance_has_surface_maint1)
+    {
+        default_opt_extensions[default_opt_count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+    }
+
     device = calloc(1, sizeof(*device));
     if(device == NULL)
     {
@@ -587,7 +607,7 @@ PDevice* create_device(Pigment* pigment)
         vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, available_extensions);
     }
 
-    uint32_t max_final = req_extensions.size + (vk_init != NULL ? vk_init->opt_device_extensions_count : 0);
+    uint32_t max_final = req_extensions.size + default_opt_count + (vk_init != NULL ? vk_init->opt_device_extensions_count : 0);
     device->extensions = calloc(1, sizeof(*device->extensions));
     if(device->extensions == NULL)
     {
@@ -602,6 +622,20 @@ PDevice* create_device(Pigment* pigment)
     for(uint32_t i = 0; i < req_extensions.size; i++)
     {
         device->extensions->names[device->extensions->size++] = req_extensions.names[i];
+    }
+
+    for(uint32_t i = 0; i < default_opt_count; i++)
+    {
+        const char* name = default_opt_extensions[i];
+        if(!extension_available(available_extensions, available_extension_count, name))
+        {
+            PLOG_INFO(pigment, "Optional device extension not available, skipping: %s", name);
+            continue;
+        }
+        if(!name_in_list((const char* const*) device->extensions->names, device->extensions->size, name))
+        {
+            device->extensions->names[device->extensions->size++] = name;
+        }
     }
 
     if(vk_init != NULL)
