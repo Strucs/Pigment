@@ -320,6 +320,7 @@ struct PSampler {
 typedef struct PSwapchainCallback {
     PSwapchainRecreateFn func;
     void* user_data;
+    PWindowRenderer* renderer;
     uint32_t handle;
     PBool alive;
 } PSwapchainCallback;

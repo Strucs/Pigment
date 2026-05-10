@@ -138,7 +138,7 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
 
     if(any_attachment_tracked(desc))
     {
-        target->recreate_handle = pigment_register_swapchain_recreate(pigment, on_swapchain_recreate, target);
+        target->recreate_handle = pigment_register_swapchain_recreate(pigment, target->renderer, on_swapchain_recreate, target);
     }
 
     return target;
@@ -366,10 +366,6 @@ static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc
 static void on_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data)
 {
     PRenderTarget* target = (PRenderTarget*) user_data;
-    if(event->renderer != target->renderer)
-    {
-        return;
-    }
 
     for(uint32_t i = 0; i < target->color_count; i++)
     {

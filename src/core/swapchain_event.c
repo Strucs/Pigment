@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #define PIGMENT_SWAPCHAIN_CALLBACK_INITIAL_CAPACITY 4
+#define PIGMENT_SWAPCHAIN_CALLBACK_STACK_BUFFER 16
 
 PSwapchainCallbackList* create_swapchain_callback_list(void)
 {
@@ -46,7 +47,7 @@ void destroy_swapchain_callback_list(PSwapchainCallbackList* list)
     free(list);
 }
 
-uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PSwapchainRecreateFn func, void* user_data)
+uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PWindowRenderer* renderer, PSwapchainRecreateFn func, void* user_data)
 {
     if(pigment == NULL || pigment->swapchain_callbacks == NULL || func == NULL)
     {
@@ -88,6 +89,7 @@ uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PSwapchainRecreat
     list->callbacks[reuse_index] = (PSwapchainCallback) {
         .func      = func,
         .user_data = user_data,
+        .renderer  = renderer,
         .handle    = handle,
         .alive     = P_TRUE,
     };
@@ -110,8 +112,9 @@ void pigment_unregister_swapchain_recreate(Pigment* pigment, uint32_t handle)
     {
         if(list->callbacks[i].handle == handle)
         {
-            list->callbacks[i].alive = P_FALSE;
-            list->callbacks[i].func  = NULL;
+            list->callbacks[i].alive    = P_FALSE;
+            list->callbacks[i].func     = NULL;
+            list->callbacks[i].renderer = NULL;
             break;
         }
     }
@@ -127,7 +130,7 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
 
     PSwapchainCallbackList* list = pigment->swapchain_callbacks;
 
-    PSwapchainCallback stack_buffer[16];
+    PSwapchainCallback stack_buffer[PIGMENT_SWAPCHAIN_CALLBACK_STACK_BUFFER];
     PSwapchainCallback* callbacks_to_call = stack_buffer;
     PSwapchainCallback* heap_buffer       = NULL;
 
@@ -147,10 +150,16 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
     uint32_t count = 0;
     for(uint32_t i = 0; i < list->count; i++)
     {
-        if(list->callbacks[i].alive)
+        const PSwapchainCallback* callback = &list->callbacks[i];
+        if(!callback->alive)
         {
-            callbacks_to_call[count++] = list->callbacks[i];
+            continue;
         }
+        if(callback->renderer != NULL && callback->renderer != event->renderer)
+        {
+            continue;
+        }
+        callbacks_to_call[count++] = *callback;
     }
     pigment_rwlock_rdunlock(&list->lock);
 
