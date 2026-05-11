@@ -267,9 +267,10 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i]->pipeline = vk_pipelines[i];
-        temp_pipelines[i]->layout   = builds[i]->layout;
-        out[i]                      = temp_pipelines[i];
+        temp_pipelines[i]->pipeline   = vk_pipelines[i];
+        temp_pipelines[i]->layout     = builds[i]->layout;
+        temp_pipelines[i]->bind_point = P_PIPELINE_BIND_POINT_GRAPHICS;
+        out[i]                        = temp_pipelines[i];
 
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
@@ -331,7 +332,12 @@ void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pip
 
     pigment_cmd_use(pigment, cmd, &pipeline->tracker);
 
-    vkCmdBindPipeline(cmd->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+    vkCmdBindPipeline(cmd->buffer, (VkPipelineBindPoint) pipeline->bind_point, pipeline->pipeline);
+
+    if(pipeline->bind_point != P_PIPELINE_BIND_POINT_GRAPHICS)
+    {
+        return;
+    }
 
     vkCmdSetCullMode(cmd->buffer, VK_CULL_MODE_BACK_BIT);
     vkCmdSetFrontFace(cmd->buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);

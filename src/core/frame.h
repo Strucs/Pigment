@@ -20,7 +20,6 @@
 #include "defines.h"
 #include "pipeline.h"
 #include "buffers.h"
-
 typedef struct PDrawIndirectCommand {
     uint32_t vertex_count;
     uint32_t instance_count;
@@ -35,6 +34,22 @@ typedef struct PDrawIndexedIndirectCommand {
     int32_t vertex_offset;
     uint32_t first_instance;
 } PDrawIndexedIndirectCommand;
+
+typedef struct PViewport {
+    float x;
+    float y;
+    float width;
+    float height;
+    float min_depth;
+    float max_depth;
+} PViewport;
+
+typedef struct PScissor {
+    int32_t x;
+    int32_t y;
+    uint32_t width;
+    uint32_t height;
+} PScissor;
 
 typedef struct PAttachmentRef {
     PImage* image;
@@ -168,8 +183,8 @@ void pigment_cmd_set_stencil_op(Pigment* pigment, PCommandBuffer* cmd, PStencilF
 void pigment_cmd_set_stencil_compare_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
 void pigment_cmd_set_stencil_write_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
 void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t reference);
-void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, float x, float y, float width, float height, float min_depth, float max_depth);
-void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, int32_t x, int32_t y, uint32_t width, uint32_t height);
+void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PViewport* viewports, uint32_t count);
+void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count);
 void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope);
 void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max);
 

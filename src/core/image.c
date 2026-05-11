@@ -327,14 +327,15 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
-    image->vk_format    = (VkFormat) desc->format;
-    image->vk_usage     = translate_usage(desc->usage);
-    image->vk_samples   = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
-    image->mip_levels   = (desc->mip_levels == 0) ? 1 : desc->mip_levels;
-    image->aspect       = compute_aspect(image->vk_format, desc->usage);
-    image->depth        = (desc->depth == 0) ? 1 : desc->depth;
-    image->array_layers = (desc->array_layers == 0) ? 1 : desc->array_layers;
-    image->name         = desc->name;
+    image->vk_format       = (VkFormat) desc->format;
+    image->vk_usage        = translate_usage(desc->usage);
+    image->vk_samples      = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
+    image->vk_sharing_mode = (VkSharingMode) desc->sharing_mode;
+    image->mip_levels      = (desc->mip_levels == 0) ? 1 : desc->mip_levels;
+    image->aspect          = compute_aspect(image->vk_format, desc->usage);
+    image->depth           = (desc->depth == 0) ? 1 : desc->depth;
+    image->array_layers    = (desc->array_layers == 0) ? 1 : desc->array_layers;
+    image->name            = desc->name;
     translate_image_type(desc->type, &image->vk_image_type, &image->vk_create_flags);
 
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
@@ -453,7 +454,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .usage         = image->vk_usage,
         .samples       = image->vk_samples ? image->vk_samples : VK_SAMPLE_COUNT_1_BIT,
-        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+        .sharingMode   = image->vk_sharing_mode,
         .flags         = image->vk_create_flags,
     };
 

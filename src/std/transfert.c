@@ -59,13 +59,13 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer*
     memcpy(pigment_buffer_mapped(staging), desc->data, (size_t) desc->size);
     pigment_buffer_flush(pigment, staging, 0, desc->size);
 
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, pool);
-    if(cmd == NULL)
+    PCommandBuffer* cmd = NULL;
+    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd) != PIGMENT_SUCCESS)
     {
         pigment_destroy_buffer(pigment, staging);
         return PIGMENT_ERROR;
     }
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
 
     PBufferCopy region = {.src_offset = 0, .dst_offset = desc->offset, .size = desc->size};
     pigment_cmd_copy_buffer(pigment, cmd, staging, dst, &region, 1);
@@ -81,9 +81,9 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer*
 
     pigment_end_recording(pigment, cmd);
 
-    PSubmitHandle handle = pigment_queue_submit(pigment, &cmd, 1);
+    PSubmitHandle handle = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
 
-    pigment_destroy_command_buffer(pigment, cmd);
+    pigment_destroy_command_buffers(pigment, &cmd, 1);
     pigment_destroy_buffer(pigment, staging);
 
     if(out_handle != NULL)

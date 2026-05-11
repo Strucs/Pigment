@@ -192,6 +192,7 @@ struct PSwapchain {
 struct PPipeline {
     VkPipeline pipeline;
     PLayout* layout;
+    PPipelineBindPoint bind_point;
     PResourceTracker tracker;
 };
 
@@ -304,6 +305,7 @@ struct PImage {
     VkImageType vk_image_type;
     VkImageCreateFlags vk_create_flags;
     VkSampleCountFlagBits vk_samples;
+    VkSharingMode vk_sharing_mode;
     VkImageAspectFlags aspect;
 
     const char* name;

@@ -189,13 +189,26 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     bindless->set_count = frames;
 
+    PDescriptorSetAllocate* set_allocs = calloc(frames, sizeof(*set_allocs));
+    if(set_allocs == NULL)
+    {
+        goto ERROR;
+    }
+
     for(uint32_t i = 0; i < frames; i++)
     {
-        bindless->sets[i] = pigment_create_descriptor_set(pigment, bindless->pool, bindless->layout, max_images, "pigment_bindless_set");
-        if(bindless->sets[i] == NULL)
-        {
-            goto ERROR;
-        }
+        set_allocs[i] = (PDescriptorSetAllocate) {
+            .layout         = bindless->layout,
+            .variable_count = max_images,
+            .name           = "pigment_bindless_set",
+        };
+    }
+
+    PResult result = pigment_create_descriptor_sets(pigment, bindless->pool, set_allocs, frames, bindless->sets);
+    free(set_allocs);
+    if(result != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
     }
 
     if(image_list_init(&bindless->images) != PIGMENT_SUCCESS)
@@ -258,7 +271,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
              .image_infos   = &image_info,
              },
         };
-        pigment_write_descriptors(pigment, writes, sizeof(writes) / sizeof(writes[0]));
+        pigment_update_descriptors(pigment, writes, sizeof(writes) / sizeof(writes[0]), NULL, 0);
     }
     free(sampler_infos);
 
@@ -335,12 +348,13 @@ uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless
         goto FREE;
     }
 
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, bindless->upload_pool);
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    PCommandBuffer* cmd = NULL;
+    pigment_create_command_buffers(pigment, bindless->upload_pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     PResult result = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
     pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &cmd, 1);
-    pigment_destroy_command_buffer(pigment, cmd);
+    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    pigment_destroy_command_buffers(pigment, &cmd, 1);
 
     if(result == PIGMENT_SUCCESS)
     {
@@ -421,12 +435,13 @@ uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, co
 
     uint64_t face_size = (uint64_t) face_width * face_height * pigment_format_pixel_size(format);
 
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, bindless->upload_pool);
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    PCommandBuffer* cmd = NULL;
+    pigment_create_command_buffers(pigment, bindless->upload_pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     record_image_upload(pigment, cmd, image, staging, face_width, face_height, 6, face_size);
     pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &cmd, 1);
-    pigment_destroy_command_buffer(pigment, cmd);
+    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    pigment_destroy_command_buffers(pigment, &cmd, 1);
     pigment_destroy_buffer(pigment, staging);
 
     uint32_t slot = bindless->cubemaps.count;
@@ -641,12 +656,13 @@ static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, c
         goto ERROR;
     }
 
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, bindless->upload_pool);
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+    PCommandBuffer* cmd = NULL;
+    pigment_create_command_buffers(pigment, bindless->upload_pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     record_image_upload(pigment, cmd, image, staging, width, height, 1, 0);
     pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &cmd, 1);
-    pigment_destroy_command_buffer(pigment, cmd);
+    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    pigment_destroy_command_buffers(pigment, &cmd, 1);
 
     pigment_destroy_buffer(pigment, staging);
 
@@ -798,7 +814,7 @@ static void write_sampler_descriptor(Pigment* pigment, PStdBindless* bindless, u
             .count         = 1,
             .image_infos   = &info,
         };
-        pigment_write_descriptors(pigment, &write, 1);
+        pigment_update_descriptors(pigment, &write, 1, NULL, 0);
     }
 }
 
@@ -815,7 +831,7 @@ static void write_sampled_image_descriptor(Pigment* pigment, PStdBindless* bindl
             .count         = 1,
             .image_infos   = &info,
         };
-        pigment_write_descriptors(pigment, &write, 1);
+        pigment_update_descriptors(pigment, &write, 1, NULL, 0);
     }
 }
 
@@ -858,7 +874,7 @@ static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, ui
             .image_infos   = infos,
         };
 
-        pigment_write_descriptors(pigment, &write, 1);
+        pigment_update_descriptors(pigment, &write, 1, NULL, 0);
     }
     free(infos);
 }

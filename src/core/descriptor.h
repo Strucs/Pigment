@@ -93,6 +93,22 @@ typedef struct PDescriptorWrite {
     const PDescriptorBufferInfo* buffer_infos;
 } PDescriptorWrite;
 
+typedef struct PDescriptorCopy {
+    PDescriptorSet* src;
+    PDescriptorSet* dst;
+    uint32_t src_binding;
+    uint32_t src_array_element;
+    uint32_t dst_binding;
+    uint32_t dst_array_element;
+    uint32_t count;
+} PDescriptorCopy;
+
+typedef struct PDescriptorSetAllocate {
+    PDescriptorSetLayout* layout;
+    uint32_t variable_count;    // 0 if no VARIABLE_COUNT binding
+    const char* name;
+} PDescriptorSetAllocate;
+
 PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
 void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayout* layout);
 
@@ -100,11 +116,11 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
 void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
 void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
 
-PDescriptorSet* pigment_create_descriptor_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSetLayout* layout, uint32_t variable_count, const char* name);
-void pigment_destroy_descriptor_set(Pigment* pigment, PDescriptorSet* set);
+PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets);
+void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, uint32_t count);
 
-void pigment_write_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count);
+void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
 
-void pigment_cmd_bind_descriptor_set(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t set_index, PDescriptorSet* set);
+void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t first_set, PDescriptorSet* const* sets, uint32_t set_count, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count);
 
 #endif

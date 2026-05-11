@@ -45,6 +45,7 @@ typedef struct PBufferDesc {
     uint64_t size;
     PBufferUsage usage;
     PMemoryType memory;
+    PSharingMode sharing_mode;    // 0 = EXCLUSIVE (default)
     const char* name;
 } PBufferDesc;
 

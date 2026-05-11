@@ -69,19 +69,34 @@ int main(void)
 
     PDescriptorPool* pool = pigment_create_descriptor_pool(pigment, &pool_desc);
 
-    PDescriptorSet* set_a = pigment_create_descriptor_set(pigment, pool, layout, 0, "set_a");
-    PDescriptorSet* set_b = pigment_create_descriptor_set(pigment, pool, layout, 0, "set_b");
+    PDescriptorSetAllocate set_allocs[2] = {
+        {.layout = layout, .variable_count = 0, .name = "set_a"},
+        {.layout = layout, .variable_count = 0, .name = "set_b"},
+    };
+    PDescriptorSet* sets[2];
+    pigment_create_descriptor_sets(pigment, pool, set_allocs, 2, sets);
+    PDescriptorSet* set_a = sets[0];
+    PDescriptorSet* set_b = sets[1];
 
-    pigment_destroy_descriptor_set(pigment, set_a);
+    pigment_destroy_descriptor_sets(pigment, &set_a, 1);
     pigment_destroy_descriptor_pool(pigment, pool);
     pigment_drain_pending(pigment);
     (void) set_b;
 
     PDescriptorPool* pool_b = pigment_create_descriptor_pool(pigment, &pool_desc);
-    pigment_create_descriptor_set(pigment, pool_b, layout, 0, "reset_set_a");
-    pigment_create_descriptor_set(pigment, pool_b, layout, 0, "reset_set_b");
+
+    PDescriptorSetAllocate reset_allocs[2] = {
+        {.layout = layout, .variable_count = 0, .name = "reset_set_a"},
+        {.layout = layout, .variable_count = 0, .name = "reset_set_b"},
+    };
+    PDescriptorSet* reset_sets[2];
+    pigment_create_descriptor_sets(pigment, pool_b, reset_allocs, 2, reset_sets);
+
     pigment_reset_descriptor_pool(pigment, pool_b);
-    pigment_create_descriptor_set(pigment, pool_b, layout, 0, "after_reset");
+
+    PDescriptorSetAllocate after_alloc = {.layout = layout, .variable_count = 0, .name = "after_reset"};
+    PDescriptorSet* after_set;
+    pigment_create_descriptor_sets(pigment, pool_b, &after_alloc, 1, &after_set);
 
     pigment_destroy_descriptor_pool(pigment, pool_b);
     pigment_destroy_descriptor_set_layout(pigment, layout);

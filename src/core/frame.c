@@ -127,7 +127,7 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
         return NULL;
     }
 
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
     return cmd;
 }
 
@@ -867,34 +867,52 @@ void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PS
     vkCmdSetStencilReference(cmd->buffer, (VkStencilFaceFlags) faces, reference);
 }
 
-void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, float x, float y, float width, float height, float min_depth, float max_depth)
+void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PViewport* viewports, uint32_t count)
 {
-    if(pigment == NULL || cmd == NULL)
+    if(pigment == NULL || cmd == NULL || viewports == NULL || count == 0)
     {
         return;
     }
-    VkViewport vp = {
-        .x        = x,
-        .y        = y,
-        .width    = width,
-        .height   = height,
-        .minDepth = min_depth,
-        .maxDepth = max_depth,
-    };
-    vkCmdSetViewportWithCount(cmd->buffer, 1, &vp);
+    VkViewport* vk_viewports = calloc(count, sizeof(*vk_viewports));
+    if(vk_viewports == NULL)
+    {
+        return;
+    }
+    for(uint32_t i = 0; i < count; i++)
+    {
+        vk_viewports[i] = (VkViewport) {
+            .x        = viewports[i].x,
+            .y        = viewports[i].y,
+            .width    = viewports[i].width,
+            .height   = viewports[i].height,
+            .minDepth = viewports[i].min_depth,
+            .maxDepth = viewports[i].max_depth,
+        };
+    }
+    vkCmdSetViewportWithCount(cmd->buffer, count, vk_viewports);
+    free(vk_viewports);
 }
 
-void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, int32_t x, int32_t y, uint32_t width, uint32_t height)
+void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count)
 {
-    if(pigment == NULL || cmd == NULL)
+    if(pigment == NULL || cmd == NULL || scissors == NULL || count == 0)
     {
         return;
     }
-    VkRect2D rect = {
-        .offset = {    x,      y},
-        .extent = {width, height},
-    };
-    vkCmdSetScissorWithCount(cmd->buffer, 1, &rect);
+    VkRect2D* vk_scissors = calloc(count, sizeof(*vk_scissors));
+    if(vk_scissors == NULL)
+    {
+        return;
+    }
+    for(uint32_t i = 0; i < count; i++)
+    {
+        vk_scissors[i] = (VkRect2D) {
+            .offset = {    scissors[i].x,      scissors[i].y},
+            .extent = {scissors[i].width, scissors[i].height},
+        };
+    }
+    vkCmdSetScissorWithCount(cmd->buffer, count, vk_scissors);
+    free(vk_scissors);
 }
 
 void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope)

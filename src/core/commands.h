@@ -20,6 +20,29 @@
 #include "defines.h"
 
 /**
+ * @brief Submit description for command buffer submissions.
+ */
+typedef struct PSubmit {
+    PCommandBuffer** cmds;
+    uint32_t cmd_count;
+} PSubmit;
+
+/**
+ * @brief Inheritance state used to begin recording a SECONDARY command buffer.
+ *
+ * Describes the dynamic rendering context the secondary will run inside (color/depth/stencil
+ * formats, sample count, view mask). Must match the primary's render pass at execute time.
+ */
+typedef struct PCommandBufferInheritance {
+    const PFormat* color_formats;
+    uint32_t color_format_count;
+    PFormat depth_format;      // P_FORMAT_UNDEFINED if no depth
+    PFormat stencil_format;    // P_FORMAT_UNDEFINED if no stencil
+    PSampleCount samples;      // 0 = 1 sample
+    uint32_t view_mask;        // 0 = no multiview
+} PCommandBufferInheritance;
+
+/**
  * @brief Create a command pool tied to a queue family. The pool is tracked by Pigment and freed
  *        at shutdown if the user does not destroy it explicitly via pigment_destroy_command_pool.
  *
@@ -53,36 +76,54 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
 void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool);
 
 /**
- * @brief Allocate a command buffer from a pool. Call pigment_begin_recording before recording into it.
+ * @brief Allocate command buffers from a pool. Call pigment_begin_recording before recording into it.
  *
  * @param pigment Pigment instance.
- * @param pool Pool to allocate from. NULL = default graphics pool.
+ * @param pool Pool to allocate from.
+ * @param level Primary or secondary. Secondary buffers are recorded inside a render pass and
+ *              executed via a primary's cmd_execute_commands.
+ * @param count Number of command buffers to allocate.
+ * @param out_cmds Array to store the allocated command buffers.
  *
- * @return Newly allocated command buffer, or NULL on failure.
+ * @return PIGMENT_SUCCESS on success, or an error code on failure.
  */
-PCommandBuffer* pigment_create_command_buffer(Pigment* pigment, PCommandPool* pool);
+PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds);
 
 /**
- * @brief Defer destruction of a command buffer until the GPU is done with it. The buffer is
- *        also freed automatically when its source pool is destroyed, so calling this is only
+ * @brief Defer destruction of command buffers until the GPU is done with it. The buffers are
+ *        also freed automatically when the source pool is destroyed, so calling this is only
  *        needed for early release before the pool goes away.
  *
  * @param pigment Pigment instance.
- * @param cmd Command buffer to destroy.
+ * @param cmds Array of command buffers to destroy.
+ * @param count Number of command buffers in the array.
  */
-void pigment_destroy_command_buffer(Pigment* pigment, PCommandBuffer* cmd);
+void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, uint32_t count);
 
 /**
  * @brief Open a command buffer for recording. Required before any pigment_cmd_* function.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer to record into.
- * @param flags Usage flags for this recording session.
+ * @param flags Usage flags for this recording session. SECONDARY recording inside a render pass
+ *              must set P_CMD_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT.
+ * @param inheritance Required for SECONDARY level inside a render pass, NULL otherwise.
  */
-void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags);
+void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags, const PCommandBufferInheritance* inheritance);
 
 /**
- * @brief Close a command buffer recording. The buffer becomes submittable via pigment_queue_submit.
+ * @brief Execute secondary command buffers from inside a primary's render pass. Secondaries must
+ *        have been recorded with matching PCommandBufferInheritance.
+ *
+ * @param pigment Pigment instance.
+ * @param primary Primary command buffer currently in a render pass.
+ * @param secondaries Array of secondary command buffers to execute.
+ * @param count Number of secondaries.
+ */
+void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCommandBuffer** secondaries, uint32_t count);
+
+/**
+ * @brief Close a command buffer recording. The buffer becomes submittable.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer to finalize.
@@ -90,15 +131,17 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
 void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
 
 /**
- * @brief Submit command buffers to the GPU. Does not wait for completion.
+ * @brief Submit one or more command-buffer batches to the GPU in a single call. Batches execute
+ *        in array order on the queue. Each batch is tracked independently, the returned handle
+ *        signals when the LAST batch is GPU-done.
  *
  * @param pigment Pigment instance.
- * @param cmds Command buffers to submit, executed in array order.
- * @param count Number of command buffers in the array.
+ * @param submits Array of submit descriptors. Each one is an independent group of command buffers.
+ * @param submit_count Number of submits in the array.
  *
- * @return Handle to query or wait for GPU completion of this submit.
+ * @return Handle to wait for the entire submission to complete (= last batch signaled).
  */
-PSubmitHandle pigment_queue_submit(Pigment* pigment, PCommandBuffer** cmds, uint32_t count);
+PSubmitHandle pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count);
 
 /**
  * @brief Returns P_TRUE if the GPU has completed all work tracked by this handle.

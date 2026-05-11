@@ -43,9 +43,10 @@ typedef struct PImageDesc {
     uint32_t array_layers;    // for arrays/cubes, otherwise 0/1
     PFormat format;
     PImageUsage usage;
-    PSampleCount samples;    // 0 or P_SAMPLE_COUNT_1 for no MSAA
-    uint32_t mip_levels;     // 0 = single mip, otherwise full chain
-    PImageType type;         // 0 = 2D
+    PSampleCount samples;         // 0 or P_SAMPLE_COUNT_1 for no MSAA
+    uint32_t mip_levels;          // 0 = single mip, otherwise full chain
+    PImageType type;              // 0 = 2D
+    PSharingMode sharing_mode;    // 0 = EXCLUSIVE (default)
     const char* name;
 } PImageDesc;
 

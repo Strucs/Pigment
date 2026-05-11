@@ -106,9 +106,10 @@ typedef enum PCommandPoolFlags {
 } PCommandPoolFlags;
 
 typedef enum PCommandBufferUsage {
-    P_CMD_BUFFER_USAGE_DEFAULT              = 0,
-    P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT  = 1 << 0,
-    P_CMD_BUFFER_USAGE_SIMULTANEOUS_USE_BIT = 1 << 1,
+    P_CMD_BUFFER_USAGE_DEFAULT                  = 0,
+    P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT      = 1 << 0,
+    P_CMD_BUFFER_USAGE_SIMULTANEOUS_USE_BIT     = 1 << 1,
+    P_CMD_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT = 1 << 2,    // secondary buffer inside a render pass
 } PCommandBufferUsage;
 
 typedef struct PCommandPoolDesc {
@@ -309,6 +310,21 @@ typedef enum PPipelineStage {
     P_PIPELINE_STAGE_ALL_GRAPHICS_BIT            = 1 << 11,
     P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1 << 12,
 } PPipelineStage;
+
+typedef enum PPipelineBindPoint {
+    P_PIPELINE_BIND_POINT_GRAPHICS = 0,
+    P_PIPELINE_BIND_POINT_COMPUTE  = 1,
+} PPipelineBindPoint;
+
+typedef enum PCommandBufferLevel {
+    P_COMMAND_BUFFER_LEVEL_PRIMARY   = 0,
+    P_COMMAND_BUFFER_LEVEL_SECONDARY = 1,
+} PCommandBufferLevel;
+
+typedef enum PSharingMode {
+    P_SHARING_MODE_EXCLUSIVE  = 0,
+    P_SHARING_MODE_CONCURRENT = 1,
+} PSharingMode;
 
 typedef enum PMemoryAccess {
     P_MEMORY_ACCESS_NONE                               = 0,

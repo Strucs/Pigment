@@ -44,7 +44,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size        = (VkDeviceSize) desc->size,
         .usage       = vk_usage,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .sharingMode = (VkSharingMode) desc->sharing_mode,
     };
 
     PVkAllocationCreateInfo alloc_info = {

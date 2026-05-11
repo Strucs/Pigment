@@ -54,17 +54,17 @@ int main(void)
         return 1;
     }
 
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, pool);
-    if(cmd == NULL)
+    PCommandBuffer* cmd = NULL;
+    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd) != PIGMENT_SUCCESS)
     {
-        fprintf(stderr, "pigment_create_command_buffer failed\n");
+        fprintf(stderr, "pigment_create_command_buffers failed\n");
         pigment_destroy_command_pool(pigment, pool);
         destroy_pigment(pigment);
         SDL_Quit();
         return 1;
     }
 
-    pigment_destroy_command_buffer(pigment, cmd);
+    pigment_destroy_command_buffers(pigment, &cmd, 1);
     pigment_destroy_command_pool(pigment, pool);
 
     pigment_drain_pending(pigment);
