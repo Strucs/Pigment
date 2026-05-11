@@ -32,26 +32,6 @@ static void pool_remove_buffer(PCommandPool* pool, PCommandBuffer* cmd);
 #define PIGMENT_POOL_BUFFERS_INITIAL_CAPACITY 4
 #define PIGMENT_CMD_USES_INITIAL_CAPACITY 16
 
-PCommandPool* create_default_command_pool(Pigment* pigment)
-{
-    PCommandPoolDesc default_desc = {
-        .queue_flags = P_QUEUE_GRAPHICS_BIT,
-        .flags       = P_COMMAND_POOL_FLAG_RESET_BUFFER,
-    };
-
-    return create_command_pool_internal(pigment, &default_desc);
-}
-
-void destroy_default_command_pool(Pigment* pigment)
-{
-    if(pigment == NULL || pigment->default_command_pool == NULL)
-    {
-        return;
-    }
-    destroy_command_pool_immediate(pigment, pigment->default_command_pool);
-    pigment->default_command_pool = NULL;
-}
-
 PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc)
 {
     if(pigment == NULL || desc == NULL)
@@ -103,11 +83,6 @@ void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool)
     {
         pool->buffers[i]->use_count = 0;
     }
-}
-
-PCommandPool* pigment_default_pool(Pigment* pigment)
-{
-    return (pigment != NULL) ? pigment->default_command_pool : NULL;
 }
 
 PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count)
@@ -174,18 +149,9 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers,
 
 PCommandBuffer* pigment_create_command_buffer(Pigment* pigment, PCommandPool* pool)
 {
-    if(pigment == NULL)
+    if(pigment == NULL || pool == NULL)
     {
         return NULL;
-    }
-
-    if(pool == NULL)
-    {
-        pool = pigment_default_pool(pigment);
-        if(pool == NULL)
-        {
-            return NULL;
-        }
     }
 
     VkCommandBufferAllocateInfo alloc_info = {

@@ -15,7 +15,7 @@
  */
 
 #include "material.h"
-#include "buffers.h"
+#include "pigment.h"
 #include "log_internal.h"
 
 #include <stdlib.h>

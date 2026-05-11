@@ -15,8 +15,7 @@
  */
 
 #include "camera.h"
-#include "buffers.h"
-#include "internal.h"
+#include "pigment.h"
 #include "log_internal.h"
 #include "std_internal.h"
 

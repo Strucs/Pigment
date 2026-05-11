@@ -52,9 +52,9 @@ static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
     return temp > max ? max : temp;
 }
 
-PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles* handles, const PSwapchainDesc* desc)
+PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc)
 {
-    if(pigment == NULL || handles == NULL || desc == NULL)
+    if(pigment == NULL || pool == NULL || handles == NULL || desc == NULL)
     {
         return NULL;
     }
@@ -98,10 +98,11 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
-    renderer->surface     = surface;
-    renderer->desc        = *desc;
-    renderer->desc.width  = width;
-    renderer->desc.height = height;
+    renderer->surface      = surface;
+    renderer->command_pool = pool;
+    renderer->desc         = *desc;
+    renderer->desc.width   = width;
+    renderer->desc.height  = height;
 
     renderer->swapchain = create_swapchain(pigment, &renderer->desc, surface, NULL);
     if(renderer->swapchain == NULL)
@@ -109,7 +110,7 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
-    renderer->command_buffers = create_command_buffers(pigment, pigment_default_pool(pigment), pigment->config.max_frames_in_flight);
+    renderer->command_buffers = create_command_buffers(pigment, pool, pigment->config.max_frames_in_flight);
     if(renderer->command_buffers == NULL)
     {
         goto ERROR;

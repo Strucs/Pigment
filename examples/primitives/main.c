@@ -12,6 +12,7 @@ int main(void)
 
     SDL_Window* window                  = NULL;
     Pigment* pigment                    = NULL;
+    PCommandPool* pool                  = NULL;
     PWindowRenderer* renderer           = NULL;
     PStdBindless* bindless              = NULL;
     PCamera* camera                     = NULL;
@@ -71,6 +72,18 @@ int main(void)
         goto FREE;
     }
 
+    PCommandPoolDesc pool_desc = {
+        .queue_flags = P_QUEUE_GRAPHICS_BIT,
+        .flags       = P_COMMAND_POOL_FLAG_RESET_BUFFER,
+        .name        = "primitives_pool",
+    };
+    pool = pigment_create_command_pool(pigment, &pool_desc);
+    if(pool == NULL)
+    {
+        fprintf(stderr, "Failed to create command pool!\n");
+        goto FREE;
+    }
+
     int win_w = 0, win_h = 0;
     SDL_GetWindowSizeInPixels(window, &win_w, &win_h);
     PWindowHandles handles        = pigment_sdl_get_window_handles(window);
@@ -81,7 +94,7 @@ int main(void)
         .samples      = P_SAMPLE_COUNT_8,
     };
 
-    renderer = pigment_renderer_create(pigment, &handles, &swapchain_desc);
+    renderer = pigment_renderer_create(pigment, pool, &handles, &swapchain_desc);
     if(renderer == NULL)
     {
         fprintf(stderr, "Failed to create renderer!\n");
@@ -238,22 +251,22 @@ int main(void)
 
     PMeshData cube    = pigment_cube_mesh();
     uint32_t cube_idx = cube.index_count;
-    gpu_cube          = pigment_upload_mesh_data(pigment, &cube);
+    gpu_cube          = pigment_upload_mesh_data(pigment, pool, &cube);
     pigment_free_mesh_data(&cube);
 
     PMeshData sphere    = pigment_sphere_mesh(32, 32);
     uint32_t sphere_idx = sphere.index_count;
-    gpu_sphere          = pigment_upload_mesh_data(pigment, &sphere);
+    gpu_sphere          = pigment_upload_mesh_data(pigment, pool, &sphere);
     pigment_free_mesh_data(&sphere);
 
     PMeshData plane    = pigment_plane_mesh(8);
     uint32_t plane_idx = plane.index_count;
-    gpu_plane          = pigment_upload_mesh_data(pigment, &plane);
+    gpu_plane          = pigment_upload_mesh_data(pigment, pool, &plane);
     pigment_free_mesh_data(&plane);
 
     PMeshData quad    = pigment_quad_mesh();
     uint32_t quad_idx = quad.index_count;
-    gpu_quad          = pigment_upload_mesh_data(pigment, &quad);
+    gpu_quad          = pigment_upload_mesh_data(pigment, pool, &quad);
     pigment_free_mesh_data(&quad);
 
     if(gpu_cube == NULL || gpu_sphere == NULL || gpu_plane == NULL || gpu_quad == NULL)
@@ -409,6 +422,7 @@ FREE:
     pigment_destroy_pipeline(pigment, skybox_pipeline);
     pigment_destroy_pipeline(pigment, crt_pipeline);
     pigment_renderer_destroy(pigment, renderer);
+    pigment_destroy_command_pool(pigment, pool);
     pigment_std_destroy_render_target(pigment, rt);
     pigment_std_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);

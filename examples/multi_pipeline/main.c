@@ -14,6 +14,7 @@ int main(void)
 
     SDL_Window* window               = NULL;
     Pigment* pigment                 = NULL;
+    PCommandPool* pool               = NULL;
     PWindowRenderer* renderer        = NULL;
     PStdBindless* bindless           = NULL;
     PCamera* camera                  = NULL;
@@ -67,6 +68,18 @@ int main(void)
         goto FREE;
     }
 
+    PCommandPoolDesc pool_desc = {
+        .queue_flags = P_QUEUE_GRAPHICS_BIT,
+        .flags       = P_COMMAND_POOL_FLAG_RESET_BUFFER,
+        .name        = "multi_pipeline_pool",
+    };
+    pool = pigment_create_command_pool(pigment, &pool_desc);
+    if(pool == NULL)
+    {
+        fprintf(stderr, "Failed to create command pool!\n");
+        goto FREE;
+    }
+
     int win_w = 0, win_h = 0;
     SDL_GetWindowSizeInPixels(window, &win_w, &win_h);
     PWindowHandles handles        = pigment_sdl_get_window_handles(window);
@@ -75,7 +88,7 @@ int main(void)
         .height = (uint32_t) win_h,
     };
 
-    renderer = pigment_renderer_create(pigment, &handles, &swapchain_desc);
+    renderer = pigment_renderer_create(pigment, pool, &handles, &swapchain_desc);
     if(renderer == NULL)
     {
         fprintf(stderr, "Failed to create renderer!\n");
@@ -172,6 +185,7 @@ int main(void)
 
     gpu_mesh = pigment_std_upload_mesh(
         pigment,
+        pool,
         asset->vertices,
         asset->vertex_count * sizeof(PVertex),
         asset->indices,
@@ -218,6 +232,7 @@ int main(void)
 
     gpu_mesh2 = pigment_std_upload_mesh(
         pigment,
+        pool,
         asset2->vertices,
         asset2->vertex_count * sizeof(PVertex),
         asset2->indices,
@@ -322,6 +337,7 @@ FREE:
     pigment_destroy_pipeline(pigment, pipelines[0]);
     pigment_destroy_pipeline(pigment, pipelines[1]);
     pigment_renderer_destroy(pigment, renderer);
+    pigment_destroy_command_pool(pigment, pool);
     pigment_std_destroy_camera(pigment, camera);
     pigment_std_destroy_instance_ring(pigment, ring);
     pigment_std_destroy_lights(pigment, lights);

@@ -119,9 +119,6 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
 VkSampleCountFlags supported_sample_counts(Pigment* pigment);
 
 // commands.c
-PCommandPool* pigment_default_pool(Pigment* pigment);
-PCommandPool* create_default_command_pool(Pigment* pigment);
-void destroy_default_command_pool(Pigment* pigment);
 PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count);
 void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count);
 void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint64_t value);

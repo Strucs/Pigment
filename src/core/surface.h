@@ -19,7 +19,7 @@
 
 #include "defines.h"
 
-PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles* handles, const PSwapchainDesc* desc);
+PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc);
 void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer);
 void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height);
 void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);

@@ -105,7 +105,6 @@ struct Pigment {
     PDevice* device;
     PVkAllocator* allocator;
     PBool owns_allocator;
-    PCommandPool* default_command_pool;
 
     PSwapchainCallbackList* swapchain_callbacks;
 
@@ -119,6 +118,7 @@ struct PWindowRenderer {
     PSurface* surface;
     PSwapchain* swapchain;
     PSync* sync;
+    PCommandPool* command_pool;
     PCommandBuffer** command_buffers;
     uint32_t current_image_index;
     PBool needs_recreate;

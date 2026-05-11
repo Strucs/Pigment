@@ -16,9 +16,9 @@
 
 #include "mesh.h"
 
-PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
+PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
 {
-    if(pigment == NULL || vertices == NULL || vertices_size == 0 || indices == NULL || index_count == 0)
+    if(pigment == NULL || pool == NULL || vertices == NULL || vertices_size == 0 || indices == NULL || index_count == 0)
     {
         return NULL;
     }
@@ -39,7 +39,7 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, const void* vertices, si
     {
         goto ERROR;
     }
-    pigment_buffer_upload(pigment, mesh->vertex_buffer, vertices, vertices_size, 0);
+    pigment_buffer_upload(pigment, pool, mesh->vertex_buffer, vertices, vertices_size, 0);
 
     PBufferDesc index_buffer_desc = {
         .size   = (uint64_t) index_count * sizeof(uint32_t),
@@ -51,7 +51,7 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, const void* vertices, si
     {
         goto ERROR;
     }
-    pigment_buffer_upload(pigment, mesh->index_buffer, indices, index_buffer_desc.size, 0);
+    pigment_buffer_upload(pigment, pool, mesh->index_buffer, indices, index_buffer_desc.size, 0);
 
     mesh->index_count = index_count;
     mesh->index_type  = P_INDEX_TYPE_UINT32;

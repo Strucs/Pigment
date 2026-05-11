@@ -132,9 +132,9 @@ VkBuffer pigment_vk_buffer(PBuffer* buffer)
     return (buffer != NULL) ? buffer->buffer : VK_NULL_HANDLE;
 }
 
-PSubmitHandle pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* data, uint64_t size, uint64_t offset)
+PSubmitHandle pigment_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer* dst, const void* data, uint64_t size, uint64_t offset)
 {
-    if(pigment == NULL || dst == NULL || data == NULL || size == 0)
+    if(pigment == NULL || pool == NULL || dst == NULL || data == NULL || size == 0)
     {
         return (PSubmitHandle) {0};
     }
@@ -165,7 +165,7 @@ PSubmitHandle pigment_buffer_upload(Pigment* pigment, PBuffer* dst, const void* 
 
     memcpy(staging->mapped, data, (size_t) size);
 
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, NULL);
+    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, pool);
     if(cmd == NULL)
     {
         pigment_destroy_buffer(pigment, staging);

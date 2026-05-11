@@ -15,15 +15,12 @@
  */
 
 #include "draw.h"
+#include "pigment.h"
 #include "material.h"
 #include "lights.h"
 #include "bindless.h"
-#include "buffers.h"
 #include "camera.h"
-#include "descriptor.h"
-#include "frame.h"
 #include "std_internal.h"
-#include "internal.h"
 #include "log_internal.h"
 
 #include <stdlib.h>

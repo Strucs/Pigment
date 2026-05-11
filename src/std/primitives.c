@@ -265,11 +265,11 @@ void pigment_free_mesh_data(PMeshData* mesh)
     mesh->index_count  = 0;
 }
 
-PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, const PMeshData* data)
+PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data)
 {
     if(data == NULL || data->vertices == NULL || data->indices == NULL)
     {
         return NULL;
     }
-    return pigment_std_upload_mesh(pigment, data->vertices, data->vertex_count * sizeof(PVertex), data->indices, data->index_count);
+    return pigment_std_upload_mesh(pigment, pool, data->vertices, data->vertex_count * sizeof(PVertex), data->indices, data->index_count);
 }

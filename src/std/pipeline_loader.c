@@ -15,9 +15,8 @@
  */
 
 #include "pipeline_loader.h"
+#include "pigment.h"
 #include "std_internal.h"
-#include "internal.h"
-#include "frame.h"
 #include "log_internal.h"
 
 #include <stdalign.h>

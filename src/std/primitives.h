@@ -35,6 +35,6 @@ PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments);
 
 void pigment_free_mesh_data(PMeshData* mesh);
 
-PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, const PMeshData* data);
+PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data);
 
 #endif

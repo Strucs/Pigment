@@ -15,11 +15,9 @@
  */
 
 #include "lights.h"
-#include "buffers.h"
+#include "pigment.h"
 #include "camera.h"
-#include "frame.h"
 #include "std_internal.h"
-#include "internal.h"
 #include "log_internal.h"
 
 #include <stdlib.h>

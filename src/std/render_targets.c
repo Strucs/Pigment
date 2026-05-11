@@ -16,11 +16,8 @@
 
 #include "render_targets.h"
 
-#include "image.h"
-#include "log_internal.h"
 #include "pigment.h"
-#include "swapchain_event.h"
-#include "surface.h"
+#include "log_internal.h"
 
 #include <stdlib.h>
 

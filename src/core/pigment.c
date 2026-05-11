@@ -78,11 +78,6 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     {
         goto ERROR;
     }
-    pigment->default_command_pool = create_default_command_pool(pigment);
-    if(pigment->default_command_pool == NULL)
-    {
-        goto ERROR;
-    }
 
     pigment->swapchain_callbacks = create_swapchain_callback_list();
     if(pigment->swapchain_callbacks == NULL)
@@ -116,7 +111,6 @@ void destroy_pigment(Pigment* pigment)
     destroy_deletion_queue(pigment, pigment->deletions);
 
     destroy_swapchain_callback_list(pigment->swapchain_callbacks);
-    destroy_default_command_pool(pigment);
     if(pigment->owns_allocator)
     {
         pigment_vk_destroy_allocator(pigment->allocator);
