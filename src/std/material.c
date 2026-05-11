@@ -53,7 +53,7 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
     PBufferDesc desc = {
         .size   = (uint64_t) max_materials * sizeof(PMaterialDesc),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_VISIBLE,
+        .memory = P_MEMORY_HOST_UPLOAD,
     };
     materials->buffer = pigment_create_buffer(pigment, &desc);
     if(materials->buffer == NULL)
@@ -111,19 +111,21 @@ uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, co
 
     PMaterialDesc* slot = (PMaterialDesc*) pigment_buffer_mapped(materials->buffer) + id;
     *slot               = *desc;
+    pigment_buffer_flush(pigment, materials->buffer, (uint64_t) id * sizeof(PMaterialDesc), sizeof(PMaterialDesc));
 
     return id;
 }
 
-void pigment_std_material_update(PMaterials* materials, uint32_t id, const PMaterialDesc* desc)
+void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32_t id, const PMaterialDesc* desc)
 {
-    if(materials == NULL || desc == NULL || id >= materials->capacity)
+    if(pigment == NULL || materials == NULL || desc == NULL || id >= materials->capacity)
     {
         return;
     }
 
     PMaterialDesc* slot = (PMaterialDesc*) pigment_buffer_mapped(materials->buffer) + id;
     *slot               = *desc;
+    pigment_buffer_flush(pigment, materials->buffer, (uint64_t) id * sizeof(PMaterialDesc), sizeof(PMaterialDesc));
 }
 
 void pigment_std_material_destroy(PMaterials* materials, uint32_t id)

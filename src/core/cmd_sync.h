@@ -22,12 +22,18 @@ typedef struct PSyncFlags {
     PMemoryAccess access;
 } PSyncFlags;
 
+typedef enum PDependencyFlags {
+    P_DEPENDENCY_NONE      = 0,
+    P_DEPENDENCY_BY_REGION = 1 << 0,
+} PDependencyFlags;
+
 typedef struct PImageBarrier {
     PImage* image;
     PImageLayout old_layout;
     PImageLayout new_layout;
     PSyncFlags src;
     PSyncFlags dst;
+    PDependencyFlags flags;
     uint32_t base_mip;
     uint32_t mip_count;    // 0 = remaining
     uint32_t base_layer;
@@ -40,6 +46,7 @@ typedef struct PBufferBarrier {
     PBuffer* buffer;
     PSyncFlags src;
     PSyncFlags dst;
+    PDependencyFlags flags;
     uint64_t offset;
     uint64_t size;                // 0 = whole buffer
     uint32_t src_queue_family;    // equal to dst_queue_family = no ownership transfer
@@ -49,6 +56,7 @@ typedef struct PBufferBarrier {
 typedef struct PMemoryBarrier {
     PSyncFlags src;
     PSyncFlags dst;
+    PDependencyFlags flags;
 } PMemoryBarrier;
 
 void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PImageBarrier* barriers, uint32_t count);

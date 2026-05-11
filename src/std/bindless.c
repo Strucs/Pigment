@@ -726,7 +726,7 @@ static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image
     PBufferDesc staging_desc = {
         .size   = total_size,
         .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
-        .memory = P_MEMORY_HOST_VISIBLE,
+        .memory = P_MEMORY_HOST_UPLOAD,
     };
 
     *out_staging = pigment_create_buffer(pigment, &staging_desc);
@@ -740,6 +740,7 @@ static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image
     {
         memcpy(mapped + i * layer_size, layer_data[i], (size_t) layer_size);
     }
+    pigment_buffer_flush(pigment, *out_staging, 0, total_size);
 
     PImageDesc image_desc = {
         .width        = width,

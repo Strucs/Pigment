@@ -48,11 +48,11 @@ typedef struct PLightDesc {
 PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights);
 void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);
 
-void pigment_std_set_ambient(PLights* lights, vec3 color);
+void pigment_std_set_ambient(Pigment* pigment, PLights* lights, vec3 color);
 
 uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc);
-void pigment_std_light_update(PLights* lights, uint32_t id, const PLightDesc* desc);
-void pigment_std_light_destroy(PLights* lights, uint32_t id);
+void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc);
+void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id);
 
 uint64_t pigment_std_light_address(PLights* lights);
 

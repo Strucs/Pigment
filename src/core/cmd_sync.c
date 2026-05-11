@@ -21,6 +21,7 @@
 
 static VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);
 static VkAccessFlags2 memory_access_to_vk(PMemoryAccess access);
+static VkDependencyFlags dep_flags_to_vk(PDependencyFlags flags);
 
 void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PImageBarrier* barriers, uint32_t count)
 {
@@ -35,6 +36,7 @@ void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PIm
         return;
     }
 
+    VkDependencyFlags vk_dep_flags = 0;
     for(uint32_t i = 0; i < count; i++)
     {
         const PImageBarrier* b = &barriers[i];
@@ -57,10 +59,12 @@ void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PIm
             .image               = b->image->image,
             .subresourceRange    = {b->image->aspect, b->base_mip, mip_count, b->base_layer, layer_count},
         };
+        vk_dep_flags |= dep_flags_to_vk(b->flags);
     }
 
     VkDependencyInfo dep = {
         .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags         = vk_dep_flags,
         .imageMemoryBarrierCount = count,
         .pImageMemoryBarriers    = vk_barriers,
     };
@@ -83,6 +87,7 @@ void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PB
         return;
     }
 
+    VkDependencyFlags vk_dep_flags = 0;
     for(uint32_t i = 0; i < count; i++)
     {
         const PBufferBarrier* b = &barriers[i];
@@ -101,10 +106,12 @@ void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PB
             .offset              = b->offset,
             .size                = (b->size == 0) ? VK_WHOLE_SIZE : b->size,
         };
+        vk_dep_flags |= dep_flags_to_vk(b->flags);
     }
 
     VkDependencyInfo dep = {
         .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags          = vk_dep_flags,
         .bufferMemoryBarrierCount = count,
         .pBufferMemoryBarriers    = vk_barriers,
     };
@@ -127,6 +134,7 @@ void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PM
         return;
     }
 
+    VkDependencyFlags vk_dep_flags = 0;
     for(uint32_t i = 0; i < count; i++)
     {
         const PMemoryBarrier* b = &barriers[i];
@@ -138,10 +146,12 @@ void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PM
             .dstStageMask  = pipeline_stage_to_vk(b->dst.stages),
             .dstAccessMask = memory_access_to_vk(b->dst.access),
         };
+        vk_dep_flags |= dep_flags_to_vk(b->flags);
     }
 
     VkDependencyInfo dep = {
         .sType              = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .dependencyFlags    = vk_dep_flags,
         .memoryBarrierCount = count,
         .pMemoryBarriers    = vk_barriers,
     };
@@ -271,6 +281,24 @@ static VkAccessFlags2 memory_access_to_vk(PMemoryAccess access)
     if(access & P_MEMORY_ACCESS_HOST_WRITE_BIT)
     {
         out |= VK_ACCESS_2_HOST_WRITE_BIT;
+    }
+    if(access & P_MEMORY_ACCESS_MEMORY_READ_BIT)
+    {
+        out |= VK_ACCESS_2_MEMORY_READ_BIT;
+    }
+    if(access & P_MEMORY_ACCESS_MEMORY_WRITE_BIT)
+    {
+        out |= VK_ACCESS_2_MEMORY_WRITE_BIT;
+    }
+    return out;
+}
+
+static VkDependencyFlags dep_flags_to_vk(PDependencyFlags flags)
+{
+    VkDependencyFlags out = 0;
+    if(flags & P_DEPENDENCY_BY_REGION)
+    {
+        out |= VK_DEPENDENCY_BY_REGION_BIT;
     }
     return out;
 }

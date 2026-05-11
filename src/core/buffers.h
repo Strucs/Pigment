@@ -31,8 +31,9 @@ typedef enum PBufferUsage {
 } PBufferUsage;
 
 typedef enum PMemoryType {
-    P_MEMORY_GPU_ONLY     = 0,
-    P_MEMORY_HOST_VISIBLE = 1,
+    P_MEMORY_GPU_ONLY      = 0,
+    P_MEMORY_HOST_UPLOAD   = 1,    // CPU->GPU (HOST_VISIBLE, prefer HOST_COHERENT + DEVICE_LOCAL via ReBAR)
+    P_MEMORY_HOST_READBACK = 2,    // GPU->CPU (HOST_VISIBLE + HOST_CACHED, prefer HOST_COHERENT)
 } PMemoryType;
 
 typedef enum PIndexType {
@@ -47,12 +48,22 @@ typedef struct PBufferDesc {
     const char* name;
 } PBufferDesc;
 
+typedef struct PBufferCopy {
+    uint64_t src_offset;
+    uint64_t dst_offset;
+    uint64_t size;
+} PBufferCopy;
+
 PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc);
 void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
 
 void* pigment_buffer_mapped(PBuffer* buffer);
 uint64_t pigment_buffer_address(PBuffer* buffer);
+uint64_t pigment_buffer_size(PBuffer* buffer);
 
-PSubmitHandle pigment_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer* dst, const void* data, uint64_t size, uint64_t offset);
+void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
+void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
+
+void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count);
 
 #endif

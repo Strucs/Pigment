@@ -47,7 +47,7 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
 void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials);
 
 uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, const PMaterialDesc* desc);
-void pigment_std_material_update(PMaterials* materials, uint32_t id, const PMaterialDesc* desc);
+void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32_t id, const PMaterialDesc* desc);
 void pigment_std_material_destroy(PMaterials* materials, uint32_t id);
 
 uint64_t pigment_std_material_address(PMaterials* materials);

@@ -20,6 +20,7 @@
 #include "std_internal.h"
 #include "log_internal.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -70,7 +71,7 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
     PBufferDesc desc = {
         .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) max_lights * sizeof(PLightDesc),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_VISIBLE,
+        .memory = P_MEMORY_HOST_UPLOAD,
     };
     lights->buffer = pigment_create_buffer(pigment, &desc);
     if(lights->buffer == NULL)
@@ -88,6 +89,7 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
     header->ambient_color[0] = 0.05f;
     header->ambient_color[1] = 0.05f;
     header->ambient_color[2] = 0.05f;
+    pigment_buffer_flush(pigment, lights->buffer, 0, sizeof(PLightsHeader));
 
     return lights;
 
@@ -98,9 +100,9 @@ ERROR:
     return NULL;
 }
 
-void pigment_std_set_ambient(PLights* lights, vec3 color)
+void pigment_std_set_ambient(Pigment* pigment, PLights* lights, vec3 color)
 {
-    if(lights == NULL)
+    if(pigment == NULL || lights == NULL)
     {
         return;
     }
@@ -109,6 +111,7 @@ void pigment_std_set_ambient(PLights* lights, vec3 color)
     header->ambient_color[0] = color[0];
     header->ambient_color[1] = color[1];
     header->ambient_color[2] = color[2];
+    pigment_buffer_flush(pigment, lights->buffer, offsetof(PLightsHeader, ambient_color), sizeof(header->ambient_color));
 }
 
 void pigment_std_destroy_lights(Pigment* pigment, PLights* lights)
@@ -131,6 +134,7 @@ uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLigh
     }
 
     uint32_t id;
+    PBool count_changed = P_FALSE;
     if(lights->free_count > 0)
     {
         id = lights->free_slots[--lights->free_count];
@@ -139,6 +143,7 @@ uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLigh
     {
         id                           = lights->count++;
         lights_header(lights)->count = lights->count;
+        count_changed                = P_TRUE;
     }
     else
     {
@@ -148,28 +153,36 @@ uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLigh
 
     lights_data(lights)[id] = *desc;
 
+    if(count_changed)
+    {
+        pigment_buffer_flush(pigment, lights->buffer, offsetof(PLightsHeader, count), sizeof(lights_header(lights)->count));
+    }
+    pigment_buffer_flush(pigment, lights->buffer, sizeof(PLightsHeader) + (uint64_t) id * sizeof(PLightDesc), sizeof(PLightDesc));
+
     return id;
 }
 
-void pigment_std_light_update(PLights* lights, uint32_t id, const PLightDesc* desc)
+void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc)
 {
-    if(lights == NULL || desc == NULL || id >= lights->capacity)
+    if(pigment == NULL || lights == NULL || desc == NULL || id >= lights->capacity)
     {
         return;
     }
 
     lights_data(lights)[id] = *desc;
+    pigment_buffer_flush(pigment, lights->buffer, sizeof(PLightsHeader) + (uint64_t) id * sizeof(PLightDesc), sizeof(PLightDesc));
 }
 
-void pigment_std_light_destroy(PLights* lights, uint32_t id)
+void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id)
 {
-    if(lights == NULL || id >= lights->capacity || lights->free_count >= lights->capacity)
+    if(pigment == NULL || lights == NULL || id >= lights->capacity || lights->free_count >= lights->capacity)
     {
         return;
     }
 
     lights_data(lights)[id].type             = P_LIGHT_TYPE_INVALID;
     lights->free_slots[lights->free_count++] = id;
+    pigment_buffer_flush(pigment, lights->buffer, sizeof(PLightsHeader) + (uint64_t) id * sizeof(PLightDesc) + offsetof(PLightDesc, type), sizeof(lights_data(lights)[id].type));
 }
 
 uint64_t pigment_std_light_address(PLights* lights)
@@ -194,7 +207,7 @@ void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, 
     uint64_t camera_slot_address = 0;
     if(camera != NULL)
     {
-        pigment_std_camera_upload(camera, current_frame);
+        pigment_std_camera_upload(pigment, camera, current_frame);
         camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, current_frame);
     }
 

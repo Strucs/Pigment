@@ -14,21 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_STD_CAMERA_H
-#define PIGMENT_STD_CAMERA_H
+#ifndef PIGMENT_STD_UPLOAD_H
+#define PIGMENT_STD_UPLOAD_H
 
-#include <cglm/types.h>
 #include "defines.h"
 
-typedef struct PCamera PCamera;
+typedef struct PBufferUploadDesc {
+    const void* data;
+    uint64_t size;
+    uint64_t offset;
+} PBufferUploadDesc;
 
-PCamera* pigment_std_create_camera(Pigment* pigment);
-void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
-
-void pigment_std_camera_set_view(PCamera* camera, mat4 view);
-void pigment_std_camera_set_projection(PCamera* camera, mat4 projection);
-
-uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
-void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);
+PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer* dst, const PBufferUploadDesc* desc, PSubmitHandle* out_handle);
 
 #endif

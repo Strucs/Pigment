@@ -135,7 +135,7 @@ int main(void)
     pigment_std_light_create(pigment, lights, &light_point);
 
     vec3 ambient_color = {0.0f, 0.0f, 0.0f};
-    pigment_std_set_ambient(lights, ambient_color);
+    pigment_std_set_ambient(pigment, lights, ambient_color);
 
     vec3 camera_position = {1.5f, 0.0f, 5.0f};
     camera               = pigment_std_create_camera(pigment);

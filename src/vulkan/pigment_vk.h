@@ -98,6 +98,10 @@ struct PVkAllocator {
     VkResult (*map)(void* user_data, PVkAllocation* allocation, void** out_data);
     void (*unmap)(void* user_data, PVkAllocation* allocation);
 
+    VkMemoryPropertyFlags (*get_memory_flags)(void* user_data, PVkAllocation* allocation);
+    void (*flush)(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size);
+    void (*invalidate)(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size);
+
     void (*destroy)(void* user_data);
 };
 

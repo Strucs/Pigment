@@ -56,7 +56,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
     PBufferDesc desc = {
         .size   = (uint64_t) camera->frame_count * sizeof(PCameraData),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_VISIBLE,
+        .memory = P_MEMORY_HOST_UPLOAD,
     };
     camera->buffer = pigment_create_buffer(pigment, &desc);
     if(camera->buffer == NULL)
@@ -100,9 +100,9 @@ void pigment_std_camera_set_projection(PCamera* camera, mat4 projection)
     camera->dirty = P_TRUE;
 }
 
-void pigment_std_camera_upload(PCamera* camera, uint32_t current_frame)
+void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame)
 {
-    if(camera == NULL || current_frame >= camera->frame_count)
+    if(pigment == NULL || camera == NULL || current_frame >= camera->frame_count)
     {
         return;
     }
@@ -112,6 +112,7 @@ void pigment_std_camera_upload(PCamera* camera, uint32_t current_frame)
     }
     PCameraData* slot = (PCameraData*) pigment_buffer_mapped(camera->buffer) + current_frame;
     *slot             = camera->data;
+    pigment_buffer_flush(pigment, camera->buffer, (uint64_t) current_frame * sizeof(PCameraData), sizeof(PCameraData));
 
     camera->last_uploaded_frame = current_frame;
     camera->dirty               = P_FALSE;

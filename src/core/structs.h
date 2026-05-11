@@ -339,6 +339,7 @@ struct PBuffer {
     VkDeviceAddress address;
     void* mapped;
     uint64_t size;
+    VkMemoryPropertyFlags memory_flags;
     PResourceTracker tracker;
 };
 

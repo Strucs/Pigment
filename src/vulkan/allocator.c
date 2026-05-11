@@ -48,6 +48,7 @@ typedef struct DefaultAllocator {
     Pigment* pigment;
     VkDevice device;
     VkPhysicalDeviceMemoryProperties memory_properties;
+    VkDeviceSize non_coherent_atom_size;
     VkDeviceSize block_size;
     VkDeviceSize dedicated_threshold;
     DefaultPool pools[VK_MAX_MEMORY_TYPES];
@@ -81,6 +82,9 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
 static void default_destroy_image(void* user_data, VkImage image, PVkAllocation* allocation);
 static VkResult default_map(void* user_data, PVkAllocation* allocation, void** out_data);
 static void default_unmap(void* user_data, PVkAllocation* allocation);
+static VkMemoryPropertyFlags default_get_memory_flags(void* user_data, PVkAllocation* allocation);
+static void default_flush(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size);
+static void default_invalidate(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size);
 static void default_destroy(void* user_data);
 
 PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info)
@@ -100,19 +104,30 @@ PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDef
     alloc->device  = pigment->device->logical_device;
     vkGetPhysicalDeviceMemoryProperties(pigment->device->physical_device, &alloc->memory_properties);
 
+    VkPhysicalDeviceProperties device_properties;
+    vkGetPhysicalDeviceProperties(pigment->device->physical_device, &device_properties);
+    alloc->non_coherent_atom_size = device_properties.limits.nonCoherentAtomSize;
+    if(alloc->non_coherent_atom_size == 0)
+    {
+        alloc->non_coherent_atom_size = 1;
+    }
+
     alloc->block_size          = (info != NULL && info->block_size != 0) ? info->block_size : DEFAULT_BLOCK_SIZE;
     alloc->dedicated_threshold = alloc->block_size / DEDICATED_THRESHOLD_DIVISOR;
 
     (void) pigment_rwlock_init(&alloc->lock);
 
-    alloc->vtable.user_data      = alloc;
-    alloc->vtable.create_buffer  = default_create_buffer;
-    alloc->vtable.destroy_buffer = default_destroy_buffer;
-    alloc->vtable.create_image   = default_create_image;
-    alloc->vtable.destroy_image  = default_destroy_image;
-    alloc->vtable.map            = default_map;
-    alloc->vtable.unmap          = default_unmap;
-    alloc->vtable.destroy        = default_destroy;
+    alloc->vtable.user_data        = alloc;
+    alloc->vtable.create_buffer    = default_create_buffer;
+    alloc->vtable.destroy_buffer   = default_destroy_buffer;
+    alloc->vtable.create_image     = default_create_image;
+    alloc->vtable.destroy_image    = default_destroy_image;
+    alloc->vtable.map              = default_map;
+    alloc->vtable.unmap            = default_unmap;
+    alloc->vtable.get_memory_flags = default_get_memory_flags;
+    alloc->vtable.flush            = default_flush;
+    alloc->vtable.invalidate       = default_invalidate;
+    alloc->vtable.destroy          = default_destroy;
 
     return &alloc->vtable;
 }
@@ -658,6 +673,71 @@ static void default_unmap(void* user_data, PVkAllocation* allocation)
 {
     (void) user_data;
     (void) allocation;
+}
+
+static VkMemoryPropertyFlags default_get_memory_flags(void* user_data, PVkAllocation* allocation)
+{
+    DefaultAllocator* alloc = (DefaultAllocator*) user_data;
+    if(allocation == NULL || allocation->memory_type_index >= alloc->memory_properties.memoryTypeCount)
+    {
+        return 0;
+    }
+    return alloc->memory_properties.memoryTypes[allocation->memory_type_index].propertyFlags;
+}
+
+static PBool build_mapped_range(DefaultAllocator* alloc, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size, VkMappedMemoryRange* out_range)
+{
+    if(allocation == NULL || allocation->mapped == NULL)
+    {
+        return P_FALSE;
+    }
+
+    if(offset >= allocation->size)
+    {
+        return P_FALSE;
+    }
+
+    VkDeviceSize clamped_size = (size == VK_WHOLE_SIZE) ? (allocation->size - offset) : size;
+    if(offset + clamped_size > allocation->size)
+    {
+        clamped_size = allocation->size - offset;
+    }
+
+    VkDeviceSize atom          = alloc->non_coherent_atom_size;
+    VkDeviceSize start         = allocation->offset + offset;
+    VkDeviceSize aligned_start = (start / atom) * atom;
+    VkDeviceSize end           = start + clamped_size;
+    VkDeviceSize aligned_end   = ((end + atom - 1) / atom) * atom;
+
+    out_range->sType  = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+    out_range->pNext  = NULL;
+    out_range->memory = allocation->memory;
+    out_range->offset = aligned_start;
+    out_range->size   = aligned_end - aligned_start;
+
+    return P_TRUE;
+}
+
+static void default_flush(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size)
+{
+    DefaultAllocator* alloc = (DefaultAllocator*) user_data;
+    VkMappedMemoryRange range;
+    if(!build_mapped_range(alloc, allocation, offset, size, &range))
+    {
+        return;
+    }
+    vkFlushMappedMemoryRanges(alloc->device, 1, &range);
+}
+
+static void default_invalidate(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size)
+{
+    DefaultAllocator* alloc = (DefaultAllocator*) user_data;
+    VkMappedMemoryRange range;
+    if(!build_mapped_range(alloc, allocation, offset, size, &range))
+    {
+        return;
+    }
+    vkInvalidateMappedMemoryRanges(alloc->device, 1, &range);
 }
 
 static void default_destroy(void* user_data)

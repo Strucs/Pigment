@@ -51,7 +51,7 @@ PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_i
     PBufferDesc desc     = {
         .size   = (uint64_t) max_instances_per_frame * frame_count * sizeof(PInstanceData),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_VISIBLE,
+        .memory = P_MEMORY_HOST_UPLOAD,
     };
     ring->buffer = pigment_create_buffer(pigment, &desc);
     if(ring->buffer == NULL)
@@ -98,12 +98,13 @@ void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bin
     }
 
     uint32_t slot_base              = current_frame * ring->per_frame_capacity;
+    uint32_t initial_cursor         = ring->cursor;
     PInstanceData* instances_mapped = (PInstanceData*) pigment_buffer_mapped(ring->buffer);
 
     uint64_t camera_slot_address = 0;
     if(camera != NULL)
     {
-        pigment_std_camera_upload(camera, current_frame);
+        pigment_std_camera_upload(pigment, camera, current_frame);
         camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, current_frame);
     }
 
@@ -137,6 +138,13 @@ void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bin
         pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
         pigment_cmd_draw_indexed(pigment, cmd, draw_call->mesh->index_buffer, draw_call->mesh->index_type, 0, draw_call->first_index, draw_call->index_count, 0, draw_call->instance_count, first_instance);
     }
+
+    if(ring->cursor > initial_cursor)
+    {
+        uint64_t flush_offset = (uint64_t) (slot_base + initial_cursor) * sizeof(PInstanceData);
+        uint64_t flush_size   = (uint64_t) (ring->cursor - initial_cursor) * sizeof(PInstanceData);
+        pigment_buffer_flush(pigment, ring->buffer, flush_offset, flush_size);
+    }
 }
 
 void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
@@ -151,7 +159,7 @@ void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBi
 
     pigment_cmd_bind_descriptor_set(pigment, cmd, pipeline, 0, pigment_std_bindless_set(pigment, bindless, current_frame));
 
-    pigment_std_camera_upload(camera, current_frame);
+    pigment_std_camera_upload(pigment, camera, current_frame);
 
     PStdSkyboxPushConstants push = {
         .camera_buffer = (uint64_t) pigment_std_camera_frame_address(camera, current_frame),

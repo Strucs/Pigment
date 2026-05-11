@@ -51,14 +51,21 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         .debug_name = desc->name,
     };
 
-    if(desc->memory == P_MEMORY_HOST_VISIBLE)
+    switch(desc->memory)
     {
-        alloc_info.required_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        alloc_info.flags          = P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
-    }
-    else
-    {
-        alloc_info.required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        case P_MEMORY_GPU_ONLY:
+            alloc_info.required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            break;
+        case P_MEMORY_HOST_UPLOAD:
+            alloc_info.required_flags  = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            alloc_info.preferred_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            alloc_info.flags           = P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
+            break;
+        case P_MEMORY_HOST_READBACK:
+            alloc_info.required_flags  = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            alloc_info.preferred_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            alloc_info.flags           = P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
+            break;
     }
 
     PVkAllocator* alloc = pigment->allocator;
@@ -70,9 +77,10 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         return NULL;
     }
 
-    buffer->size = desc->size;
+    buffer->size         = desc->size;
+    buffer->memory_flags = alloc->get_memory_flags(alloc->user_data, buffer->allocation);
 
-    if(desc->memory == P_MEMORY_HOST_VISIBLE)
+    if(buffer->memory_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
         result = alloc->map(alloc->user_data, buffer->allocation, &buffer->mapped);
         if(result != VK_SUCCESS)
@@ -127,64 +135,75 @@ uint64_t pigment_buffer_address(PBuffer* buffer)
     return (buffer != NULL) ? (uint64_t) buffer->address : 0;
 }
 
+uint64_t pigment_buffer_size(PBuffer* buffer)
+{
+    return (buffer != NULL) ? buffer->size : 0;
+}
+
+void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size)
+{
+    if(pigment == NULL || buffer == NULL || buffer->mapped == NULL)
+    {
+        return;
+    }
+
+    if(buffer->memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    {
+        return;
+    }
+
+    PVkAllocator* alloc = pigment->allocator;
+    alloc->flush(alloc->user_data, buffer->allocation, (VkDeviceSize) offset, (size == 0) ? VK_WHOLE_SIZE : (VkDeviceSize) size);
+}
+
+void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size)
+{
+    if(pigment == NULL || buffer == NULL || buffer->mapped == NULL)
+    {
+        return;
+    }
+
+    if(buffer->memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    {
+        return;
+    }
+
+    PVkAllocator* alloc = pigment->allocator;
+    alloc->invalidate(alloc->user_data, buffer->allocation, (VkDeviceSize) offset, (size == 0) ? VK_WHOLE_SIZE : (VkDeviceSize) size);
+}
+
 VkBuffer pigment_vk_buffer(PBuffer* buffer)
 {
     return (buffer != NULL) ? buffer->buffer : VK_NULL_HANDLE;
 }
 
-PSubmitHandle pigment_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer* dst, const void* data, uint64_t size, uint64_t offset)
+void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count)
 {
-    if(pigment == NULL || pool == NULL || dst == NULL || data == NULL || size == 0)
+    if(pigment == NULL || cmd == NULL || src == NULL || dst == NULL || regions == NULL || region_count == 0)
     {
-        return (PSubmitHandle) {0};
+        return;
     }
 
-    if(offset + size > dst->size)
-    {
-        PLOG_ERROR(pigment, "Buffer upload out of range (offset=%llu, size=%llu, buffer size=%llu)", (unsigned long long) offset, (unsigned long long) size, (unsigned long long) dst->size);
-        return (PSubmitHandle) {0};
-    }
-
-    if(dst->mapped != NULL)
-    {
-        memcpy((unsigned char*) dst->mapped + offset, data, (size_t) size);
-        return (PSubmitHandle) {0};
-    }
-
-    PBufferDesc staging_desc = {
-        .size   = size,
-        .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
-        .memory = P_MEMORY_HOST_VISIBLE,
-    };
-
-    PBuffer* staging = pigment_create_buffer(pigment, &staging_desc);
-    if(staging == NULL)
-    {
-        return (PSubmitHandle) {0};
-    }
-
-    memcpy(staging->mapped, data, (size_t) size);
-
-    PCommandBuffer* cmd = pigment_create_command_buffer(pigment, pool);
-    if(cmd == NULL)
-    {
-        pigment_destroy_buffer(pigment, staging);
-        return (PSubmitHandle) {0};
-    }
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-    pigment_cmd_use_buffer(pigment, cmd, staging);
+    pigment_cmd_use_buffer(pigment, cmd, src);
     pigment_cmd_use_buffer(pigment, cmd, dst);
 
-    VkBufferCopy copy_region = {.srcOffset = 0, .dstOffset = (VkDeviceSize) offset, .size = (VkDeviceSize) size};
-    vkCmdCopyBuffer(cmd->buffer, staging->buffer, dst->buffer, 1, &copy_region);
-    pigment_end_recording(pigment, cmd);
+    VkBufferCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    if(vk_regions == NULL)
+    {
+        return;
+    }
 
-    PSubmitHandle handle = pigment_queue_submit(pigment, &cmd, 1);
+    for(uint32_t i = 0; i < region_count; i++)
+    {
+        vk_regions[i] = (VkBufferCopy) {
+            .srcOffset = (VkDeviceSize) regions[i].src_offset,
+            .dstOffset = (VkDeviceSize) regions[i].dst_offset,
+            .size      = (VkDeviceSize) regions[i].size,
+        };
+    }
 
-    pigment_destroy_command_buffer(pigment, cmd);
-    pigment_destroy_buffer(pigment, staging);
-
-    return handle;
+    vkCmdCopyBuffer(cmd->buffer, src->buffer, dst->buffer, region_count, vk_regions);
+    free(vk_regions);
 }
 
 static VkBufferUsageFlags translate_usage(PBufferUsage usage)

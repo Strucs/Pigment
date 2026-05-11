@@ -327,6 +327,8 @@ typedef enum PMemoryAccess {
     P_MEMORY_ACCESS_TRANSFER_WRITE_BIT                 = 1 << 12,
     P_MEMORY_ACCESS_HOST_READ_BIT                      = 1 << 13,
     P_MEMORY_ACCESS_HOST_WRITE_BIT                     = 1 << 14,
+    P_MEMORY_ACCESS_MEMORY_READ_BIT                    = 1 << 15,
+    P_MEMORY_ACCESS_MEMORY_WRITE_BIT                   = 1 << 16,
 } PMemoryAccess;
 
 typedef enum PImageLayout {
