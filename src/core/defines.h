@@ -256,6 +256,18 @@ typedef enum PResolveMode {
     P_RESOLVE_MODE_MAX         = 8,
 } PResolveMode;
 
+typedef enum PLoadOp {
+    P_LOAD_OP_CLEAR     = 0,    // default, clear to clear_color / depth_clear_value
+    P_LOAD_OP_LOAD      = 1,    // preserve previous content (accumulation, overlay, multi-pass)
+    P_LOAD_OP_DONT_CARE = 2,    // contents undefined at pass start
+} PLoadOp;
+
+typedef enum PStoreOp {
+    P_STORE_OP_AUTO      = 0,    // STORE if no resolve, DONT_CARE if resolve_image is set
+    P_STORE_OP_STORE     = 1,    // keep written content
+    P_STORE_OP_DONT_CARE = 2,    // discard written content
+} PStoreOp;
+
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,
     P_FORMAT_R8_UNORM            = 9,
@@ -409,8 +421,8 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     PBool enable_validation;
     PBool enable_best_practices;
-    float depth_clear_value;            // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
-    const PAllocator* allocator;        // NULL = uses pigment_default_allocator (malloc/free)
+    float depth_clear_value;        // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    const PAllocator* allocator;    // NULL = uses pigment_default_allocator (malloc/free)
     const void* extra;
 } PigmentConfig;
 

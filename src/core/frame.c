@@ -398,12 +398,13 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         PBool has_resolve         = (ref->resolve_image != NULL);
 
         PImage* img               = ref->image;
+        PBool preserve_contents   = (ref->load_op == P_LOAD_OP_LOAD);
         barriers[barrier_count++] = (PImageBarrier) {
             .image       = img,
-            .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
+            .old_layout  = preserve_contents ? P_IMAGE_LAYOUT_COLOR_ATTACHMENT : P_IMAGE_LAYOUT_UNDEFINED,
             .new_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
-            .src         = {                       P_PIPELINE_STAGE_NONE,                       P_MEMORY_ACCESS_NONE},
-            .dst         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            .src         = {preserve_contents ? P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT : P_PIPELINE_STAGE_NONE,                                                                     preserve_contents ? P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : P_MEMORY_ACCESS_NONE},
+            .dst         = {                                            P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, preserve_contents ? (P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | P_MEMORY_ACCESS_COLOR_ATTACHMENT_READ_BIT) : P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
             .base_mip    = ref->mip_level,
             .mip_count   = 1,
             .base_layer  = ref->base_layer,
@@ -448,8 +449,8 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
             .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
             .imageView          = view->view,
             .imageLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp             = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp            = has_resolve ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE,
+            .loadOp             = load_op_to_vk(ref->load_op),
+            .storeOp            = store_op_to_vk(ref->store_op, has_resolve),
             .clearValue         = {.color = clear_color},
             .resolveMode        = has_resolve ? resolve_mode_to_vk(ref->resolve_mode, P_FALSE) : VK_RESOLVE_MODE_NONE,
             .resolveImageView   = resolve_view_handle,
@@ -463,9 +464,10 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     {
         const PAttachmentRef* ref = &desc->depth_attachment;
         PImage* img               = ref->image;
+        PBool preserve_depth      = (ref->load_op == P_LOAD_OP_LOAD);
         barriers[barrier_count++] = (PImageBarrier) {
             .image       = img,
-            .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
+            .old_layout  = preserve_depth ? P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT : P_IMAGE_LAYOUT_UNDEFINED,
             .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
             .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
             .dst         = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
@@ -510,12 +512,10 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
 
         VkClearDepthStencilValue clear_depth_stencil_value = {desc->depth_clear_value, desc->stencil_clear_value};
 
-        VkRenderingAttachmentInfo attachment = {
+        VkRenderingAttachmentInfo base_attachment = {
             .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
             .imageView          = view->view,
             .imageLayout        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            .loadOp             = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp            = has_depth_resolve ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE,
             .clearValue         = {.depthStencil = clear_depth_stencil_value},
             .resolveMode        = has_depth_resolve ? resolve_mode_to_vk(ref->resolve_mode, P_TRUE) : VK_RESOLVE_MODE_NONE,
             .resolveImageView   = depth_resolve_view_handle,
@@ -524,12 +524,16 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
 
         if(has_depth)
         {
-            depth = attachment;
+            depth         = base_attachment;
+            depth.loadOp  = load_op_to_vk(ref->load_op);
+            depth.storeOp = store_op_to_vk(ref->store_op, has_depth_resolve);
         }
 
         if(has_stencil)
         {
-            stencil = attachment;
+            stencil         = base_attachment;
+            stencil.loadOp  = load_op_to_vk(ref->stencil_load_op);
+            stencil.storeOp = store_op_to_vk(ref->stencil_store_op, has_depth_resolve);
         }
     }
 
@@ -599,14 +603,19 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
     {
         const PAttachmentRef* ref = &desc->color_attachments[i];
 
-        if(ref->image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+        PImageLayout image_target = pick_end_pass_layout(ref->final_layout, ref->image, P_IMAGE_LAYOUT_COLOR_ATTACHMENT);
+        if(image_target != P_IMAGE_LAYOUT_COLOR_ATTACHMENT)
         {
+            PPipelineStage dst_stage = 0;
+            PMemoryAccess dst_access = 0;
+            layout_to_dst_sync(image_target, &dst_stage, &dst_access);
+
             barriers[barrier_count++] = (PImageBarrier) {
                 .image       = ref->image,
                 .old_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
-                .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+                .new_layout  = image_target,
                 .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
-                .dst         = {        P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+                .dst         = {                                   dst_stage,                                 dst_access},
                 .base_mip    = ref->mip_level,
                 .mip_count   = 1,
                 .base_layer  = ref->base_layer,
@@ -614,19 +623,27 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
             };
         }
 
-        if(ref->resolve_image != NULL && (ref->resolve_image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+        if(ref->resolve_image != NULL)
         {
-            barriers[barrier_count++] = (PImageBarrier) {
-                .image       = ref->resolve_image,
-                .old_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
-                .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
-                .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
-                .dst         = {        P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
-                .base_mip    = ref->resolve_mip_level,
-                .mip_count   = 1,
-                .base_layer  = ref->resolve_base_layer,
-                .layer_count = ref->layer_count,
-            };
+            PImageLayout resolve_target = pick_end_pass_layout(ref->final_layout, ref->resolve_image, P_IMAGE_LAYOUT_COLOR_ATTACHMENT);
+            if(resolve_target != P_IMAGE_LAYOUT_COLOR_ATTACHMENT)
+            {
+                PPipelineStage dst_stage = 0;
+                PMemoryAccess dst_access = 0;
+                layout_to_dst_sync(resolve_target, &dst_stage, &dst_access);
+
+                barriers[barrier_count++] = (PImageBarrier) {
+                    .image       = ref->resolve_image,
+                    .old_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
+                    .new_layout  = resolve_target,
+                    .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+                    .dst         = {                                   dst_stage,                                 dst_access},
+                    .base_mip    = ref->resolve_mip_level,
+                    .mip_count   = 1,
+                    .base_layer  = ref->resolve_base_layer,
+                    .layer_count = ref->layer_count,
+                };
+            }
         }
     }
 
@@ -634,14 +651,19 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
     {
         const PAttachmentRef* ref = &desc->depth_attachment;
 
-        if(ref->image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+        PImageLayout image_target = pick_end_pass_layout(ref->final_layout, ref->image, P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT);
+        if(image_target != P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT)
         {
+            PPipelineStage dst_stage = 0;
+            PMemoryAccess dst_access = 0;
+            layout_to_dst_sync(image_target, &dst_stage, &dst_access);
+
             barriers[barrier_count++] = (PImageBarrier) {
                 .image       = ref->image,
                 .old_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
-                .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+                .new_layout  = image_target,
                 .src         = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-                .dst         = {    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,            P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
+                .dst         = {                               dst_stage,                                         dst_access},
                 .base_mip    = ref->mip_level,
                 .mip_count   = 1,
                 .base_layer  = ref->base_layer,
@@ -649,19 +671,27 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
             };
         }
 
-        if(ref->resolve_image != NULL && (ref->resolve_image->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+        if(ref->resolve_image != NULL)
         {
-            barriers[barrier_count++] = (PImageBarrier) {
-                .image       = ref->resolve_image,
-                .old_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
-                .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
-                .src         = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-                .dst         = {    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,            P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT},
-                .base_mip    = ref->resolve_mip_level,
-                .mip_count   = 1,
-                .base_layer  = ref->resolve_base_layer,
-                .layer_count = ref->layer_count,
-            };
+            PImageLayout resolve_target = pick_end_pass_layout(ref->final_layout, ref->resolve_image, P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT);
+            if(resolve_target != P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT)
+            {
+                PPipelineStage dst_stage = 0;
+                PMemoryAccess dst_access = 0;
+                layout_to_dst_sync(resolve_target, &dst_stage, &dst_access);
+
+                barriers[barrier_count++] = (PImageBarrier) {
+                    .image       = ref->resolve_image,
+                    .old_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+                    .new_layout  = resolve_target,
+                    .src         = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+                    .dst         = {                               dst_stage,                                         dst_access},
+                    .base_mip    = ref->resolve_mip_level,
+                    .mip_count   = 1,
+                    .base_layer  = ref->resolve_base_layer,
+                    .layer_count = ref->layer_count,
+                };
+            }
         }
     }
 

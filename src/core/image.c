@@ -336,6 +336,12 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
     image->name            = desc->name;
     translate_image_type(desc->type, &image->vk_image_type, &image->vk_create_flags);
 
+    if(image->vk_samples != VK_SAMPLE_COUNT_1_BIT && image->mip_levels > 1)
+    {
+        PLOG_WARN(pigment, "MSAA image cannot have mipmaps (samples=%u, mip_levels=%u). Clamping mip_levels to 1.", (unsigned) image->vk_samples, image->mip_levels);
+        image->mip_levels = 1;
+    }
+
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d)", desc->width, desc->height, desc->format);

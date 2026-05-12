@@ -76,6 +76,92 @@ static inline VkResolveModeFlagBits resolve_mode_to_vk(PResolveMode mode, PBool 
     return (VkResolveModeFlagBits) mode;
 }
 
+static inline VkAttachmentLoadOp load_op_to_vk(PLoadOp op)
+{
+    switch(op)
+    {
+        case P_LOAD_OP_LOAD:
+            return VK_ATTACHMENT_LOAD_OP_LOAD;
+        case P_LOAD_OP_DONT_CARE:
+            return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        case P_LOAD_OP_CLEAR:
+        default:
+            return VK_ATTACHMENT_LOAD_OP_CLEAR;
+    }
+}
+
+static inline VkAttachmentStoreOp store_op_to_vk(PStoreOp op, PBool has_resolve)
+{
+    if(op == P_STORE_OP_AUTO)
+    {
+        return has_resolve ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
+    }
+    if(op == P_STORE_OP_DONT_CARE)
+    {
+        return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    }
+    return VK_ATTACHMENT_STORE_OP_STORE;
+}
+
+/*
+ * Pick the layout to transition into at the end of a render pass.
+ *  - if user set ref->final_layout explicitly: use it.
+ *  - else if the image is sampled: auto-transition to SHADER_READ_ONLY.
+ *  - else: stay at current_layout (no transition needed).
+ */
+static inline PImageLayout pick_end_pass_layout(PImageLayout requested, PImage* img, PImageLayout current_layout)
+{
+    if(requested != P_IMAGE_LAYOUT_UNDEFINED)
+    {
+        return requested;
+    }
+
+    if(img != NULL && (img->vk_usage & VK_IMAGE_USAGE_SAMPLED_BIT))
+    {
+        return P_IMAGE_LAYOUT_SHADER_READ_ONLY;
+    }
+
+    return current_layout;
+}
+
+static inline void layout_to_dst_sync(PImageLayout layout, PPipelineStage* out_stage, PMemoryAccess* out_access)
+{
+    switch(layout)
+    {
+        case P_IMAGE_LAYOUT_SHADER_READ_ONLY:
+            *out_stage  = P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            *out_access = P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT;
+            return;
+        case P_IMAGE_LAYOUT_TRANSFER_SRC:
+            *out_stage  = P_PIPELINE_STAGE_TRANSFER_BIT;
+            *out_access = P_MEMORY_ACCESS_TRANSFER_READ_BIT;
+            return;
+        case P_IMAGE_LAYOUT_TRANSFER_DST:
+            *out_stage  = P_PIPELINE_STAGE_TRANSFER_BIT;
+            *out_access = P_MEMORY_ACCESS_TRANSFER_WRITE_BIT;
+            return;
+        case P_IMAGE_LAYOUT_COLOR_ATTACHMENT:
+            *out_stage  = P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            *out_access = P_MEMORY_ACCESS_COLOR_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            return;
+        case P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT:
+            *out_stage  = P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            *out_access = P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            return;
+        case P_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY:
+            *out_stage  = P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            *out_access = P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT;
+            return;
+        case P_IMAGE_LAYOUT_GENERAL:
+        case P_IMAGE_LAYOUT_PRESENT:
+        case P_IMAGE_LAYOUT_UNDEFINED:
+        default:
+            *out_stage  = P_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            *out_access = P_MEMORY_ACCESS_NONE;
+            return;
+    }
+}
+
 static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t handle, const char* name)
 {
     if(name == NULL || handle == 0 || vkSetDebugUtilsObjectNameEXT == NULL)

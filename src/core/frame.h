@@ -60,6 +60,16 @@ typedef struct PAttachmentRef {
     uint32_t resolve_base_layer;
     uint32_t resolve_mip_level;
     PResolveMode resolve_mode;
+    PLoadOp load_op;              // CLEAR (default), LOAD (preserve), DONT_CARE (undefined). Depth aspect for depth/stencil attachments.
+    PStoreOp store_op;            // AUTO (default), STORE, DONT_CARE. Depth aspect for depth/stencil attachments.
+    PLoadOp stencil_load_op;      // stencil aspect only, ignored if image has no stencil
+    PStoreOp stencil_store_op;    // stencil aspect only, ignored if image has no stencil
+
+    /*
+     * UNDEFINED (default): auto-transition to SHADER_READ_ONLY if image has SAMPLED usage, else no transition.
+     *                      Set explicitly to force a target layout at end of pass.
+     */
+    PImageLayout final_layout;
 } PAttachmentRef;
 
 struct PRenderPassDesc {
