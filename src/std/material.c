@@ -15,11 +15,8 @@
  */
 
 #include "material.h"
+#include "internal.h"
 #include "pigment.h"
-#include "log_internal.h"
-
-#include <stdlib.h>
-#include <string.h>
 
 struct PMaterials {
     PBuffer* buffer;
@@ -38,13 +35,13 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
         return NULL;
     }
 
-    PMaterials* materials = calloc(1, sizeof(*materials));
+    PMaterials* materials = P_NEW_FOR_OBJECT(pigment, materials);
     if(materials == NULL)
     {
         return NULL;
     }
 
-    materials->free_slots = calloc(max_materials, sizeof(*materials->free_slots));
+    materials->free_slots = P_NEW_ARRAY_FOR_OBJECT(pigment, materials->free_slots, max_materials);
     if(materials->free_slots == NULL)
     {
         goto ERROR;
@@ -70,8 +67,8 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
 
 ERROR:
     pigment_destroy_buffer(pigment, materials->buffer);
-    free(materials->free_slots);
-    free(materials);
+    P_FREE(pigment, materials->free_slots);
+    P_FREE(pigment, materials);
     return NULL;
 }
 
@@ -83,8 +80,8 @@ void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials)
     }
 
     pigment_destroy_buffer(pigment, materials->buffer);
-    free(materials->free_slots);
-    free(materials);
+    P_FREE(pigment, materials->free_slots);
+    P_FREE(pigment, materials);
 }
 
 uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, const PMaterialDesc* desc)

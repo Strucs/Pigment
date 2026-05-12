@@ -16,12 +16,11 @@
 
 #include "primitives.h"
 
+#include "internal.h"
 #include "mesh.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <stdlib.h>
-#include <string.h>
 
 static PVertex make_vertex(float px, float py, float pz, float nx, float ny, float nz, float u, float v)
 {
@@ -43,17 +42,17 @@ static PVertex make_vertex(float px, float py, float pz, float nx, float ny, flo
     return out;
 }
 
-PMeshData pigment_cube_mesh(void)
+PMeshData pigment_cube_mesh(Pigment* pigment)
 {
     PMeshData mesh    = {0};
     mesh.vertex_count = 24;
     mesh.index_count  = 36;
-    mesh.vertices     = malloc(mesh.vertex_count * sizeof(PVertex));
-    mesh.indices      = malloc(mesh.index_count * sizeof(uint32_t));
+    mesh.vertices     = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.vertices, mesh.vertex_count);
+    mesh.indices      = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.indices, mesh.index_count);
     if(mesh.vertices == NULL || mesh.indices == NULL)
     {
-        free(mesh.vertices);
-        free(mesh.indices);
+        P_FREE(pigment, mesh.vertices);
+        P_FREE(pigment, mesh.indices);
         return (PMeshData) {0};
     }
 
@@ -102,17 +101,17 @@ PMeshData pigment_cube_mesh(void)
     return mesh;
 }
 
-PMeshData pigment_quad_mesh(void)
+PMeshData pigment_quad_mesh(Pigment* pigment)
 {
     PMeshData mesh    = {0};
     mesh.vertex_count = 4;
     mesh.index_count  = 6;
-    mesh.vertices     = malloc(mesh.vertex_count * sizeof(PVertex));
-    mesh.indices      = malloc(mesh.index_count * sizeof(uint32_t));
+    mesh.vertices     = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.vertices, mesh.vertex_count);
+    mesh.indices      = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.indices, mesh.index_count);
     if(mesh.vertices == NULL || mesh.indices == NULL)
     {
-        free(mesh.vertices);
-        free(mesh.indices);
+        P_FREE(pigment, mesh.vertices);
+        P_FREE(pigment, mesh.indices);
         return (PMeshData) {0};
     }
 
@@ -131,7 +130,7 @@ PMeshData pigment_quad_mesh(void)
     return mesh;
 }
 
-PMeshData pigment_plane_mesh(uint32_t segments)
+PMeshData pigment_plane_mesh(Pigment* pigment, uint32_t segments)
 {
     if(segments == 0)
     {
@@ -142,12 +141,12 @@ PMeshData pigment_plane_mesh(uint32_t segments)
     PMeshData mesh    = {0};
     mesh.vertex_count = side * side;
     mesh.index_count  = segments * segments * 6;
-    mesh.vertices     = malloc(mesh.vertex_count * sizeof(PVertex));
-    mesh.indices      = malloc(mesh.index_count * sizeof(uint32_t));
+    mesh.vertices     = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.vertices, mesh.vertex_count);
+    mesh.indices      = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.indices, mesh.index_count);
     if(mesh.vertices == NULL || mesh.indices == NULL)
     {
-        free(mesh.vertices);
-        free(mesh.indices);
+        P_FREE(pigment, mesh.vertices);
+        P_FREE(pigment, mesh.indices);
         return (PMeshData) {0};
     }
 
@@ -185,7 +184,7 @@ PMeshData pigment_plane_mesh(uint32_t segments)
     return mesh;
 }
 
-PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments)
+PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segments, uint32_t lon_segments)
 {
     if(lat_segments < 2)
     {
@@ -199,12 +198,12 @@ PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments)
     PMeshData mesh    = {0};
     mesh.vertex_count = (lat_segments + 1) * (lon_segments + 1);
     mesh.index_count  = lat_segments * lon_segments * 6;
-    mesh.vertices     = malloc(mesh.vertex_count * sizeof(PVertex));
-    mesh.indices      = malloc(mesh.index_count * sizeof(uint32_t));
+    mesh.vertices     = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.vertices, mesh.vertex_count);
+    mesh.indices      = P_NEW_ARRAY_FOR_OBJECT(pigment, mesh.indices, mesh.index_count);
     if(mesh.vertices == NULL || mesh.indices == NULL)
     {
-        free(mesh.vertices);
-        free(mesh.indices);
+        P_FREE(pigment, mesh.vertices);
+        P_FREE(pigment, mesh.indices);
         return (PMeshData) {0};
     }
 
@@ -251,14 +250,14 @@ PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments)
     return mesh;
 }
 
-void pigment_free_mesh_data(PMeshData* mesh)
+void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh)
 {
     if(mesh == NULL)
     {
         return;
     }
-    free(mesh->vertices);
-    free(mesh->indices);
+    P_FREE(pigment, mesh->vertices);
+    P_FREE(pigment, mesh->indices);
     mesh->vertices     = NULL;
     mesh->indices      = NULL;
     mesh->vertex_count = 0;

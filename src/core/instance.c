@@ -16,7 +16,6 @@
 
 #include "instance.h"
 #include "internal.h"
-#include "log_internal.h"
 #include "pigment_vk.h"
 
 static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
@@ -42,7 +41,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     uint32_t available_layer_count              = 0;
     uint32_t available_extension_count          = 0;
 
-    instance = calloc(1, sizeof(*instance));
+    instance = P_NEW_FOR_INSTANCE(pigment, instance);
     if(instance == NULL)
     {
         goto ERROR;
@@ -65,7 +64,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     vkEnumerateInstanceLayerProperties(&available_layer_count, NULL);
     if(available_layer_count > 0)
     {
-        available_layers = malloc(available_layer_count * sizeof(*available_layers));
+        available_layers = P_NEW_ARRAY_FOR_COMMAND(pigment, available_layers, available_layer_count);
         if(available_layers == NULL)
         {
             goto ERROR;
@@ -76,7 +75,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     vkEnumerateInstanceExtensionProperties(NULL, &available_extension_count, NULL);
     if(available_extension_count > 0)
     {
-        available_extensions = malloc(available_extension_count * sizeof(*available_extensions));
+        available_extensions = P_NEW_ARRAY_FOR_COMMAND(pigment, available_extensions, available_extension_count);
         if(available_extensions == NULL)
         {
             goto ERROR;
@@ -168,34 +167,34 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     volkLoadInstance(instance->vulkan_instance);
 
-    free(available_layers);
-    free(available_extensions);
+    P_FREE(pigment, available_layers);
+    P_FREE(pigment, available_extensions);
 
     return instance;
 
 ERROR:
-    free(available_layers);
-    free(available_extensions);
+    P_FREE(pigment, available_layers);
+    P_FREE(pigment, available_extensions);
     if(instance != NULL)
     {
         if(instance->layers != NULL)
         {
-            free(instance->layers->names);
+            P_FREE(pigment, instance->layers->names);
         }
-        free(instance->layers);
+        P_FREE(pigment, instance->layers);
         if(instance->extensions != NULL)
         {
-            free(instance->extensions->names);
+            P_FREE(pigment, instance->extensions->names);
         }
-        free(instance->extensions);
-        free(instance);
+        P_FREE(pigment, instance->extensions);
+        P_FREE(pigment, instance);
     }
     return NULL;
 }
 
 static PResult build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count)
 {
-    instance->layers = calloc(1, sizeof(*(instance->layers)));
+    instance->layers = P_NEW_FOR_INSTANCE(pigment, instance->layers);
     if(instance->layers == NULL)
     {
         goto ERROR;
@@ -218,7 +217,7 @@ static PResult build_instance_layers(Pigment* pigment, PInstance* instance, cons
         return PIGMENT_SUCCESS;
     }
 
-    instance->layers->names = malloc(max_layers * sizeof(*(instance->layers->names)));
+    instance->layers->names = P_NEW_ARRAY_FOR_INSTANCE(pigment, instance->layers->names, max_layers);
     if(instance->layers->names == NULL)
     {
         goto ERROR;
@@ -267,9 +266,9 @@ static PResult build_instance_layers(Pigment* pigment, PInstance* instance, cons
 ERROR:
     if(instance->layers != NULL)
     {
-        free(instance->layers->names);
+        P_FREE(pigment, instance->layers->names);
     }
-    free(instance->layers);
+    P_FREE(pigment, instance->layers);
     instance->layers = NULL;
     return PIGMENT_ERROR_OUT_OF_MEMORY;
 }
@@ -279,7 +278,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     const char** names = NULL;
     uint32_t count     = 0;
 
-    instance->extensions = calloc(1, sizeof(*(instance->extensions)));
+    instance->extensions = P_NEW_FOR_INSTANCE(pigment, instance->extensions);
     if(instance->extensions == NULL)
     {
         goto ERROR;
@@ -324,7 +323,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
         max_extensions += vk_init->opt_instance_extensions_count;
     }
 
-    names = malloc(max_extensions * sizeof(*names));
+    names = P_NEW_ARRAY_FOR_INSTANCE(pigment, names, max_extensions);
     if(names == NULL)
     {
         goto ERROR;
@@ -403,8 +402,8 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     return PIGMENT_SUCCESS;
 
 ERROR:
-    free(names);
-    free(instance->extensions);
+    P_FREE(pigment, names);
+    P_FREE(pigment, instance->extensions);
     instance->extensions = NULL;
     return PIGMENT_ERROR_OUT_OF_MEMORY;
 }
@@ -421,11 +420,11 @@ void destroy_instance(Pigment* pigment)
         destroy_debug_utils_messenger(instance->vulkan_instance, instance->debug_messenger, &pigment->vk_alloc);
     }
     vkDestroyInstance(instance->vulkan_instance, &pigment->vk_alloc);
-    free(instance->layers->names);
-    free(instance->layers);
-    free(instance->extensions->names);
-    free(instance->extensions);
-    free(instance);
+    P_FREE(pigment, instance->layers->names);
+    P_FREE(pigment, instance->layers);
+    P_FREE(pigment, instance->extensions->names);
+    P_FREE(pigment, instance->extensions);
+    P_FREE(pigment, instance);
 }
 
 static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name)

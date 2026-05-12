@@ -90,10 +90,12 @@ static inline void p_free_impl(Pigment* pigment, void* ptr)
 
 // === STACK OR HEAP HELPERS ===
 
-#define P_STACK_OR_HEAP(T, name, count, threshold)       \
-    T _##name##_stack[threshold];                        \
-    T* name = ((count) <= (threshold)) ? _##name##_stack \
-                                       : (T*) P_ALLOC_COMMAND(pigment, (count) * sizeof(T), _Alignof(T))
+#define P_STACK_OR_HEAP_THRESHOLD 8
+
+#define P_STACK_OR_HEAP(T, name, count)                                \
+    T _##name##_stack[P_STACK_OR_HEAP_THRESHOLD];                      \
+    T* name = ((count) <= P_STACK_OR_HEAP_THRESHOLD) ? _##name##_stack \
+                                                     : (T*) P_ALLOC_COMMAND(pigment, (count) * sizeof(T), _Alignof(T))
 
 #define P_STACK_OR_HEAP_FREE(pigment, name)           \
     do                                                \

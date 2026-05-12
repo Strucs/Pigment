@@ -19,7 +19,6 @@
 #include "deletion.h"
 #include "image.h"
 #include "internal.h"
-#include "log_internal.h"
 #include "native_surface.h"
 #include "synchronization.h"
 
@@ -39,8 +38,8 @@ static void destroy_swapchain_color_multisample(Pigment* pigment, PSwapchain* sw
 static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount requested);
 static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space);
 static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space);
-static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface);
-static void destroy_support_details(SwapChainSupportDetails* details);
+static SwapChainSupportDetails* query_swapchain_support(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface);
+static void destroy_support_details(Pigment* pigment, SwapChainSupportDetails* details);
 static void destroy_surface(Pigment* pigment, PSurface* surface);
 static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
 static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
@@ -67,7 +66,7 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, c
         goto ERROR;
     }
 
-    surface = malloc(sizeof(*surface));
+    surface = P_NEW_FOR_OBJECT(pigment, surface);
     if(surface == NULL)
     {
         goto ERROR;
@@ -92,7 +91,7 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, c
         }
     }
 
-    renderer = calloc(1, sizeof(*renderer));
+    renderer = P_NEW_FOR_OBJECT(pigment, renderer);
     if(renderer == NULL)
     {
         goto ERROR;
@@ -218,7 +217,7 @@ static void destroy_surface(Pigment* pigment, PSurface* surface)
         return;
     }
     vkDestroySurfaceKHR(pigment->instance->vulkan_instance, surface->surface, &pigment->vk_alloc);
-    free(surface);
+    P_FREE(pigment, surface);
 }
 
 PFormat pigment_get_color_format(PWindowRenderer* renderer)
@@ -304,10 +303,10 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
     return PIGMENT_SUCCESS;
 }
 
-static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device, VkSurfaceKHR surface)
+static SwapChainSupportDetails* query_swapchain_support(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface)
 {
     SwapChainSupportDetails* details;
-    details = calloc(1, sizeof(*details));
+    details = P_NEW_FOR_OBJECT(pigment, details);
     if(details == NULL)
     {
         goto ERROR;
@@ -316,7 +315,7 @@ static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device,
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details->capabilities);
 
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formats_count, NULL);
-    details->formats = malloc(details->formats_count * sizeof(*details->formats));
+    details->formats = P_NEW_ARRAY_FOR_OBJECT(pigment, details->formats, details->formats_count);
     if(details->formats == NULL)
     {
         goto ERROR;
@@ -324,7 +323,7 @@ static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device,
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formats_count, details->formats);
 
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details->present_modes_count, NULL);
-    details->present_modes = malloc(details->present_modes_count * sizeof(*details->present_modes));
+    details->present_modes = P_NEW_ARRAY_FOR_OBJECT(pigment, details->present_modes, details->present_modes_count);
     if(details->present_modes == NULL)
     {
         goto ERROR;
@@ -334,17 +333,17 @@ static SwapChainSupportDetails* query_swapchain_support(VkPhysicalDevice device,
     return details;
 
 ERROR:
-    destroy_support_details(details);
+    destroy_support_details(pigment, details);
     return NULL;
 }
 
-static void destroy_support_details(SwapChainSupportDetails* details)
+static void destroy_support_details(Pigment* pigment, SwapChainSupportDetails* details)
 {
     if(details != NULL)
     {
-        free(details->formats);
-        free(details->present_modes);
-        free(details);
+        P_FREE(pigment, details->formats);
+        P_FREE(pigment, details->present_modes);
+        P_FREE(pigment, details);
     }
 }
 
@@ -540,7 +539,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     PSwapchain* swapchain                    = NULL;
     SwapChainSupportDetails* support_details = NULL;
 
-    swapchain = calloc(1, sizeof(*swapchain));
+    swapchain = P_NEW_FOR_OBJECT(pigment, swapchain);
     if(swapchain == NULL)
     {
         goto ERROR;
@@ -588,7 +587,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         PLOG_INFO(pigment, "Graphics family does not support present, using separate present family %u", present_family_index);
     }
 
-    support_details = query_swapchain_support(device->physical_device, surface->surface);
+    support_details = query_swapchain_support(pigment, device->physical_device, surface->surface);
     if(support_details == NULL)
     {
         goto ERROR;
@@ -655,7 +654,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
 
     vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, NULL);
 
-    swapchain->images = malloc(image_count * sizeof(*swapchain->images));
+    swapchain->images = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->images, image_count);
     if(swapchain->images == NULL)
     {
         goto ERROR;
@@ -688,16 +687,16 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
-    destroy_support_details(support_details);
+    destroy_support_details(pigment, support_details);
 
     return swapchain;
 
 ERROR:
-    destroy_support_details(support_details);
+    destroy_support_details(pigment, support_details);
     if(swapchain != NULL)
     {
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
-        free(swapchain);
+        P_FREE(pigment, swapchain);
     }
     return NULL;
 }
@@ -711,7 +710,7 @@ static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
         destroy_swapchain_depth(pigment, swapchain);
         destroy_swapchain_image_views(pigment, swapchain);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
-        free(swapchain);
+        P_FREE(pigment, swapchain);
     }
 }
 
@@ -827,7 +826,7 @@ static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount r
 
 static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain)
 {
-    swapchain->image_views = calloc(swapchain->image_count, sizeof(*(swapchain->image_views)));
+    swapchain->image_views = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->image_views, swapchain->image_count);
     if(swapchain->image_views == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -852,8 +851,8 @@ static void destroy_swapchain_image_views(Pigment* pigment, PSwapchain* swapchai
         vkDestroyImageView(pigment->device->logical_device, swapchain->image_views[i], &pigment->vk_alloc);
     }
 
-    free(swapchain->image_views);
-    free(swapchain->images);
+    P_FREE(pigment, swapchain->image_views);
+    P_FREE(pigment, swapchain->images);
 }
 
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer)
@@ -867,5 +866,5 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     destroy_command_buffers(pigment, renderer->command_buffers, pigment->config.max_frames_in_flight);
     destroy_swapchain(pigment, renderer->swapchain);
     destroy_surface(pigment, renderer->surface);
-    free(renderer);
+    P_FREE(pigment, renderer);
 }

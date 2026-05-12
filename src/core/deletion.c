@@ -17,9 +17,6 @@
 #include "deletion.h"
 #include "structs.h"
 #include "internal.h"
-#include "log_internal.h"
-
-#include <stdlib.h>
 
 #define PIGMENT_DELETION_CHUNK_NODES 64
 
@@ -59,6 +56,7 @@ typedef struct PDeletionChunk {
 } PDeletionChunk;
 
 typedef struct PDeletionTsd {
+    Pigment* pigment;
     PDeletionNode* private_free;
 } PDeletionTsd;
 
@@ -72,17 +70,16 @@ struct PDeletionQueue {
 
 static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_targets, uint32_t* out_count);
 static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
-static PResult push_node(PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
+static PResult push_node(Pigment* pigment, PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
 static void prepend_chain(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
 static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
-static PDeletionNode* node_acquire(PDeletionQueue* queue);
+static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
 static PBool target_signaled(VkDevice device, const PWaitTarget* target);
 
 PDeletionQueue* create_deletion_queue(Pigment* pigment)
 {
-    (void) pigment;
-    PDeletionQueue* queue = calloc(1, sizeof(*queue));
+    PDeletionQueue* queue = P_NEW_FOR_INSTANCE(pigment, queue);
     if(queue == NULL)
     {
         return NULL;
@@ -90,7 +87,7 @@ PDeletionQueue* create_deletion_queue(Pigment* pigment)
 
     if(pigment_tsd_init(&queue->tsd, tsd_destructor) != 0)
     {
-        free(queue);
+        P_FREE(pigment, queue);
         return NULL;
     }
     return queue;
@@ -119,7 +116,7 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
     {
         PDeletionNode* next = node->next;
         node->entry.destroy_fn(pigment, node->entry.resource);
-        free(node->entry.targets);
+        P_FREE(pigment, node->entry.targets);
         node = next;
     }
 
@@ -127,12 +124,12 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
     while(chunk != NULL)
     {
         PDeletionChunk* next = chunk->next;
-        free(chunk);
+        P_FREE(pigment, chunk);
         chunk = next;
     }
 
     pigment_tsd_destroy(queue->tsd);
-    free(queue);
+    P_FREE(pigment, queue);
 }
 
 void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource)
@@ -158,7 +155,7 @@ void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resour
     }
 
     enqueue_or_destroy(pigment, destroy_fn, resource, targets, count);
-    free(targets);
+    P_FREE(pigment, targets);
 }
 
 void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker)
@@ -321,7 +318,7 @@ void drain_deletion_queue(Pigment* pigment)
         if(ready)
         {
             node->entry.destroy_fn(pigment, node->entry.resource);
-            free(node->entry.targets);
+            P_FREE(pigment, node->entry.targets);
             node->next = ready_head;
             ready_head = node;
             if(ready_tail == NULL)
@@ -355,7 +352,7 @@ void drain_deletion_queue(Pigment* pigment)
 
 static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count)
 {
-    PResult result = push_node(pigment->deletions, destroy_fn, resource, targets, target_count);
+    PResult result = push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count);
     if(result != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to enqueue deferred destroy. Falling back to immediate destroy.");
@@ -363,12 +360,12 @@ static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* re
     }
 }
 
-static PResult push_node(PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count)
+static PResult push_node(Pigment* pigment, PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count)
 {
     PWaitTarget* targets_copy = NULL;
     if(target_count > 0)
     {
-        targets_copy = malloc(target_count * sizeof(*targets_copy));
+        targets_copy = P_NEW_ARRAY_FOR_OBJECT(pigment, targets_copy, target_count);
         if(targets_copy == NULL)
         {
             return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -376,10 +373,10 @@ static PResult push_node(PDeletionQueue* queue, PDestroyFn destroy_fn, void* res
         memcpy(targets_copy, targets, target_count * sizeof(*targets_copy));
     }
 
-    PDeletionNode* node = node_acquire(queue);
+    PDeletionNode* node = node_acquire(pigment, queue);
     if(node == NULL)
     {
-        free(targets_copy);
+        P_FREE(pigment, targets_copy);
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
@@ -420,19 +417,20 @@ static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head
     while(!atomic_compare_exchange_weak_explicit(&queue->shared_free, &old_head, chain_head, memory_order_release, memory_order_relaxed));
 }
 
-static PDeletionNode* node_acquire(PDeletionQueue* queue)
+static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue)
 {
     PDeletionTsd* tsd = pigment_tsd_get(queue->tsd);
     if(tsd == NULL)
     {
-        tsd = calloc(1, sizeof(*tsd));
+        tsd = P_NEW_FOR_INSTANCE(pigment, tsd);
         if(tsd == NULL)
         {
             return NULL;
         }
+        tsd->pigment = pigment;
         if(pigment_tsd_set(queue->tsd, tsd) != 0)
         {
-            free(tsd);
+            P_FREE(pigment, tsd);
             return NULL;
         }
     }
@@ -454,7 +452,7 @@ static PDeletionNode* node_acquire(PDeletionQueue* queue)
     }
 
     // If the shared free list is empty, Allocate a new chunk of nodes and add them to the shared free list, then acquire one for the caller.
-    PDeletionChunk* chunk = malloc(sizeof(*chunk));
+    PDeletionChunk* chunk = P_NEW_FOR_INSTANCE(pigment, chunk);
     if(chunk == NULL)
     {
         return NULL;
@@ -480,7 +478,12 @@ static PDeletionNode* node_acquire(PDeletionQueue* queue)
 
 static void tsd_destructor(void* ptr)
 {
-    free(ptr);
+    if(ptr == NULL)
+    {
+        return;
+    }
+    PDeletionTsd* tsd = (PDeletionTsd*) ptr;
+    P_FREE(tsd->pigment, tsd);
 }
 
 static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_targets, uint32_t* out_count)
@@ -509,7 +512,7 @@ static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_target
         return PIGMENT_SUCCESS;
     }
 
-    PWaitTarget* targets = malloc(active * sizeof(*targets));
+    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, active);
     if(targets == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;

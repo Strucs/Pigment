@@ -15,12 +15,11 @@
  */
 
 #include "log.h"
-#include "log_internal.h"
+#include "internal.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define PIGMENT_LOG_STACK_BUFFER 1024
 #define PIGMENT_LOG_SNAPSHOT_MAX 16
@@ -50,7 +49,7 @@ PResult pigment_log_init(Pigment* pigment)
         return PIGMENT_ERROR;
     }
 
-    PLogState* log = calloc(1, sizeof(*log));
+    PLogState* log = P_NEW_FOR_INSTANCE(pigment, log);
     if(log == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -58,7 +57,7 @@ PResult pigment_log_init(Pigment* pigment)
 
     if(pigment_rwlock_init(&log->lock) != 0)
     {
-        free(log);
+        P_FREE(pigment, log);
         return PIGMENT_ERROR;
     }
 
@@ -80,7 +79,7 @@ void pigment_log_destroy(Pigment* pigment)
     while(logger != NULL)
     {
         PigmentLogger* next = logger->next;
-        free(logger);
+        P_FREE(pigment, logger);
         logger = next;
     }
     log->loggers      = NULL;
@@ -88,7 +87,7 @@ void pigment_log_destroy(Pigment* pigment)
     pigment_rwlock_wrunlock(&log->lock);
     pigment_rwlock_destroy(&log->lock);
 
-    free(log);
+    P_FREE(pigment, log);
     pigment->log = NULL;
 }
 
@@ -101,7 +100,7 @@ PigmentLogger* pigment_logger_create(Pigment* pigment, const PigmentLoggerCreate
 
     PLogState* log = pigment->log;
 
-    PigmentLogger* logger = calloc(1, sizeof(*logger));
+    PigmentLogger* logger = P_NEW_FOR_INSTANCE(pigment, logger);
     if(logger == NULL)
     {
         return NULL;
@@ -144,7 +143,7 @@ void pigment_logger_destroy(Pigment* pigment, PigmentLogger* logger)
     recompute_active_masks_locked(log);
     pigment_rwlock_wrunlock(&log->lock);
 
-    free(logger);
+    P_FREE(pigment, logger);
 }
 
 void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, PigmentLogType type, const char* message_id_name, int32_t message_id, const char* fmt, ...)
@@ -170,7 +169,7 @@ void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, Pigment
 
     if((size_t) needed >= sizeof(stack_buf))
     {
-        heap_buf = malloc((size_t) needed + 1);
+        heap_buf = P_ALLOC_COMMAND(pigment, (size_t) needed + 1, _Alignof(char));
         if(heap_buf != NULL)
         {
             vsnprintf(heap_buf, (size_t) needed + 1, fmt, args_copy);
@@ -206,7 +205,7 @@ void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, Pigment
         snapshots[i].callback(severity, type, &record, snapshots[i].user_data);
     }
 
-    free(heap_buf);
+    P_FREE(pigment, heap_buf);
 }
 
 #ifdef _WIN32

@@ -212,7 +212,7 @@ int main(void)
         draw_calls[i].first_index       = s->start_index;
         draw_calls[i].index_count       = s->index_count;
     }
-    free_mesh_asset(asset);
+    free_mesh_asset(pigment, asset);
     asset = NULL;
 
     // CUBE (additive blend)
@@ -261,7 +261,7 @@ int main(void)
         draw_calls2[i].first_index       = s->start_index;
         draw_calls2[i].index_count       = s->index_count;
     }
-    free_mesh_asset(asset2);
+    free_mesh_asset(pigment, asset2);
     asset2 = NULL;
 
     SDL_ShowWindow(window);
@@ -332,8 +332,8 @@ FREE:
     free(draw_calls2);
     free(instance_storage);
     free(instance_storage2);
-    free_mesh_asset(asset);
-    free_mesh_asset(asset2);
+    free_mesh_asset(pigment, asset);
+    free_mesh_asset(pigment, asset2);
     pigment_destroy_pipeline(pigment, pipelines[0]);
     pigment_destroy_pipeline(pigment, pipelines[1]);
     pigment_renderer_destroy(pigment, renderer);

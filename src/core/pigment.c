@@ -17,8 +17,6 @@
 #include "pigment.h"
 
 #include "internal.h"
-#include "internal_alloc.h"
-#include "log_internal.h"
 #include "instance.h"
 #include "device.h"
 
@@ -87,7 +85,7 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         goto ERROR;
     }
 
-    pigment->swapchain_callbacks = create_swapchain_callback_list();
+    pigment->swapchain_callbacks = create_swapchain_callback_list(pigment);
     if(pigment->swapchain_callbacks == NULL)
     {
         goto ERROR;
@@ -118,7 +116,7 @@ void destroy_pigment(Pigment* pigment)
 
     destroy_deletion_queue(pigment, pigment->deletions);
 
-    destroy_swapchain_callback_list(pigment->swapchain_callbacks);
+    destroy_swapchain_callback_list(pigment, pigment->swapchain_callbacks);
     if(pigment->owns_gpu_allocator)
     {
         pigment_vk_destroy_allocator(pigment->gpu_allocator);

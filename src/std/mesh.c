@@ -15,6 +15,7 @@
  */
 
 #include "mesh.h"
+#include "internal.h"
 #include "transfert.h"
 
 PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
@@ -24,7 +25,7 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, cons
         return NULL;
     }
 
-    PMeshBuffers* mesh = calloc(1, sizeof(*mesh));
+    PMeshBuffers* mesh = P_NEW_FOR_OBJECT(pigment, mesh);
     if(mesh == NULL)
     {
         return NULL;
@@ -74,7 +75,7 @@ void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh)
     }
     pigment_destroy_buffer(pigment, mesh->vertex_buffer);
     pigment_destroy_buffer(pigment, mesh->index_buffer);
-    free(mesh);
+    P_FREE(pigment, mesh);
 }
 
 uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh)

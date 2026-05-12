@@ -171,10 +171,10 @@ int main(void)
         goto FREE;
     }
 
-    PMeshData sphere_data = pigment_sphere_mesh(16, 16);
+    PMeshData sphere_data = pigment_sphere_mesh(pigment, 16, 16);
     gizmo_sphere_indices  = sphere_data.index_count;
     gizmo_sphere          = pigment_upload_mesh_data(pigment, pool, &sphere_data);
-    pigment_free_mesh_data(&sphere_data);
+    pigment_free_mesh_data(pigment, &sphere_data);
     if(gizmo_sphere == NULL)
     {
         fprintf(stderr, "Failed to upload gizmo sphere!\n");
@@ -225,7 +225,7 @@ int main(void)
         draw_calls[i].first_index       = s->start_index;
         draw_calls[i].index_count       = s->index_count;
     }
-    free_mesh_asset(asset);
+    free_mesh_asset(pigment, asset);
     asset = NULL;
 
     // CUBE
@@ -243,10 +243,10 @@ int main(void)
     }
     );
 
-    PMeshData cube_data = pigment_cube_mesh();
+    PMeshData cube_data = pigment_cube_mesh(pigment);
     uint32_t cube_idx   = cube_data.index_count;
     gpu_mesh2           = pigment_upload_mesh_data(pigment, pool, &cube_data);
-    pigment_free_mesh_data(&cube_data);
+    pigment_free_mesh_data(pigment, &cube_data);
     if(gpu_mesh2 == NULL)
     {
         fprintf(stderr, "Failed to upload primitive cube!\n");
@@ -343,8 +343,8 @@ FREE:
     free(draw_calls2);
     free(instance_storage);
     free(instance_storage2);
-    free_mesh_asset(asset);
-    free_mesh_asset(asset2);
+    free_mesh_asset(pigment, asset);
+    free_mesh_asset(pigment, asset2);
     pigment_destroy_pipeline(pigment, pipeline);
     pigment_destroy_pipeline(pigment, gizmo_pipeline);
     pigment_renderer_destroy(pigment, renderer);

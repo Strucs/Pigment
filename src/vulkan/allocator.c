@@ -18,7 +18,6 @@
 
 #include "structs.h"
 #include "internal.h"
-#include "log_internal.h"
 
 #define DEFAULT_BLOCK_SIZE (4ULL * 1024 * 1024)    // 4 MiB
 #define DEDICATED_THRESHOLD_DIVISOR 4ULL
@@ -69,10 +68,10 @@ static uint32_t find_memory_type_index(const VkPhysicalDeviceMemoryProperties* p
 static PBool memory_type_is_host_visible(const VkPhysicalDeviceMemoryProperties* props, uint32_t type_index);
 static void destroy_block(DefaultAllocator* alloc, DefaultBlock* block);
 static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_index, VkDeviceSize size);
-static PBool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset);
-static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize size);
+static PBool block_try_allocate(Pigment* pigment, DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset);
+static void block_release(Pigment* pigment, DefaultBlock* block, VkDeviceSize offset, VkDeviceSize size);
 static PBool block_is_empty(const DefaultBlock* block);
-static PVkAllocation* create_allocation(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, void* block_mapped, DefaultBlock* block, uint32_t memory_type_index);
+static PVkAllocation* create_allocation(Pigment* pigment, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, void* block_mapped, DefaultBlock* block, uint32_t memory_type_index);
 static PVkAllocation* allocate_pooled(DefaultAllocator* alloc, VkDeviceSize size, VkDeviceSize alignment, uint32_t memory_type_index);
 static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize size, uint32_t memory_type_index);
 static void release_allocation(DefaultAllocator* alloc, PVkAllocation* allocation);
@@ -94,7 +93,7 @@ PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDef
         return NULL;
     }
 
-    DefaultAllocator* alloc = calloc(1, sizeof(*alloc));
+    DefaultAllocator* alloc = P_NEW_FOR_INSTANCE(pigment, alloc);
     if(alloc == NULL)
     {
         return NULL;
@@ -182,13 +181,13 @@ static void destroy_block(DefaultAllocator* alloc, DefaultBlock* block)
     {
         vkFreeMemory(alloc->device, block->memory, &alloc->pigment->vk_alloc);
     }
-    free(block->free_ranges);
-    free(block);
+    P_FREE(alloc->pigment, block->free_ranges);
+    P_FREE(alloc->pigment, block);
 }
 
 static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_index, VkDeviceSize size)
 {
-    DefaultBlock* block = calloc(1, sizeof(*block));
+    DefaultBlock* block = P_NEW_FOR_INSTANCE(alloc->pigment, block);
     if(block == NULL)
     {
         goto ERROR;
@@ -222,7 +221,7 @@ static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_
         }
     }
 
-    block->free_ranges = malloc(INITIAL_FREE_RANGE_CAPACITY * sizeof(*block->free_ranges));
+    block->free_ranges = P_NEW_ARRAY_FOR_DEVICE(alloc->pigment, block->free_ranges, INITIAL_FREE_RANGE_CAPACITY);
     if(block->free_ranges == NULL)
     {
         goto ERROR;
@@ -239,7 +238,7 @@ ERROR:
     return NULL;
 }
 
-static PBool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset)
+static PBool block_try_allocate(Pigment* pigment, DefaultBlock* block, VkDeviceSize size, VkDeviceSize alignment, VkDeviceSize* out_offset)
 {
     for(uint32_t i = 0; i < block->free_range_count; i++)
     {
@@ -257,16 +256,9 @@ static PBool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDevice
 
         if(padding > 0 && remaining_after > 0)
         {
-            if(block->free_range_count + 1 > block->free_range_capacity)
+            if(P_ARRAY_RESERVE_DEVICE(pigment, block->free_ranges, block->free_range_count, block->free_range_capacity, 1, INITIAL_FREE_RANGE_CAPACITY) != PIGMENT_SUCCESS)
             {
-                uint32_t new_capacity        = block->free_range_capacity * 2;
-                DefaultFreeRange* new_ranges = realloc(block->free_ranges, new_capacity * sizeof(*new_ranges));
-                if(new_ranges == NULL)
-                {
-                    return P_FALSE;
-                }
-                block->free_ranges         = new_ranges;
-                block->free_range_capacity = new_capacity;
+                return P_FALSE;
             }
 
             memmove(&block->free_ranges[i + 1], &block->free_ranges[i], (block->free_range_count - i) * sizeof(*block->free_ranges));
@@ -296,7 +288,7 @@ static PBool block_try_allocate(DefaultBlock* block, VkDeviceSize size, VkDevice
     return P_FALSE;
 }
 
-static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize size)
+static void block_release(Pigment* pigment, DefaultBlock* block, VkDeviceSize offset, VkDeviceSize size)
 {
     uint32_t i = 0;
     while(i < block->free_range_count && block->free_ranges[i].offset < offset)
@@ -324,16 +316,9 @@ static void block_release(DefaultBlock* block, VkDeviceSize offset, VkDeviceSize
     }
     else
     {
-        if(block->free_range_count + 1 > block->free_range_capacity)
+        if(P_ARRAY_RESERVE_DEVICE(pigment, block->free_ranges, block->free_range_count, block->free_range_capacity, 1, INITIAL_FREE_RANGE_CAPACITY) != PIGMENT_SUCCESS)
         {
-            uint32_t new_capacity        = block->free_range_capacity * 2;
-            DefaultFreeRange* new_ranges = realloc(block->free_ranges, new_capacity * sizeof(*new_ranges));
-            if(new_ranges == NULL)
-            {
-                return;
-            }
-            block->free_ranges         = new_ranges;
-            block->free_range_capacity = new_capacity;
+            return;
         }
 
         memmove(&block->free_ranges[i + 1], &block->free_ranges[i], (block->free_range_count - i) * sizeof(*block->free_ranges));
@@ -348,9 +333,9 @@ static PBool block_is_empty(const DefaultBlock* block)
     return block->free_range_count == 1 && block->free_ranges[0].offset == 0 && block->free_ranges[0].size == block->block_size;
 }
 
-static PVkAllocation* create_allocation(VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, void* block_mapped, DefaultBlock* block, uint32_t memory_type_index)
+static PVkAllocation* create_allocation(Pigment* pigment, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, void* block_mapped, DefaultBlock* block, uint32_t memory_type_index)
 {
-    PVkAllocation* allocation = malloc(sizeof(*allocation));
+    PVkAllocation* allocation = P_NEW_FOR_INSTANCE(pigment, allocation);
     if(allocation == NULL)
     {
         return NULL;
@@ -373,9 +358,9 @@ static PVkAllocation* allocate_pooled(DefaultAllocator* alloc, VkDeviceSize size
     for(DefaultBlock* block = pool->blocks; block != NULL; block = block->next)
     {
         VkDeviceSize offset;
-        if(block_try_allocate(block, size, alignment, &offset))
+        if(block_try_allocate(alloc->pigment, block, size, alignment, &offset))
         {
-            return create_allocation(block->memory, offset, size, block->mapped, block, memory_type_index);
+            return create_allocation(alloc->pigment, block->memory, offset, size, block->mapped, block, memory_type_index);
         }
     }
 
@@ -389,12 +374,12 @@ static PVkAllocation* allocate_pooled(DefaultAllocator* alloc, VkDeviceSize size
     pool->blocks = block;
 
     VkDeviceSize offset;
-    if(!block_try_allocate(block, size, alignment, &offset))
+    if(!block_try_allocate(alloc->pigment, block, size, alignment, &offset))
     {
         return NULL;
     }
 
-    return create_allocation(block->memory, offset, size, block->mapped, block, memory_type_index);
+    return create_allocation(alloc->pigment, block->memory, offset, size, block->mapped, block, memory_type_index);
 }
 
 static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize size, uint32_t memory_type_index)
@@ -429,7 +414,7 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
         }
     }
 
-    PVkAllocation* allocation = create_allocation(memory, 0, size, mapped, NULL, memory_type_index);
+    PVkAllocation* allocation = create_allocation(alloc->pigment, memory, 0, size, mapped, NULL, memory_type_index);
     if(allocation == NULL)
     {
         if(mapped != NULL)
@@ -460,7 +445,7 @@ static void release_allocation(DefaultAllocator* allocator, PVkAllocation* alloc
     }
     else
     {
-        block_release(allocation->block, allocation->offset, allocation->size);
+        block_release(allocator->pigment, allocation->block, allocation->offset, allocation->size);
         if(block_is_empty(allocation->block))
         {
             DefaultPool* pool = &allocator->pools[allocation->memory_type_index];
@@ -483,7 +468,7 @@ static void release_allocation(DefaultAllocator* allocator, PVkAllocation* alloc
         }
     }
 
-    free(allocation);
+    P_FREE(allocator->pigment, allocation);
 }
 
 static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation)
@@ -774,5 +759,5 @@ static void default_destroy(void* user_data)
     }
 
     pigment_rwlock_destroy(&alloc->lock);
-    free(alloc);
+    P_FREE(alloc->pigment, alloc);
 }

@@ -15,13 +15,12 @@
  */
 
 #include "pipeline_loader.h"
+#include "internal.h"
 #include "pigment.h"
 #include "std_internal.h"
-#include "log_internal.h"
 
 #include <stdalign.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <shaderc/shaderc.h>
 
@@ -50,7 +49,7 @@ alignas(uint32_t) static constexpr unsigned char crt_fragment_spv[] = {
     #embed <crt_frag.spv>
 };
 
-char* load_shader_code(const char* file_path, uint32_t* shader_size)
+char* load_shader_code(Pigment* pigment, const char* file_path, uint32_t* shader_size)
 {
     FILE* fd = fopen(file_path, "rb");
     if(fd == NULL)
@@ -62,7 +61,7 @@ char* load_shader_code(const char* file_path, uint32_t* shader_size)
     *shader_size = (uint32_t) ftell(fd);
     rewind(fd);
 
-    char* shader_code = malloc((*shader_size) * sizeof(*shader_code) + 1);
+    char* shader_code = P_ALLOC_OBJECT(pigment, (*shader_size) + 1, _Alignof(char));
     if(shader_code != NULL)
     {
         fread(shader_code, 1, *shader_size, fd);
@@ -109,7 +108,7 @@ uint32_t* compile_glsl_to_spv(Pigment* pigment, const char* source_code, uint32_
     *spv_size             = shaderc_result_get_length(result);
     const uint32_t* bytes = (const uint32_t*) shaderc_result_get_bytes(result);
 
-    uint32_t* spv = malloc(*spv_size);
+    uint32_t* spv = P_ALLOC_OBJECT(pigment, *spv_size, _Alignof(uint32_t));
     if(spv != NULL)
     {
         memcpy(spv, bytes, *spv_size);
@@ -129,7 +128,7 @@ ERROR:
     return NULL;
 }
 
-static PStdPipelineLayouts* pipeline_layouts_get(PStdBindless* bindless)
+static PStdPipelineLayouts* pipeline_layouts_get(Pigment* pigment, PStdBindless* bindless)
 {
     PStdPipelineLayouts** slot = pigment_std_bindless_pipeline_layouts_slot(bindless);
     if(slot == NULL)
@@ -139,7 +138,7 @@ static PStdPipelineLayouts* pipeline_layouts_get(PStdBindless* bindless)
 
     if(*slot == NULL)
     {
-        *slot = calloc(1, sizeof(**slot));
+        *slot = P_NEW_FOR_OBJECT(pigment, *slot);
     }
 
     return *slot;
@@ -147,7 +146,7 @@ static PStdPipelineLayouts* pipeline_layouts_get(PStdBindless* bindless)
 
 PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
-    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(pigment, bindless);
     if(layouts == NULL)
     {
         return NULL;
@@ -195,7 +194,7 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
 
 PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
-    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(pigment, bindless);
     if(layouts == NULL)
     {
         return NULL;
@@ -243,7 +242,7 @@ PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* 
 
 PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
-    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(pigment, bindless);
     if(layouts == NULL)
     {
         return NULL;
@@ -290,7 +289,7 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
 
 static PLayout* default_crt_pipeline_layout(Pigment* pigment, PStdBindless* bindless)
 {
-    PStdPipelineLayouts* layouts = pipeline_layouts_get(bindless);
+    PStdPipelineLayouts* layouts = pipeline_layouts_get(pigment, bindless);
     if(layouts == NULL)
     {
         return NULL;

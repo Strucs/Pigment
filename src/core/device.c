@@ -16,17 +16,14 @@
 
 #include "device.h"
 #include "internal.h"
-#include "log_internal.h"
 #include "pigment_vk.h"
-
-#include <vulkan/vulkan_core.h>
 
 static PBool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available);
 static PBool features_chain_supports(const void* req, const void* available, size_t struct_size);
 static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalDeviceFeatures* src, const VkPhysicalDeviceFeatures* available);
 static void merge_features_chain_or(void* dst, const void* src, const void* available, size_t struct_size);
 
-static PBool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required);
+static PBool check_device_extensions_supported(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* required);
 static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
 static PResult pick_physical_device(Pigment* pigment, PDevice* device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
 static PResult create_logical_device(Pigment* pigment, PDevice* device);
@@ -141,7 +138,7 @@ static void merge_features_chain_or(void* dst, const void* src, const void* avai
     }
 }
 
-static PBool check_device_extensions_supported(VkPhysicalDevice device, const ExtensionList* required)
+static PBool check_device_extensions_supported(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* required)
 {
     uint32_t count                   = 0;
     VkExtensionProperties* available = NULL;
@@ -154,7 +151,7 @@ static PBool check_device_extensions_supported(VkPhysicalDevice device, const Ex
 
     if(count > 0)
     {
-        available = malloc(count * sizeof(*available));
+        available = P_NEW_ARRAY_FOR_COMMAND(pigment, available, count);
         if(available == NULL)
         {
             return P_FALSE;
@@ -172,7 +169,7 @@ static PBool check_device_extensions_supported(VkPhysicalDevice device, const Ex
         }
     }
 
-    free(available);
+    P_FREE(pigment, available);
     return extensions_found;
 }
 
@@ -181,13 +178,13 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const Extens
     PBool result = P_FALSE;
 
     uint32_t graphics_family = 0;
-    if(!find_graphics_family(device, &graphics_family))
+    if(!find_graphics_family(pigment, device, &graphics_family))
     {
         PLOG_TRACE(pigment, "Device rejected: no graphics queue family");
         goto FREE;
     }
 
-    if(!check_device_extensions_supported(device, req_extensions))
+    if(!check_device_extensions_supported(pigment, device, req_extensions))
     {
         PLOG_TRACE(pigment, "Device rejected: missing required extensions");
         goto FREE;
@@ -251,7 +248,7 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
         return PIGMENT_ERROR_VULKAN;
     }
 
-    devices = malloc(devices_count * sizeof(*devices));
+    devices = P_NEW_ARRAY_FOR_COMMAND(pigment, devices, devices_count);
     if(devices == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -268,7 +265,7 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
         }
     }
 
-    free(devices);
+    P_FREE(pigment, devices);
 
     if(device->physical_device == VK_NULL_HANDLE)
     {
@@ -284,7 +281,7 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
     return PIGMENT_SUCCESS;
 }
 
-PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family)
+PBool find_graphics_family(Pigment* pigment, VkPhysicalDevice device, uint32_t* out_family)
 {
     uint32_t queue_families_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, NULL);
@@ -293,7 +290,7 @@ PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family)
         return P_FALSE;
     }
 
-    VkQueueFamilyProperties* queue_families = malloc(queue_families_count * sizeof(*queue_families));
+    VkQueueFamilyProperties* queue_families = P_NEW_ARRAY_FOR_COMMAND(pigment, queue_families, queue_families_count);
     if(queue_families == NULL)
     {
         return P_FALSE;
@@ -312,7 +309,7 @@ PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family)
         }
     }
 
-    free(queue_families);
+    P_FREE(pigment, queue_families);
     return found;
 }
 
@@ -353,15 +350,15 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     uint32_t queue_families_count           = 0;
 
     vkGetPhysicalDeviceQueueFamilyProperties(device->physical_device, &queue_families_count, NULL);
-    queue_families = malloc(queue_families_count * sizeof(*queue_families));
+    queue_families = P_NEW_ARRAY_FOR_COMMAND(pigment, queue_families, queue_families_count);
     if(queue_families == NULL)
     {
         goto ERROR;
     }
     vkGetPhysicalDeviceQueueFamilyProperties(device->physical_device, &queue_families_count, queue_families);
 
-    selected_families = malloc(queue_families_count * sizeof(*selected_families));
-    queue_infos       = calloc(queue_families_count, sizeof(*queue_infos));
+    selected_families = P_NEW_ARRAY_FOR_COMMAND(pigment, selected_families, queue_families_count);
+    queue_infos       = P_NEW_ARRAY_FOR_COMMAND(pigment, queue_infos, queue_families_count);
     if(selected_families == NULL || queue_infos == NULL)
     {
         goto ERROR;
@@ -488,7 +485,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     }
     volkLoadDevice(device->logical_device);
 
-    device->queues = malloc(selected_count * sizeof(*device->queues));
+    device->queues = P_NEW_ARRAY_FOR_OBJECT(pigment, device->queues, selected_count);
     if(device->queues == NULL)
     {
         result = PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -518,22 +515,22 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
             {
                 vkDestroySemaphore(device->logical_device, device->queues[j].timeline, &pigment->vk_alloc);
             }
-            free(device->queues);
+            P_FREE(pigment, device->queues);
             device->queues = NULL;
             result         = PIGMENT_ERROR_VULKAN;
             goto ERROR;
         }
     }
 
-    free(queue_infos);
-    free(selected_families);
-    free(queue_families);
+    P_FREE(pigment, queue_infos);
+    P_FREE(pigment, selected_families);
+    P_FREE(pigment, queue_families);
     return PIGMENT_SUCCESS;
 
 ERROR:
-    free(queue_infos);
-    free(selected_families);
-    free(queue_families);
+    P_FREE(pigment, queue_infos);
+    P_FREE(pigment, selected_families);
+    P_FREE(pigment, queue_families);
     return result;
 }
 
@@ -563,14 +560,14 @@ PDevice* create_device(Pigment* pigment)
         default_opt_extensions[default_opt_count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
     }
 
-    device = calloc(1, sizeof(*device));
+    device = P_NEW_FOR_OBJECT(pigment, device);
     if(device == NULL)
     {
         goto ERROR;
     }
 
     uint32_t max_req     = default_req_count + (vk_init != NULL ? vk_init->req_device_extensions_count : 0);
-    req_extensions.names = malloc(max_req * sizeof(*req_extensions.names));
+    req_extensions.names = P_NEW_ARRAY_FOR_COMMAND(pigment, req_extensions.names, max_req);
     if(req_extensions.names == NULL)
     {
         goto ERROR;
@@ -600,7 +597,7 @@ PDevice* create_device(Pigment* pigment)
     vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, NULL);
     if(available_extension_count > 0)
     {
-        available_extensions = malloc(available_extension_count * sizeof(*available_extensions));
+        available_extensions = P_NEW_ARRAY_FOR_COMMAND(pigment, available_extensions, available_extension_count);
         if(available_extensions == NULL)
         {
             goto ERROR;
@@ -609,12 +606,12 @@ PDevice* create_device(Pigment* pigment)
     }
 
     uint32_t max_final = req_extensions.size + default_opt_count + (vk_init != NULL ? vk_init->opt_device_extensions_count : 0);
-    device->extensions = calloc(1, sizeof(*device->extensions));
+    device->extensions = P_NEW_FOR_OBJECT(pigment, device->extensions);
     if(device->extensions == NULL)
     {
         goto ERROR;
     }
-    device->extensions->names = malloc(max_final * sizeof(*device->extensions->names));
+    device->extensions->names = P_NEW_ARRAY_FOR_OBJECT(pigment, device->extensions->names, max_final);
     if(device->extensions->names == NULL)
     {
         goto ERROR;
@@ -661,21 +658,21 @@ PDevice* create_device(Pigment* pigment)
         goto ERROR;
     }
 
-    free(req_extensions.names);
-    free(available_extensions);
+    P_FREE(pigment, req_extensions.names);
+    P_FREE(pigment, available_extensions);
     return device;
 
 ERROR:
-    free(req_extensions.names);
-    free(available_extensions);
+    P_FREE(pigment, req_extensions.names);
+    P_FREE(pigment, available_extensions);
     if(device != NULL)
     {
         if(device->extensions != NULL)
         {
-            free(device->extensions->names);
+            P_FREE(pigment, device->extensions->names);
         }
-        free(device->extensions);
-        free(device);
+        P_FREE(pigment, device->extensions);
+        P_FREE(pigment, device);
     }
     return NULL;
 }
@@ -700,11 +697,11 @@ void destroy_device(Pigment* pigment)
     vkDestroyDevice(device->logical_device, &pigment->vk_alloc);
     if(device->extensions != NULL)
     {
-        free(device->extensions->names);
+        P_FREE(pigment, device->extensions->names);
     }
-    free(device->extensions);
-    free(device->queues);
-    free(device);
+    P_FREE(pigment, device->extensions);
+    P_FREE(pigment, device->queues);
+    P_FREE(pigment, device);
 }
 
 void device_wait_idle(Pigment* pigment)

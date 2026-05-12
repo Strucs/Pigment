@@ -22,9 +22,6 @@
 #include "internal.h"
 #include "surface.h"
 #include "synchronization.h"
-#include "log_internal.h"
-
-#include <stdlib.h>
 
 void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
 {
@@ -380,9 +377,9 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     }
     PBool has_depth_resolve = has_ds_attachment && (desc->depth_attachment.resolve_image != NULL);
 
-    uint32_t max_barrier_count       = desc->color_count + resolve_count + (has_ds_attachment ? 1 : 0) + (has_depth_resolve ? 1 : 0);
-    PImageBarrier* barriers          = malloc(max_barrier_count * sizeof(*barriers));
-    VkRenderingAttachmentInfo* color = (desc->color_count > 0) ? malloc(desc->color_count * sizeof(*color)) : NULL;
+    uint32_t max_barrier_count = desc->color_count + resolve_count + (has_ds_attachment ? 1 : 0) + (has_depth_resolve ? 1 : 0);
+    P_STACK_OR_HEAP(PImageBarrier, barriers, max_barrier_count);
+    P_STACK_OR_HEAP(VkRenderingAttachmentInfo, color, desc->color_count);
 
     if(barriers == NULL || (desc->color_count > 0 && color == NULL))
     {
@@ -570,8 +567,8 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     vkCmdSetScissorWithCount(cmd->buffer, 1, &scissor);
 
 FREE:
-    free(barriers);
-    free(color);
+    P_STACK_OR_HEAP_FREE(pigment, barriers);
+    P_STACK_OR_HEAP_FREE(pigment, color);
 }
 
 void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc)
@@ -590,7 +587,7 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
         return;
     }
 
-    PImageBarrier* barriers = malloc(max_barriers * sizeof(*barriers));
+    P_STACK_OR_HEAP(PImageBarrier, barriers, max_barriers);
     if(barriers == NULL)
     {
         return;
@@ -670,7 +667,7 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
 
     pigment_cmd_image_barriers(pigment, cmd, barriers, barrier_count);
 
-    free(barriers);
+    P_STACK_OR_HEAP_FREE(pigment, barriers);
 }
 
 void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer)
@@ -873,7 +870,7 @@ void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PView
     {
         return;
     }
-    VkViewport* vk_viewports = calloc(count, sizeof(*vk_viewports));
+    P_STACK_OR_HEAP(VkViewport, vk_viewports, count);
     if(vk_viewports == NULL)
     {
         return;
@@ -890,7 +887,7 @@ void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PView
         };
     }
     vkCmdSetViewportWithCount(cmd->buffer, count, vk_viewports);
-    free(vk_viewports);
+    P_STACK_OR_HEAP_FREE(pigment, vk_viewports);
 }
 
 void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count)
@@ -899,7 +896,7 @@ void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PSciss
     {
         return;
     }
-    VkRect2D* vk_scissors = calloc(count, sizeof(*vk_scissors));
+    P_STACK_OR_HEAP(VkRect2D, vk_scissors, count);
     if(vk_scissors == NULL)
     {
         return;
@@ -912,7 +909,7 @@ void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PSciss
         };
     }
     vkCmdSetScissorWithCount(cmd->buffer, count, vk_scissors);
-    free(vk_scissors);
+    P_STACK_OR_HEAP_FREE(pigment, vk_scissors);
 }
 
 void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope)

@@ -17,7 +17,6 @@
 #include "synchronization.h"
 #include "internal.h"
 #include "structs.h"
-#include "log_internal.h"
 
 static VkSemaphore create_semaphore(Pigment* pigment);
 static VkFence create_fence(Pigment* pigment);
@@ -27,25 +26,25 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
     PDevice* device = pigment->device;
     PSync* sync     = NULL;
 
-    sync = calloc(1, sizeof(*sync));
+    sync = P_NEW_FOR_OBJECT(pigment, sync);
     if(sync == NULL)
     {
         goto ERROR;
     }
 
-    sync->image_available_semaphores = calloc(max_frame, sizeof(*sync->image_available_semaphores));
+    sync->image_available_semaphores = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->image_available_semaphores, max_frame);
     if(sync->image_available_semaphores == NULL)
     {
         goto ERROR;
     }
 
-    sync->render_finished_semaphores = calloc(swapchain_image_count, sizeof(*sync->render_finished_semaphores));
+    sync->render_finished_semaphores = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->render_finished_semaphores, swapchain_image_count);
     if(sync->render_finished_semaphores == NULL)
     {
         goto ERROR;
     }
 
-    sync->per_slot_value = calloc(max_frame, sizeof(*sync->per_slot_value));
+    sync->per_slot_value = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->per_slot_value, max_frame);
     if(sync->per_slot_value == NULL)
     {
         goto ERROR;
@@ -53,7 +52,7 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 
     if(pigment_has_swapchain_maintenance1(pigment))
     {
-        sync->present_fences = calloc(max_frame, sizeof(*sync->present_fences));
+        sync->present_fences = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->present_fences, max_frame);
         if(sync->present_fences == NULL)
         {
             goto ERROR;
@@ -120,12 +119,12 @@ ERROR:
                     vkDestroyFence(device->logical_device, sync->present_fences[i], &pigment->vk_alloc);
                 }
             }
-            free(sync->present_fences);
+            P_FREE(pigment, sync->present_fences);
         }
-        free(sync->per_slot_value);
-        free(sync->render_finished_semaphores);
-        free(sync->image_available_semaphores);
-        free(sync);
+        P_FREE(pigment, sync->per_slot_value);
+        P_FREE(pigment, sync->render_finished_semaphores);
+        P_FREE(pigment, sync->image_available_semaphores);
+        P_FREE(pigment, sync);
     }
     return NULL;
 }
@@ -152,11 +151,11 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
         vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
     }
 
-    free(sync->present_fences);
-    free(sync->per_slot_value);
-    free(sync->render_finished_semaphores);
-    free(sync->image_available_semaphores);
-    free(sync);
+    P_FREE(pigment, sync->present_fences);
+    P_FREE(pigment, sync->per_slot_value);
+    P_FREE(pigment, sync->render_finished_semaphores);
+    P_FREE(pigment, sync->image_available_semaphores);
+    P_FREE(pigment, sync);
 }
 
 PResult recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t index)
@@ -178,7 +177,7 @@ PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint3
 {
     PResult result              = PIGMENT_ERROR_OUT_OF_MEMORY;
     PDevice* device             = pigment->device;
-    VkSemaphore* new_semaphores = calloc(new_count, sizeof(*new_semaphores));
+    VkSemaphore* new_semaphores = P_NEW_ARRAY_FOR_OBJECT(pigment, new_semaphores, new_count);
     if(new_semaphores == NULL)
     {
         goto ERROR;
@@ -199,7 +198,7 @@ PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint3
         vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
     }
 
-    free(sync->render_finished_semaphores);
+    P_FREE(pigment, sync->render_finished_semaphores);
     sync->render_finished_semaphores = new_semaphores;
 
     return PIGMENT_SUCCESS;
@@ -218,7 +217,7 @@ ERROR:
             vkDestroySemaphore(device->logical_device, new_semaphores[i], &pigment->vk_alloc);
         }
     }
-    free(new_semaphores);
+    P_FREE(pigment, new_semaphores);
 
     return result;
 }

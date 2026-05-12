@@ -17,11 +17,12 @@
 #ifndef PIGMENT_STD_GLTF_LOADER_H
 #define PIGMENT_STD_GLTF_LOADER_H
 
-#include <cglm/types.h>
 #include "defines.h"
 #include "bindless.h"
 #include "material.h"
 #include "vertex.h"
+
+#include <cglm/types.h>
 
 typedef struct PRawSurface {
     uint32_t start_index;
@@ -63,7 +64,7 @@ typedef struct MeshAsset {
 } MeshAsset;
 
 MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath);
-void free_mesh_asset(MeshAsset* mesh);
+void free_mesh_asset(Pigment* pigment, MeshAsset* mesh);
 
 PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);
 

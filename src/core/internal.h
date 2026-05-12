@@ -20,6 +20,10 @@
 #define PIGMENT_INTERNAL_H
 
 #include "structs.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
+
+#include <string.h>
 
 static inline PBool name_in_list(const char* const* list, uint32_t count, const char* name)
 {
@@ -90,7 +94,7 @@ static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t 
 }
 
 // device.c
-PBool find_graphics_family(VkPhysicalDevice device, uint32_t* out_family);
+PBool find_graphics_family(Pigment* pigment, VkPhysicalDevice device, uint32_t* out_family);
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
 PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden);
 void device_wait_idle(Pigment* pigment);
@@ -131,8 +135,8 @@ PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PIma
 void image_destroy_view_cache(Pigment* pigment, PImage* image);
 
 // swapchain_event.c
-PSwapchainCallbackList* create_swapchain_callback_list(void);
-void destroy_swapchain_callback_list(PSwapchainCallbackList* list);
+PSwapchainCallbackList* create_swapchain_callback_list(Pigment* pigment);
+void destroy_swapchain_callback_list(Pigment* pigment, PSwapchainCallbackList* list);
 void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event);
 
 // deletion.c

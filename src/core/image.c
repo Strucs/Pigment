@@ -18,10 +18,8 @@
 #include "commands.h"
 #include "deletion.h"
 #include "internal.h"
-#include "log_internal.h"
 
-#include <math.h>
-#include <stdlib.h>
+#include <stdio.h>
 
 #define PIGMENT_VIEW_CACHE_INITIAL_CAPACITY 4
 
@@ -109,7 +107,7 @@ void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBu
     pigment_cmd_use_buffer(pigment, cmd, src);
     pigment_cmd_use_image(pigment, cmd, dst);
 
-    VkBufferImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    P_STACK_OR_HEAP(VkBufferImageCopy, vk_regions, region_count);
     if(vk_regions == NULL)
     {
         return;
@@ -133,7 +131,7 @@ void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBu
 
     vkCmdCopyBufferToImage(cmd->buffer, src->buffer, dst->image, image_layout_to_vk(dst_layout), region_count, vk_regions);
 
-    free(vk_regions);
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
 }
 
 void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PBuffer* dst, const PBufferImageCopy* regions, uint32_t region_count)
@@ -145,7 +143,7 @@ void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PIm
     pigment_cmd_use_image(pigment, cmd, src);
     pigment_cmd_use_buffer(pigment, cmd, dst);
 
-    VkBufferImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    P_STACK_OR_HEAP(VkBufferImageCopy, vk_regions, region_count);
     if(vk_regions == NULL)
     {
         return;
@@ -169,7 +167,7 @@ void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PIm
 
     vkCmdCopyImageToBuffer(cmd->buffer, src->image, image_layout_to_vk(src_layout), dst->buffer, region_count, vk_regions);
 
-    free(vk_regions);
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
 }
 
 void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageCopy* regions, uint32_t region_count)
@@ -181,7 +179,7 @@ void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
     pigment_cmd_use_image(pigment, cmd, src);
     pigment_cmd_use_image(pigment, cmd, dst);
 
-    VkImageCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    P_STACK_OR_HEAP(VkImageCopy, vk_regions, region_count);
     if(vk_regions == NULL)
     {
         return;
@@ -201,7 +199,7 @@ void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
 
     vkCmdCopyImage(cmd->buffer, src->image, image_layout_to_vk(src_layout), dst->image, image_layout_to_vk(dst_layout), region_count, vk_regions);
 
-    free(vk_regions);
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
 }
 
 void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageBlit* regions, uint32_t region_count, PFilteringMode filter)
@@ -213,7 +211,7 @@ void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
     pigment_cmd_use_image(pigment, cmd, src);
     pigment_cmd_use_image(pigment, cmd, dst);
 
-    VkImageBlit* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    P_STACK_OR_HEAP(VkImageBlit, vk_regions, region_count);
     if(vk_regions == NULL)
     {
         return;
@@ -233,7 +231,7 @@ void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
     VkFilter vk_filter = (filter == P_FILTERING_MODE_LINEAR) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
     vkCmdBlitImage(cmd->buffer, src->image, image_layout_to_vk(src_layout), dst->image, image_layout_to_vk(dst_layout), region_count, vk_regions, vk_filter);
 
-    free(vk_regions);
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
 }
 
 void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage* image, uint32_t base_layer, uint32_t layer_count, PImageLayout final_layout)
@@ -321,7 +319,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
-    PImage* image = calloc(1, sizeof(*image));
+    PImage* image = P_NEW_FOR_OBJECT(pigment, image);
     if(image == NULL)
     {
         return NULL;
@@ -341,7 +339,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d)", desc->width, desc->height, desc->format);
-        free(image);
+        P_FREE(pigment, image);
         return NULL;
     }
 
@@ -362,7 +360,7 @@ static void destroy_image_immediate(Pigment* pigment, void* resource)
 {
     PImage* image = (PImage*) resource;
     free_resources(pigment, image);
-    free(image);
+    P_FREE(pigment, image);
 }
 
 void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
@@ -376,7 +374,7 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
         return;
     }
 
-    PImageResources* old = malloc(sizeof(*old));
+    PImageResources* old = P_NEW_FOR_OBJECT(pigment, old);
     if(old == NULL)
     {
         PLOG_ERROR(pigment, "Failed to allocate old resource bundle for resize, falling back to blocking path");
@@ -402,7 +400,7 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
         image->image            = old->image;
         image->image_allocation = old->allocation;
         image->view_cache       = old->view_cache;
-        free(old);
+        P_FREE(pigment, old);
         PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
         return;
     }
@@ -418,15 +416,15 @@ static void destroy_image_resources(Pigment* pigment, void* resource)
     for(uint32_t i = 0; i < res->view_cache.count; i++)
     {
         vkDestroyImageView(pigment->device->logical_device, res->view_cache.views[i]->view, &pigment->vk_alloc);
-        free(res->view_cache.views[i]);
+        P_FREE(pigment, res->view_cache.views[i]);
     }
-    free(res->view_cache.views);
+    P_FREE(pigment, res->view_cache.views);
 
     if(res->image != VK_NULL_HANDLE)
     {
         alloc->destroy_image(alloc->user_data, res->image, res->allocation);
     }
-    free(res);
+    P_FREE(pigment, res);
 }
 
 uint32_t pigment_image_width(PImage* image)
@@ -552,20 +550,13 @@ PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PIma
         return NULL;
     }
 
-    if(cache->count >= cache->capacity)
+    if(P_ARRAY_RESERVE_CACHE(pigment, cache->views, cache->count, cache->capacity, 1, PIGMENT_VIEW_CACHE_INITIAL_CAPACITY) != PIGMENT_SUCCESS)
     {
-        uint32_t new_capacity = cache->capacity == 0 ? PIGMENT_VIEW_CACHE_INITIAL_CAPACITY : cache->capacity * 2;
-        PImageView** new_ptr  = realloc(cache->views, new_capacity * sizeof(*new_ptr));
-        if(new_ptr == NULL)
-        {
-            vkDestroyImageView(pigment->device->logical_device, new_handle, &pigment->vk_alloc);
-            return NULL;
-        }
-        cache->views    = new_ptr;
-        cache->capacity = new_capacity;
+        vkDestroyImageView(pigment->device->logical_device, new_handle, &pigment->vk_alloc);
+        return NULL;
     }
 
-    PImageView* view = malloc(sizeof(*view));
+    PImageView* view = P_NEW_FOR_OBJECT(pigment, view);
     if(view == NULL)
     {
         vkDestroyImageView(pigment->device->logical_device, new_handle, &pigment->vk_alloc);
@@ -593,10 +584,10 @@ void image_destroy_view_cache(Pigment* pigment, PImage* image)
     for(uint32_t i = 0; i < cache->count; i++)
     {
         vkDestroyImageView(pigment->device->logical_device, cache->views[i]->view, &pigment->vk_alloc);
-        free(cache->views[i]);
+        P_FREE(pigment, cache->views[i]);
     }
 
-    free(cache->views);
+    P_FREE(pigment, cache->views);
     *cache = (PImageViewCache) {0};
 }
 

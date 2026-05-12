@@ -16,10 +16,8 @@
 
 #include "render_targets.h"
 
+#include "internal.h"
 #include "pigment.h"
-#include "log_internal.h"
-
-#include <stdlib.h>
 
 struct PRenderTarget {
     PImage** colors;
@@ -52,7 +50,7 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
         return NULL;
     }
 
-    PRenderTarget* target = calloc(1, sizeof(*target));
+    PRenderTarget* target = P_NEW_FOR_OBJECT(pigment, target);
     if(target == NULL)
     {
         return NULL;
@@ -72,10 +70,10 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
 
     if(desc->color_count > 0 && desc->colors != NULL)
     {
-        target->colors              = calloc(desc->color_count, sizeof(*target->colors));
-        target->color_resolves      = calloc(desc->color_count, sizeof(*target->color_resolves));
-        target->color_scales        = calloc(desc->color_count, sizeof(*target->color_scales));
-        target->color_aspect_ratios = calloc(desc->color_count, sizeof(*target->color_aspect_ratios));
+        target->colors              = P_NEW_ARRAY_FOR_OBJECT(pigment, target->colors, desc->color_count);
+        target->color_resolves      = P_NEW_ARRAY_FOR_OBJECT(pigment, target->color_resolves, desc->color_count);
+        target->color_scales        = P_NEW_ARRAY_FOR_OBJECT(pigment, target->color_scales, desc->color_count);
+        target->color_aspect_ratios = P_NEW_ARRAY_FOR_OBJECT(pigment, target->color_aspect_ratios, desc->color_count);
         if(target->colors == NULL || target->color_resolves == NULL || target->color_scales == NULL || target->color_aspect_ratios == NULL)
         {
             goto ERROR;
@@ -166,15 +164,15 @@ void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target)
                 pigment_destroy_image(pigment, target->color_resolves[i]);
             }
         }
-        free(target->colors);
-        free(target->color_resolves);
-        free(target->color_scales);
-        free(target->color_aspect_ratios);
+        P_FREE(pigment, target->colors);
+        P_FREE(pigment, target->color_resolves);
+        P_FREE(pigment, target->color_scales);
+        P_FREE(pigment, target->color_aspect_ratios);
     }
 
     pigment_destroy_image(pigment, target->depth);
     pigment_destroy_image(pigment, target->depth_resolve);
-    free(target);
+    P_FREE(pigment, target);
 }
 
 PImage** pigment_std_render_target_colors(PRenderTarget* target)

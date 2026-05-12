@@ -15,11 +15,10 @@
  */
 
 #include "camera.h"
+#include "internal.h"
 #include "pigment.h"
-#include "log_internal.h"
 #include "std_internal.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 typedef struct PCameraData {
@@ -42,7 +41,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
         return NULL;
     }
 
-    PCamera* camera = calloc(1, sizeof(*camera));
+    PCamera* camera = P_NEW_FOR_OBJECT(pigment, camera);
     if(camera == NULL)
     {
         return NULL;
@@ -62,7 +61,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
     if(camera->buffer == NULL)
     {
         PLOG_ERROR(pigment, "Failed to create camera buffer (size=%llu)", (unsigned long long) desc.size);
-        free(camera);
+        P_FREE(pigment, camera);
         return NULL;
     }
 
@@ -77,7 +76,7 @@ void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera)
     }
 
     pigment_destroy_buffer(pigment, camera->buffer);
-    free(camera);
+    P_FREE(pigment, camera);
 }
 
 void pigment_std_camera_set_view(PCamera* camera, mat4 view)

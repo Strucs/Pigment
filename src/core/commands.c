@@ -17,7 +17,6 @@
 #include "commands.h"
 #include "deletion.h"
 #include "internal.h"
-#include "log_internal.h"
 
 static void destroy_command_pool_immediate(Pigment* pigment, void* resource);
 static void destroy_command_buffers_immediate(Pigment* pigment, void* resource);
@@ -25,8 +24,8 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
-static PResult cmd_track_use(PCommandBuffer* cmd, PResourceTracker* tracker);
-static PResult pool_append_buffer(PCommandPool* pool, PCommandBuffer* cmd);
+static PResult cmd_track_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
+static PResult pool_append_buffer(Pigment* pigment, PCommandPool* pool, PCommandBuffer* cmd);
 static void pool_remove_buffer(PCommandPool* pool, PCommandBuffer* cmd);
 
 #define PIGMENT_POOL_BUFFERS_INITIAL_CAPACITY 4
@@ -65,11 +64,11 @@ static void destroy_command_pool_immediate(Pigment* pigment, void* resource)
     vkDestroyCommandPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
     for(uint32_t i = 0; i < pool->buffer_count; i++)
     {
-        free(pool->buffers[i]->uses);
-        free(pool->buffers[i]);
+        P_FREE(pigment, pool->buffers[i]->uses);
+        P_FREE(pigment, pool->buffers[i]);
     }
-    free(pool->buffers);
-    free(pool);
+    P_FREE(pigment, pool->buffers);
+    P_FREE(pigment, pool);
 }
 
 void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool)
@@ -99,7 +98,7 @@ PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, ui
         return NULL;
     }
 
-    PCommandBuffer** command_buffers = calloc(count, sizeof(*command_buffers));
+    PCommandBuffer** command_buffers = P_NEW_ARRAY_FOR_COMMAND(pigment, command_buffers, count);
     if(command_buffers == NULL)
     {
         return NULL;
@@ -107,7 +106,7 @@ PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, ui
 
     if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, count, command_buffers) != PIGMENT_SUCCESS)
     {
-        free(command_buffers);
+        P_FREE(pigment, command_buffers);
         return NULL;
     }
 
@@ -123,7 +122,7 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers,
 
     PCommandPool* pool = command_buffers[0]->source_pool;
 
-    VkCommandBuffer* vk_cmd_buffer = malloc(count * sizeof(*vk_cmd_buffer));
+    P_STACK_OR_HEAP(VkCommandBuffer, vk_cmd_buffer, count);
     if(vk_cmd_buffer != NULL)
     {
         for(uint32_t i = 0; i < count; i++)
@@ -131,16 +130,16 @@ void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers,
             vk_cmd_buffer[i] = command_buffers[i]->buffer;
         }
         vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, count, vk_cmd_buffer);
-        free(vk_cmd_buffer);
+        P_STACK_OR_HEAP_FREE(pigment, vk_cmd_buffer);
     }
 
     for(uint32_t i = 0; i < count; i++)
     {
         pool_remove_buffer(pool, command_buffers[i]);
-        free(command_buffers[i]->uses);
-        free(command_buffers[i]);
+        P_FREE(pigment, command_buffers[i]->uses);
+        P_FREE(pigment, command_buffers[i]);
     }
-    free(command_buffers);
+    P_FREE(pigment, command_buffers);
 }
 
 PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds)
@@ -150,15 +149,13 @@ PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCo
         return PIGMENT_ERROR;
     }
 
-    PResult status            = PIGMENT_ERROR;
-    VkCommandBuffer* vk_cmds  = NULL;
-    PCommandBuffer** wrappers = NULL;
-    uint32_t wrappers_done    = 0;
-    uint32_t appended         = 0;
-    PBool vk_allocated        = P_FALSE;
+    PResult status         = PIGMENT_ERROR;
+    uint32_t wrappers_done = 0;
+    uint32_t appended      = 0;
+    PBool vk_allocated     = P_FALSE;
 
-    vk_cmds  = calloc(count, sizeof(*vk_cmds));
-    wrappers = calloc(count, sizeof(*wrappers));
+    P_STACK_OR_HEAP(VkCommandBuffer, vk_cmds, count);
+    P_STACK_OR_HEAP(PCommandBuffer*, wrappers, count);
     if(vk_cmds == NULL || wrappers == NULL)
     {
         status = PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -183,13 +180,13 @@ PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCo
 
     for(uint32_t i = 0; i < count; i++)
     {
-        wrappers[i] = calloc(1, sizeof(*wrappers[i]));
+        wrappers[i] = P_NEW_FOR_OBJECT(pigment, wrappers[i]);
         if(wrappers[i] == NULL)
         {
             status = PIGMENT_ERROR_OUT_OF_MEMORY;
             goto FREE;
         }
-        wrappers[i]->uses = malloc(PIGMENT_CMD_USES_INITIAL_CAPACITY * sizeof(*wrappers[i]->uses));
+        wrappers[i]->uses = P_NEW_ARRAY_FOR_OBJECT(pigment, wrappers[i]->uses, PIGMENT_CMD_USES_INITIAL_CAPACITY);
         if(wrappers[i]->uses == NULL)
         {
             status = PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -200,7 +197,7 @@ PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCo
         wrappers[i]->use_capacity = PIGMENT_CMD_USES_INITIAL_CAPACITY;
         wrappers_done++;
 
-        if(pool_append_buffer(pool, wrappers[i]) != PIGMENT_SUCCESS)
+        if(pool_append_buffer(pigment, pool, wrappers[i]) != PIGMENT_SUCCESS)
         {
             status = PIGMENT_ERROR_OUT_OF_MEMORY;
             goto FREE;
@@ -210,8 +207,8 @@ PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCo
         out_cmds[i] = wrappers[i];
     }
 
-    free(vk_cmds);
-    free(wrappers);
+    P_STACK_OR_HEAP_FREE(pigment, vk_cmds);
+    P_STACK_OR_HEAP_FREE(pigment, wrappers);
     return PIGMENT_SUCCESS;
 
 FREE:
@@ -221,15 +218,15 @@ FREE:
     }
     for(uint32_t i = 0; i < wrappers_done; i++)
     {
-        free(wrappers[i]->uses);
-        free(wrappers[i]);
+        P_FREE(pigment, wrappers[i]->uses);
+        P_FREE(pigment, wrappers[i]);
     }
     if(vk_allocated)
     {
         vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, count, vk_cmds);
     }
-    free(vk_cmds);
-    free(wrappers);
+    P_STACK_OR_HEAP_FREE(pigment, vk_cmds);
+    P_STACK_OR_HEAP_FREE(pigment, wrappers);
     return status;
 }
 
@@ -258,7 +255,8 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
 
     VkCommandBufferInheritanceRenderingInfo rendering_inheritance = {0};
     VkCommandBufferInheritanceInfo inheritance_info               = {0};
-    VkFormat* color_formats                                       = NULL;
+    uint32_t color_format_count                                   = (inheritance != NULL) ? inheritance->color_format_count : 0;
+    P_STACK_OR_HEAP(VkFormat, color_formats, color_format_count);
 
     VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -267,15 +265,14 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
 
     if(inheritance != NULL)
     {
-        if(inheritance->color_format_count > 0)
+        if(color_format_count > 0)
         {
-            color_formats = calloc(inheritance->color_format_count, sizeof(*color_formats));
             if(color_formats == NULL)
             {
                 PLOG_ERROR(pigment, "Failed to allocate color formats for inheritance.");
                 return;
             }
-            for(uint32_t i = 0; i < inheritance->color_format_count; i++)
+            for(uint32_t i = 0; i < color_format_count; i++)
             {
                 color_formats[i] = (VkFormat) inheritance->color_formats[i];
             }
@@ -305,7 +302,7 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
         PLOG_ERROR(pigment, "Failed to begin command buffer recording (result: %d)", result);
     }
 
-    free(color_formats);
+    P_STACK_OR_HEAP_FREE(pigment, color_formats);
 }
 
 void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCommandBuffer** secondaries, uint32_t count)
@@ -315,7 +312,7 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
         return;
     }
 
-    VkCommandBuffer* vk_secondaries = calloc(count, sizeof(*vk_secondaries));
+    P_STACK_OR_HEAP(VkCommandBuffer, vk_secondaries, count);
     if(vk_secondaries == NULL)
     {
         return;
@@ -325,14 +322,14 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
     {
         if(secondaries[i] == NULL)
         {
-            free(vk_secondaries);
+            P_STACK_OR_HEAP_FREE(pigment, vk_secondaries);
             return;
         }
         vk_secondaries[i] = secondaries[i]->buffer;
     }
 
     vkCmdExecuteCommands(primary->buffer, count, vk_secondaries);
-    free(vk_secondaries);
+    P_STACK_OR_HEAP_FREE(pigment, vk_secondaries);
 }
 
 void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd)
@@ -373,14 +370,14 @@ PSubmitHandle pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uin
         total_cmd_count += submits[i].cmd_count;
     }
 
-    VkSubmitInfo2* submit_infos          = calloc(submit_count, sizeof(*submit_infos));
-    VkCommandBufferSubmitInfo* cmd_infos = malloc(total_cmd_count * sizeof(*cmd_infos));
-    VkSemaphoreSubmitInfo* signals       = calloc(submit_count, sizeof(*signals));
+    P_STACK_OR_HEAP(VkSubmitInfo2, submit_infos, submit_count);
+    P_STACK_OR_HEAP(VkCommandBufferSubmitInfo, cmd_infos, total_cmd_count);
+    P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, signals, submit_count);
     if(submit_infos == NULL || cmd_infos == NULL || signals == NULL)
     {
-        free(submit_infos);
-        free(cmd_infos);
-        free(signals);
+        P_STACK_OR_HEAP_FREE(pigment, submit_infos);
+        P_STACK_OR_HEAP_FREE(pigment, cmd_infos);
+        P_STACK_OR_HEAP_FREE(pigment, signals);
         return (PSubmitHandle) {0};
     }
 
@@ -419,9 +416,9 @@ PSubmitHandle pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uin
 
     VkResult result = vkQueueSubmit2(graphics->queue, submit_count, submit_infos, VK_NULL_HANDLE);
 
-    free(submit_infos);
-    free(cmd_infos);
-    free(signals);
+    P_STACK_OR_HEAP_FREE(pigment, submit_infos);
+    P_STACK_OR_HEAP_FREE(pigment, cmd_infos);
+    P_STACK_OR_HEAP_FREE(pigment, signals);
 
     if(result != VK_SUCCESS)
     {
@@ -480,12 +477,12 @@ static void destroy_command_buffers_immediate(Pigment* pigment, void* resource)
     vkFreeCommandBuffers(pigment->device->logical_device, batch->pool->pool, batch->count, batch->vk_buffers);
     for(uint32_t i = 0; i < batch->count; i++)
     {
-        free(batch->wrappers[i]->uses);
-        free(batch->wrappers[i]);
+        P_FREE(pigment, batch->wrappers[i]->uses);
+        P_FREE(pigment, batch->wrappers[i]);
     }
-    free(batch->vk_buffers);
-    free(batch->wrappers);
-    free(batch);
+    P_FREE(pigment, batch->vk_buffers);
+    P_FREE(pigment, batch->wrappers);
+    P_FREE(pigment, batch);
 }
 
 void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, uint32_t count)
@@ -505,19 +502,19 @@ void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, ui
         }
     }
 
-    PCommandBufferBatch* batch = calloc(1, sizeof(*batch));
+    PCommandBufferBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
     if(batch == NULL)
     {
         return;
     }
 
-    batch->vk_buffers = calloc(count, sizeof(*batch->vk_buffers));
-    batch->wrappers   = calloc(count, sizeof(*batch->wrappers));
+    batch->vk_buffers = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->vk_buffers, count);
+    batch->wrappers   = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->wrappers, count);
     if(batch->vk_buffers == NULL || batch->wrappers == NULL)
     {
-        free(batch->vk_buffers);
-        free(batch->wrappers);
-        free(batch);
+        P_FREE(pigment, batch->vk_buffers);
+        P_FREE(pigment, batch->wrappers);
+        P_FREE(pigment, batch);
         return;
     }
 
@@ -591,7 +588,7 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
         goto ERROR;
     }
 
-    command_pool = calloc(1, sizeof(*command_pool));
+    command_pool = P_NEW_FOR_OBJECT(pigment, command_pool);
     if(command_pool == NULL)
     {
         goto ERROR;
@@ -660,18 +657,12 @@ static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)
     return result;
 }
 
-static PResult pool_append_buffer(PCommandPool* pool, PCommandBuffer* cmd)
+static PResult pool_append_buffer(Pigment* pigment, PCommandPool* pool, PCommandBuffer* cmd)
 {
-    if(pool->buffer_count >= pool->buffer_capacity)
+    PResult res = P_ARRAY_RESERVE_OBJECT(pigment, pool->buffers, pool->buffer_count, pool->buffer_capacity, 1, PIGMENT_POOL_BUFFERS_INITIAL_CAPACITY);
+    if(res != PIGMENT_SUCCESS)
     {
-        uint32_t new_capacity    = (pool->buffer_capacity == 0) ? PIGMENT_POOL_BUFFERS_INITIAL_CAPACITY : pool->buffer_capacity * 2;
-        PCommandBuffer** new_ptr = realloc(pool->buffers, new_capacity * sizeof(*new_ptr));
-        if(new_ptr == NULL)
-        {
-            return PIGMENT_ERROR_OUT_OF_MEMORY;
-        }
-        pool->buffers         = new_ptr;
-        pool->buffer_capacity = new_capacity;
+        return res;
     }
     pool->buffers[pool->buffer_count++] = cmd;
     return PIGMENT_SUCCESS;
@@ -695,7 +686,7 @@ void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tr
     {
         return;
     }
-    if(cmd_track_use(cmd, tracker) != PIGMENT_SUCCESS)
+    if(cmd_track_use(pigment, cmd, tracker) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "pigment_cmd_use: failed to grow uses array, tracking dropped for this entry.");
     }
@@ -728,20 +719,13 @@ void pigment_cmd_use_sampler(Pigment* pigment, PCommandBuffer* cmd, PSampler* sa
     pigment_cmd_use(pigment, cmd, &sampler->tracker);
 }
 
-static PResult cmd_track_use(PCommandBuffer* cmd, PResourceTracker* tracker)
+static PResult cmd_track_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker)
 {
-    if(cmd->use_count >= cmd->use_capacity)
+    PResult res = P_ARRAY_RESERVE_OBJECT(pigment, cmd->uses, cmd->use_count, cmd->use_capacity, 1, PIGMENT_CMD_USES_INITIAL_CAPACITY);
+    if(res != PIGMENT_SUCCESS)
     {
-        uint32_t new_capacity       = (cmd->use_capacity == 0) ? PIGMENT_CMD_USES_INITIAL_CAPACITY : cmd->use_capacity * 2;
-        PResourceTracker** new_uses = realloc(cmd->uses, new_capacity * sizeof(*new_uses));
-        if(new_uses == NULL)
-        {
-            return PIGMENT_ERROR_OUT_OF_MEMORY;
-        }
-        cmd->uses         = new_uses;
-        cmd->use_capacity = new_capacity;
+        return res;
     }
-
     cmd->uses[cmd->use_count++] = tracker;
     return PIGMENT_SUCCESS;
 }

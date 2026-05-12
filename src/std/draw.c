@@ -15,15 +15,14 @@
  */
 
 #include "draw.h"
+#include "internal.h"
 #include "pigment.h"
 #include "material.h"
 #include "lights.h"
 #include "bindless.h"
 #include "camera.h"
 #include "std_internal.h"
-#include "log_internal.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 struct PInstanceRing {
@@ -41,7 +40,7 @@ PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_i
         return NULL;
     }
 
-    PInstanceRing* ring = calloc(1, sizeof(*ring));
+    PInstanceRing* ring = P_NEW_FOR_OBJECT(pigment, ring);
     if(ring == NULL)
     {
         return NULL;
@@ -57,7 +56,7 @@ PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_i
     if(ring->buffer == NULL)
     {
         PLOG_ERROR(pigment, "Failed to create instance ring buffer (size=%llu)", (unsigned long long) desc.size);
-        free(ring);
+        P_FREE(pigment, ring);
         return NULL;
     }
 
@@ -76,7 +75,7 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring)
     }
 
     pigment_destroy_buffer(pigment, ring->buffer);
-    free(ring);
+    P_FREE(pigment, ring);
 }
 
 void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)

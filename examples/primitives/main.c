@@ -249,25 +249,25 @@ int main(void)
         goto FREE;
     }
 
-    PMeshData cube    = pigment_cube_mesh();
+    PMeshData cube    = pigment_cube_mesh(pigment);
     uint32_t cube_idx = cube.index_count;
     gpu_cube          = pigment_upload_mesh_data(pigment, pool, &cube);
-    pigment_free_mesh_data(&cube);
+    pigment_free_mesh_data(pigment, &cube);
 
-    PMeshData sphere    = pigment_sphere_mesh(32, 32);
+    PMeshData sphere    = pigment_sphere_mesh(pigment, 32, 32);
     uint32_t sphere_idx = sphere.index_count;
     gpu_sphere          = pigment_upload_mesh_data(pigment, pool, &sphere);
-    pigment_free_mesh_data(&sphere);
+    pigment_free_mesh_data(pigment, &sphere);
 
-    PMeshData plane    = pigment_plane_mesh(8);
+    PMeshData plane    = pigment_plane_mesh(pigment, 8);
     uint32_t plane_idx = plane.index_count;
     gpu_plane          = pigment_upload_mesh_data(pigment, pool, &plane);
-    pigment_free_mesh_data(&plane);
+    pigment_free_mesh_data(pigment, &plane);
 
-    PMeshData quad    = pigment_quad_mesh();
+    PMeshData quad    = pigment_quad_mesh(pigment);
     uint32_t quad_idx = quad.index_count;
     gpu_quad          = pigment_upload_mesh_data(pigment, pool, &quad);
-    pigment_free_mesh_data(&quad);
+    pigment_free_mesh_data(pigment, &quad);
 
     if(gpu_cube == NULL || gpu_sphere == NULL || gpu_plane == NULL || gpu_quad == NULL)
     {

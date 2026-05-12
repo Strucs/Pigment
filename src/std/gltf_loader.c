@@ -15,9 +15,8 @@
  */
 
 #include "gltf_loader.h"
-#include "log_internal.h"
+#include "internal.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #include <cgltf.h>
@@ -34,38 +33,13 @@ typedef struct PrimAttrs {
     cgltf_accessor* color;
 } PrimAttrs;
 
-static PResult darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t add, size_t elem_size);
 static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s);
 static PrimAttrs find_primitive_attrs(cgltf_primitive* prim);
-static PResult append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs);
+static PResult append_primitive_vertices(Pigment* pigment, MeshAsset* asset, const PrimAttrs* attrs);
 static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data* data);
-static PResult append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
-static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
-static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node);
-
-static PResult darray_reserve(void** ptr, uint32_t count, uint32_t* cap, uint32_t add, size_t elem_size)
-{
-    if((uint64_t) count + add <= *cap)
-    {
-        return PIGMENT_SUCCESS;
-    }
-
-    uint32_t new_cap = (*cap == 0) ? DEFAULT_CAPACITY : *cap;
-    while(new_cap < count + add)
-    {
-        new_cap *= 2;
-    }
-
-    void* new_ptr = realloc(*ptr, elem_size * new_cap);
-    if(new_ptr == NULL)
-    {
-        return PIGMENT_ERROR_OUT_OF_MEMORY;
-    }
-
-    *ptr = new_ptr;
-    *cap = new_cap;
-    return PIGMENT_SUCCESS;
-}
+static PResult append_surface(Pigment* pigment, MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
+static PResult process_primitive(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
+static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_node* node);
 
 static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s)
 {
@@ -160,7 +134,7 @@ static PrimAttrs find_primitive_attrs(cgltf_primitive* prim)
     return attributes;
 }
 
-static PResult append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attrs)
+static PResult append_primitive_vertices(Pigment* pigment, MeshAsset* asset, const PrimAttrs* attrs)
 {
     if(attrs->pos == NULL || attrs->pos->count == 0)
     {
@@ -168,7 +142,7 @@ static PResult append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attr
     }
 
     uint32_t add = (uint32_t) attrs->pos->count;
-    PResult res  = darray_reserve((void**) &asset->vertices, asset->vertex_count, &asset->vertex_capacity, add, sizeof(PVertex));
+    PResult res  = P_ARRAY_RESERVE_CACHE(pigment, asset->vertices, asset->vertex_count, asset->vertex_capacity, add, DEFAULT_CAPACITY);
     if(res != PIGMENT_SUCCESS)
     {
         return res;
@@ -210,7 +184,7 @@ static PResult append_primitive_vertices(MeshAsset* asset, const PrimAttrs* attr
     return PIGMENT_SUCCESS;
 }
 
-static PResult append_primitive_indices(MeshAsset* asset, cgltf_accessor* indices, uint32_t base_vertex)
+static PResult append_primitive_indices(Pigment* pigment, MeshAsset* asset, cgltf_accessor* indices, uint32_t base_vertex)
 {
     if(indices == NULL || indices->count == 0)
     {
@@ -218,7 +192,7 @@ static PResult append_primitive_indices(MeshAsset* asset, cgltf_accessor* indice
     }
 
     uint32_t add = (uint32_t) indices->count;
-    PResult res  = darray_reserve((void**) &asset->indices, asset->index_count, &asset->index_capacity, add, sizeof(uint32_t));
+    PResult res  = P_ARRAY_RESERVE_CACHE(pigment, asset->indices, asset->index_count, asset->index_capacity, add, DEFAULT_CAPACITY);
     if(res != PIGMENT_SUCCESS)
     {
         return res;
@@ -313,24 +287,22 @@ static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data*
     return desc;
 }
 
-static PResult append_surface(MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc)
+static PResult append_surface(Pigment* pigment, MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc)
 {
-    if((uint64_t) asset->surface_count + 1 > asset->surface_capacity)
+    uint32_t cap_a = asset->surface_capacity;
+    uint32_t cap_b = asset->surface_capacity;
+    PResult res    = P_ARRAY_RESERVE_CACHE(pigment, asset->surfaces, asset->surface_count, cap_a, 1, DEFAULT_CAPACITY);
+    if(res != PIGMENT_SUCCESS)
     {
-        uint32_t new_cap = (asset->surface_capacity == 0) ? DEFAULT_CAPACITY : asset->surface_capacity * 2;
-
-        PRawSurface* new_surfaces = realloc(asset->surfaces, sizeof(PRawSurface) * new_cap);
-        PMaterialDesc* new_descs  = realloc(asset->surface_descs, sizeof(PMaterialDesc) * new_cap);
-
-        if(new_surfaces == NULL || new_descs == NULL)
-        {
-            return PIGMENT_ERROR_OUT_OF_MEMORY;
-        }
-
-        asset->surfaces         = new_surfaces;
-        asset->surface_descs    = new_descs;
-        asset->surface_capacity = new_cap;
+        return res;
     }
+
+    res = P_ARRAY_RESERVE_CACHE(pigment, asset->surface_descs, asset->surface_count, cap_b, 1, DEFAULT_CAPACITY);
+    if(res != PIGMENT_SUCCESS)
+    {
+        return res;
+    }
+    asset->surface_capacity = cap_a;
 
     asset->surfaces[asset->surface_count]      = surface;
     asset->surface_descs[asset->surface_count] = *desc;
@@ -339,14 +311,14 @@ static PResult append_surface(MeshAsset* asset, PRawSurface surface, const PMate
     return PIGMENT_SUCCESS;
 }
 
-static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx)
+static PResult process_primitive(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx)
 {
     PrimAttrs attrs = find_primitive_attrs(prim);
 
     uint32_t base_vertex = asset->vertex_count;
     uint32_t index_start = asset->index_count;
 
-    PResult res = append_primitive_vertices(asset, &attrs);
+    PResult res = append_primitive_vertices(pigment, asset, &attrs);
     if(res != PIGMENT_SUCCESS)
     {
         return res;
@@ -354,7 +326,7 @@ static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primi
 
     if(prim->indices)
     {
-        res = append_primitive_indices(asset, prim->indices, base_vertex);
+        res = append_primitive_indices(pigment, asset, prim->indices, base_vertex);
         if(res != PIGMENT_SUCCESS)
         {
             return res;
@@ -363,7 +335,7 @@ static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primi
     else if(attrs.pos)
     {
         uint32_t add = (uint32_t) attrs.pos->count;
-        res          = darray_reserve((void**) &asset->indices, asset->index_count, &asset->index_capacity, add, sizeof(uint32_t));
+        res          = P_ARRAY_RESERVE_CACHE(pigment, asset->indices, asset->index_count, asset->index_capacity, add, DEFAULT_CAPACITY);
         if(res != PIGMENT_SUCCESS)
         {
             return res;
@@ -384,10 +356,10 @@ static PResult process_primitive(MeshAsset* asset, cgltf_data* data, cgltf_primi
         .node_index  = node_idx,
     };
 
-    return append_surface(asset, surface, &desc);
+    return append_surface(pigment, asset, surface, &desc);
 }
 
-static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node)
+static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_node* node)
 {
     if(node->mesh)
     {
@@ -397,7 +369,7 @@ static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node
 
         cgltf_node_transform_world(node, world);
 
-        PResult res = darray_reserve((void**) &asset->node_transforms, asset->node_count, &asset->node_capacity, 1, sizeof(mat4));
+        PResult res = P_ARRAY_RESERVE_CACHE(pigment, asset->node_transforms, asset->node_count, asset->node_capacity, 1, DEFAULT_CAPACITY);
         if(res != PIGMENT_SUCCESS)
         {
             return res;
@@ -410,7 +382,7 @@ static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node
         gltf_mesh = node->mesh;
         for(size_t p = 0; p < gltf_mesh->primitives_count; p++)
         {
-            res = process_primitive(asset, data, &gltf_mesh->primitives[p], this_node_idx);
+            res = process_primitive(pigment, asset, data, &gltf_mesh->primitives[p], this_node_idx);
             if(res != PIGMENT_SUCCESS)
             {
                 return res;
@@ -420,7 +392,7 @@ static PResult process_node(MeshAsset* asset, cgltf_data* data, cgltf_node* node
 
     for(size_t c = 0; c < node->children_count; c++)
     {
-        PResult res = process_node(asset, data, node->children[c]);
+        PResult res = process_node(pigment, asset, data, node->children[c]);
         if(res != PIGMENT_SUCCESS)
         {
             return res;
@@ -456,7 +428,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
         }
     }
 
-    asset = calloc(1, sizeof(MeshAsset));
+    asset = P_NEW_FOR_OBJECT(pigment, asset);
     if(asset == NULL)
     {
         goto FREE;
@@ -464,7 +436,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
 
     if(data->images_count > 0)
     {
-        asset->images = calloc(data->images_count, sizeof(PRawImage));
+        asset->images = P_NEW_ARRAY_FOR_OBJECT(pigment, asset->images, data->images_count);
         if(asset->images == NULL)
         {
             goto ERROR;
@@ -487,13 +459,13 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
                 if(strncmp(img->uri, "data:", 5) != 0)
                 {
                     size_t uri_len  = strlen(img->uri);
-                    char* full_path = malloc(base_len + uri_len + 1);
+                    char* full_path = P_ALLOC_COMMAND(pigment, base_len + uri_len + 1, _Alignof(char));
                     if(full_path)
                     {
                         memcpy(full_path, filepath, base_len);
                         memcpy(full_path + base_len, img->uri, uri_len + 1);
                         pixels = stbi_load(full_path, &w, &h, &channels, STBI_rgb_alpha);
-                        free(full_path);
+                        P_FREE(pigment, full_path);
                     }
                 }
                 else
@@ -518,7 +490,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
                         if(cgltf_load_buffer_base64(&options, decoded_size, b64, &decoded) == cgltf_result_success)
                         {
                             pixels = stbi_load_from_memory((const unsigned char*) decoded, (int) decoded_size, &w, &h, &channels, STBI_rgb_alpha);
-                            free(decoded);
+                            P_FREE(pigment, decoded);
                         }
                     }
                 }
@@ -538,7 +510,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
 
     if(data->samplers_count > 0)
     {
-        asset->sampler_descs = calloc(data->samplers_count, sizeof(PSamplerDesc));
+        asset->sampler_descs = P_NEW_ARRAY_FOR_OBJECT(pigment, asset->sampler_descs, data->samplers_count);
         if(asset->sampler_descs == NULL)
         {
             goto ERROR;
@@ -557,7 +529,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
         cgltf_scene* scene = &data->scenes[s];
         for(size_t n = 0; n < scene->nodes_count; n++)
         {
-            if(process_node(asset, data, scene->nodes[n]) != PIGMENT_SUCCESS)
+            if(process_node(pigment, asset, data, scene->nodes[n]) != PIGMENT_SUCCESS)
             {
                 goto ERROR;
             }
@@ -567,7 +539,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
     goto FREE;
 
 ERROR:
-    free_mesh_asset(asset);
+    free_mesh_asset(pigment, asset);
     asset = NULL;
 
 FREE:
@@ -594,12 +566,12 @@ PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset
     // Upload one batch of valid images contiguously and store indices in an array
     if(asset->image_count > 0)
     {
-        tex_map     = calloc(asset->image_count, sizeof(*tex_map));
-        pixels      = malloc(asset->image_count * sizeof(*pixels));
-        widths      = malloc(asset->image_count * sizeof(*widths));
-        heights     = malloc(asset->image_count * sizeof(*heights));
-        formats     = malloc(asset->image_count * sizeof(*formats));
-        src_indices = malloc(asset->image_count * sizeof(*src_indices));
+        tex_map     = P_NEW_ARRAY_FOR_OBJECT(pigment, tex_map, asset->image_count);
+        pixels      = P_NEW_ARRAY_FOR_OBJECT(pigment, pixels, asset->image_count);
+        widths      = P_NEW_ARRAY_FOR_OBJECT(pigment, widths, asset->image_count);
+        heights     = P_NEW_ARRAY_FOR_OBJECT(pigment, heights, asset->image_count);
+        formats     = P_NEW_ARRAY_FOR_OBJECT(pigment, formats, asset->image_count);
+        src_indices = P_NEW_ARRAY_FOR_OBJECT(pigment, src_indices, asset->image_count);
 
         if(tex_map == NULL || pixels == NULL || widths == NULL || heights == NULL || formats == NULL || src_indices == NULL)
         {
@@ -637,7 +609,7 @@ PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset
 
     if(asset->sampler_count > 0)
     {
-        samp_map = calloc(asset->sampler_count, sizeof(*samp_map));
+        samp_map = P_NEW_ARRAY_FOR_OBJECT(pigment, samp_map, asset->sampler_count);
         if(samp_map == NULL)
         {
             goto FREE;
@@ -690,21 +662,21 @@ PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset
         }
     }
 
-    free(asset->surface_descs);
+    P_FREE(pigment, asset->surface_descs);
     asset->surface_descs = NULL;
 
 FREE:
-    free(pixels);
-    free(tex_map);
-    free(samp_map);
-    free(widths);
-    free(heights);
-    free(formats);
-    free(src_indices);
+    P_FREE(pigment, pixels);
+    P_FREE(pigment, tex_map);
+    P_FREE(pigment, samp_map);
+    P_FREE(pigment, widths);
+    P_FREE(pigment, heights);
+    P_FREE(pigment, formats);
+    P_FREE(pigment, src_indices);
     return status;
 }
 
-void free_mesh_asset(MeshAsset* asset)
+void free_mesh_asset(Pigment* pigment, MeshAsset* asset)
 {
     if(!asset)
     {
@@ -716,13 +688,13 @@ void free_mesh_asset(MeshAsset* asset)
         stbi_image_free(asset->images[i].pixels);
     }
 
-    free(asset->images);
-    free(asset->sampler_descs);
+    P_FREE(pigment, asset->images);
+    P_FREE(pigment, asset->sampler_descs);
 
-    free(asset->vertices);
-    free(asset->indices);
-    free(asset->surfaces);
-    free(asset->surface_descs);
-    free(asset->node_transforms);
-    free(asset);
+    P_FREE(pigment, asset->vertices);
+    P_FREE(pigment, asset->indices);
+    P_FREE(pigment, asset->surfaces);
+    P_FREE(pigment, asset->surface_descs);
+    P_FREE(pigment, asset->node_transforms);
+    P_FREE(pigment, asset);
 }

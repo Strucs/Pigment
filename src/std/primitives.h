@@ -28,12 +28,12 @@ typedef struct PMeshData {
     uint32_t index_count;
 } PMeshData;
 
-PMeshData pigment_cube_mesh(void);
-PMeshData pigment_quad_mesh(void);
-PMeshData pigment_plane_mesh(uint32_t segments);
-PMeshData pigment_sphere_mesh(uint32_t lat_segments, uint32_t lon_segments);
+PMeshData pigment_cube_mesh(Pigment* pigment);
+PMeshData pigment_quad_mesh(Pigment* pigment);
+PMeshData pigment_plane_mesh(Pigment* pigment, uint32_t segments);
+PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segments, uint32_t lon_segments);
 
-void pigment_free_mesh_data(PMeshData* mesh);
+void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh);
 
 PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data);
 

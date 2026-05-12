@@ -18,9 +18,6 @@
 #include "commands.h"
 #include "deletion.h"
 #include "internal.h"
-#include "log_internal.h"
-
-#include <stdlib.h>
 
 static void destroy_buffer_immediate(Pigment* pigment, void* resource);
 static VkBufferUsageFlags translate_usage(PBufferUsage usage);
@@ -32,7 +29,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         return NULL;
     }
 
-    PBuffer* buffer = calloc(1, sizeof(*buffer));
+    PBuffer* buffer = P_NEW_FOR_OBJECT(pigment, buffer);
     if(buffer == NULL)
     {
         return NULL;
@@ -73,7 +70,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);
-        free(buffer);
+        P_FREE(pigment, buffer);
         return NULL;
     }
 
@@ -87,7 +84,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         {
             PLOG_ERROR(pigment, "Failed to map buffer (result: %d)", result);
             alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
-            free(buffer);
+            P_FREE(pigment, buffer);
             return NULL;
         }
     }
@@ -122,7 +119,7 @@ static void destroy_buffer_immediate(Pigment* pigment, void* resource)
         alloc->unmap(alloc->user_data, buffer->allocation);
     }
     alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
-    free(buffer);
+    P_FREE(pigment, buffer);
 }
 
 void* pigment_buffer_mapped(PBuffer* buffer)
@@ -187,7 +184,7 @@ void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src
     pigment_cmd_use_buffer(pigment, cmd, src);
     pigment_cmd_use_buffer(pigment, cmd, dst);
 
-    VkBufferCopy* vk_regions = calloc(region_count, sizeof(*vk_regions));
+    P_STACK_OR_HEAP(VkBufferCopy, vk_regions, region_count);
     if(vk_regions == NULL)
     {
         return;
@@ -203,7 +200,7 @@ void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src
     }
 
     vkCmdCopyBuffer(cmd->buffer, src->buffer, dst->buffer, region_count, vk_regions);
-    free(vk_regions);
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
 }
 
 static VkBufferUsageFlags translate_usage(PBufferUsage usage)

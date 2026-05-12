@@ -28,7 +28,6 @@
 
 #include "native_surface.h"
 #include "internal.h"
-#include "log_internal.h"
 
 #define LOAD_SURFACE_FUNC(instance, name)                                                         \
     PFN_##name name##_func = (PFN_##name) vkGetInstanceProcAddr((instance), #name);               \

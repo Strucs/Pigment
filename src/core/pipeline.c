@@ -18,7 +18,6 @@
 #include "structs.h"
 #include "deletion.h"
 #include "internal.h"
-#include "log_internal.h"
 
 static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
 static VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point);
@@ -41,7 +40,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         return NULL;
     }
 
-    PPipelineBuild* build = calloc(1, sizeof(*build));
+    PPipelineBuild* build = P_NEW_FOR_OBJECT(pigment, build);
     if(build == NULL)
     {
         return NULL;
@@ -73,7 +72,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
     build->color_format_count = desc->color_format_count;
     if(desc->color_format_count > 0)
     {
-        build->color_formats = malloc(desc->color_format_count * sizeof(*build->color_formats));
+        build->color_formats = P_NEW_ARRAY_FOR_OBJECT(pigment, build->color_formats, desc->color_format_count);
         if(build->color_formats == NULL)
         {
             goto ERROR;
@@ -84,7 +83,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
         }
 
         build->blend_attachment_count = desc->color_format_count;
-        build->blend_attachments      = malloc(desc->color_format_count * sizeof(*build->blend_attachments));
+        build->blend_attachments      = P_NEW_ARRAY_FOR_OBJECT(pigment, build->blend_attachments, desc->color_format_count);
         if(build->blend_attachments == NULL)
         {
             goto ERROR;
@@ -127,7 +126,7 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
     const uint32_t optional_count = pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? 2 : 0;
 
     build->dynamic_state_count = base_count + optional_count;
-    build->dynamic_state_list  = malloc(build->dynamic_state_count * sizeof(*build->dynamic_state_list));
+    build->dynamic_state_list  = P_NEW_ARRAY_FOR_OBJECT(pigment, build->dynamic_state_list, build->dynamic_state_count);
     if(build->dynamic_state_list == NULL)
     {
         goto ERROR;
@@ -182,10 +181,10 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
         vkDestroyShaderModule(device, build->fragment_module, &pigment->vk_alloc);
     }
 
-    free(build->color_formats);
-    free(build->blend_attachments);
-    free(build->dynamic_state_list);
-    free(build);
+    P_FREE(pigment, build->color_formats);
+    P_FREE(pigment, build->blend_attachments);
+    P_FREE(pigment, build->dynamic_state_list);
+    P_FREE(pigment, build);
 }
 
 PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out)
@@ -214,9 +213,9 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
 
     VkDevice device = pigment->device->logical_device;
 
-    vk_pipelines          = calloc(count, sizeof(*vk_pipelines));
-    temp_pipelines        = calloc(count, sizeof(*temp_pipelines));
-    pipeline_create_infos = calloc(count, sizeof(*pipeline_create_infos));
+    vk_pipelines          = P_NEW_ARRAY_FOR_COMMAND(pigment, vk_pipelines, count);
+    temp_pipelines        = P_NEW_ARRAY_FOR_COMMAND(pigment, temp_pipelines, count);
+    pipeline_create_infos = P_NEW_ARRAY_FOR_COMMAND(pigment, pipeline_create_infos, count);
     if(vk_pipelines == NULL || temp_pipelines == NULL || pipeline_create_infos == NULL)
     {
         goto FREE;
@@ -224,7 +223,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i] = calloc(1, sizeof(**temp_pipelines));
+        temp_pipelines[i] = P_NEW_FOR_OBJECT(pigment, temp_pipelines[i]);
         if(temp_pipelines[i] == NULL)
         {
             goto FREE;
@@ -284,12 +283,12 @@ FREE:
     {
         for(uint32_t i = 0; i < temp_pipelines_allocated; i++)
         {
-            free(temp_pipelines[i]);
+            P_FREE(pigment, temp_pipelines[i]);
         }
     }
-    free(temp_pipelines);
-    free(vk_pipelines);
-    free(pipeline_create_infos);
+    P_FREE(pigment, temp_pipelines);
+    P_FREE(pigment, vk_pipelines);
+    P_FREE(pigment, pipeline_create_infos);
 
     for(uint32_t i = 0; i < count; i++)
     {
@@ -320,7 +319,7 @@ static void destroy_pipeline_immediate(Pigment* pigment, void* resource)
     {
         vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, &pigment->vk_alloc);
     }
-    free(pipeline);
+    P_FREE(pigment, pipeline);
 }
 
 void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline)
@@ -574,7 +573,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     VkDescriptorSetLayout* vk_set_layouts = NULL;
     if(desc->set_layout_count > 0)
     {
-        vk_set_layouts = malloc(desc->set_layout_count * sizeof(*vk_set_layouts));
+        vk_set_layouts = P_NEW_ARRAY_FOR_COMMAND(pigment, vk_set_layouts, desc->set_layout_count);
         if(vk_set_layouts == NULL)
         {
             return NULL;
@@ -597,7 +596,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     VkPipelineLayout vk_layout = VK_NULL_HANDLE;
     VkResult result            = vkCreatePipelineLayout(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &vk_layout);
 
-    free(vk_set_layouts);
+    P_FREE(pigment, vk_set_layouts);
 
     if(result != VK_SUCCESS)
     {
@@ -605,7 +604,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
         return NULL;
     }
 
-    PLayout* layout = calloc(1, sizeof(*layout));
+    PLayout* layout = P_NEW_FOR_OBJECT(pigment, layout);
     if(layout == NULL)
     {
         vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, &pigment->vk_alloc);
@@ -638,5 +637,5 @@ static void destroy_layout_immediate(Pigment* pigment, void* resource)
     {
         vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, &pigment->vk_alloc);
     }
-    free(layout);
+    P_FREE(pigment, layout);
 }

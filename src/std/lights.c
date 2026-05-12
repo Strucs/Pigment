@@ -15,14 +15,12 @@
  */
 
 #include "lights.h"
+#include "internal.h"
 #include "pigment.h"
 #include "camera.h"
 #include "std_internal.h"
-#include "log_internal.h"
 
 #include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
 
 typedef struct PLightsHeader {
     vec3 ambient_color;
@@ -56,13 +54,13 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
         return NULL;
     }
 
-    PLights* lights = calloc(1, sizeof(*lights));
+    PLights* lights = P_NEW_FOR_OBJECT(pigment, lights);
     if(lights == NULL)
     {
         return NULL;
     }
 
-    lights->free_slots = calloc(max_lights, sizeof(*lights->free_slots));
+    lights->free_slots = P_NEW_ARRAY_FOR_OBJECT(pigment, lights->free_slots, max_lights);
     if(lights->free_slots == NULL)
     {
         goto ERROR;
@@ -95,8 +93,8 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
 
 ERROR:
     pigment_destroy_buffer(pigment, lights->buffer);
-    free(lights->free_slots);
-    free(lights);
+    P_FREE(pigment, lights->free_slots);
+    P_FREE(pigment, lights);
     return NULL;
 }
 
@@ -122,8 +120,8 @@ void pigment_std_destroy_lights(Pigment* pigment, PLights* lights)
     }
 
     pigment_destroy_buffer(pigment, lights->buffer);
-    free(lights->free_slots);
-    free(lights);
+    P_FREE(pigment, lights->free_slots);
+    P_FREE(pigment, lights);
 }
 
 uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc)

@@ -19,9 +19,6 @@
 #include "commands.h"
 #include "deletion.h"
 #include "internal.h"
-#include "log_internal.h"
-
-#include <stdlib.h>
 
 static void destroy_sampler_immediate(Pigment* pigment, void* resource);
 
@@ -32,7 +29,7 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
         return NULL;
     }
 
-    PSampler* sampler = calloc(1, sizeof(*sampler));
+    PSampler* sampler = P_NEW_FOR_OBJECT(pigment, sampler);
     if(sampler == NULL)
     {
         return NULL;
@@ -71,7 +68,7 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create sampler! (result: %d)", result);
-        free(sampler);
+        P_FREE(pigment, sampler);
         return NULL;
     }
 
@@ -94,5 +91,5 @@ static void destroy_sampler_immediate(Pigment* pigment, void* resource)
 {
     PSampler* sampler = (PSampler*) resource;
     vkDestroySampler(pigment->device->logical_device, sampler->sampler, &pigment->vk_alloc);
-    free(sampler);
+    P_FREE(pigment, sampler);
 }

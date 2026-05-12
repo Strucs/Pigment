@@ -17,7 +17,6 @@
 #include "cmd_sync.h"
 #include "commands.h"
 #include "internal.h"
-#include "log_internal.h"
 
 static VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);
 static VkAccessFlags2 memory_access_to_vk(PMemoryAccess access);
@@ -30,7 +29,7 @@ void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PIm
         return;
     }
 
-    VkImageMemoryBarrier2* vk_barriers = calloc(count, sizeof(*vk_barriers));
+    P_STACK_OR_HEAP(VkImageMemoryBarrier2, vk_barriers, count);
     if(vk_barriers == NULL)
     {
         return;
@@ -71,7 +70,7 @@ void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PIm
 
     vkCmdPipelineBarrier2(cmd->buffer, &dep);
 
-    free(vk_barriers);
+    P_STACK_OR_HEAP_FREE(pigment, vk_barriers);
 }
 
 void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PBufferBarrier* barriers, uint32_t count)
@@ -81,7 +80,7 @@ void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PB
         return;
     }
 
-    VkBufferMemoryBarrier2* vk_barriers = calloc(count, sizeof(*vk_barriers));
+    P_STACK_OR_HEAP(VkBufferMemoryBarrier2, vk_barriers, count);
     if(vk_barriers == NULL)
     {
         return;
@@ -118,7 +117,7 @@ void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PB
 
     vkCmdPipelineBarrier2(cmd->buffer, &dep);
 
-    free(vk_barriers);
+    P_STACK_OR_HEAP_FREE(pigment, vk_barriers);
 }
 
 void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PMemoryBarrier* barriers, uint32_t count)
@@ -128,7 +127,7 @@ void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PM
         return;
     }
 
-    VkMemoryBarrier2* vk_barriers = calloc(count, sizeof(*vk_barriers));
+    P_STACK_OR_HEAP(VkMemoryBarrier2, vk_barriers, count);
     if(vk_barriers == NULL)
     {
         return;
@@ -158,7 +157,7 @@ void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PM
 
     vkCmdPipelineBarrier2(cmd->buffer, &dep);
 
-    free(vk_barriers);
+    P_STACK_OR_HEAP_FREE(pigment, vk_barriers);
 }
 
 static VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages)
