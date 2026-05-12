@@ -22,9 +22,7 @@ int main(void)
     PPipeline* pipeline                 = NULL;
     PPipeline* skybox_pipeline          = NULL;
     PPipeline* crt_pipeline             = NULL;
-    PPipelineBuild* build               = NULL;
-    PPipelineBuild* skybox_build        = NULL;
-    PPipelineBuild* crt_build           = NULL;
+    PStdCanvas* canvas                  = NULL;
     PRenderTarget* rt                   = NULL;
     uint32_t cubemap_slot               = 0;
     uint32_t rt_slot                    = 0;
@@ -221,31 +219,30 @@ int main(void)
     rt_slot = pigment_std_register_render_target(pigment, bindless, rt);
 
     PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
-    build              = pigment_pipeline_build_from_desc(pigment, &desc);
-    if(build == NULL)
-    {
-        fprintf(stderr, "Failed to build pipeline!\n");
-        goto FREE;
-    }
-    if(pigment_create_graphic_pipelines(pigment, &build, 1, &pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, &desc, 1, &pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipeline!\n");
         goto FREE;
     }
 
     PPipelineDesc skybox_desc = default_skybox_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
-    skybox_build              = pigment_pipeline_build_from_desc(pigment, &skybox_desc);
-    if(skybox_build == NULL || pigment_create_graphic_pipelines(pigment, &skybox_build, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, &skybox_desc, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create skybox pipeline!\n");
         goto FREE;
     }
 
     PPipelineDesc crt_desc = default_crt_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, pigment_get_sample_count(renderer));
-    crt_build              = pigment_pipeline_build_from_desc(pigment, &crt_desc);
-    if(crt_build == NULL || pigment_create_graphic_pipelines(pigment, &crt_build, 1, &crt_pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, &crt_desc, 1, &crt_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create CRT pipeline!\n");
+        goto FREE;
+    }
+
+    canvas = pigment_std_create_canvas(pigment, color_format, rt_samples);
+    if(canvas == NULL)
+    {
+        fprintf(stderr, "Failed to create canvas!\n");
         goto FREE;
     }
 
@@ -366,7 +363,10 @@ int main(void)
         }
 
         PAttachmentRef scene_colors[] = {pigment_std_render_target_color_ref(rt, 0)};
-        PRenderPassDesc scene_pass    = {
+        scene_colors[0].store_op      = P_STORE_OP_STORE;
+        scene_colors[0].final_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT;
+
+        PRenderPassDesc scene_pass = {
             .color_attachments = scene_colors,
             .color_count       = 1,
             .depth_attachment  = pigment_std_render_target_depth_ref(rt),
@@ -382,6 +382,22 @@ int main(void)
         pigment_std_draw_skybox(pigment, renderer, bindless, skybox_pipeline, camera, cubemap_slot, 0);
 
         pigment_end_render_pass(pigment, cmd, &scene_pass);
+
+        PAttachmentRef hud_colors[] = {pigment_std_render_target_color_ref(rt, 0)};
+        hud_colors[0].load_op       = P_LOAD_OP_LOAD;
+
+        PRenderPassDesc hud_pass = {
+            .color_attachments = hud_colors,
+            .color_count       = 1,
+        };
+        pigment_begin_render_pass(pigment, cmd, &hud_pass);
+
+        pigment_std_canvas_begin(pigment, canvas, cmd);
+        float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2,  crosshair_color);
+        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2,  24, crosshair_color);
+
+        pigment_end_render_pass(pigment, cmd, &hud_pass);
 
         pigment_begin_swapchain_pass(pigment, renderer);
 
@@ -421,6 +437,7 @@ FREE:
     pigment_destroy_pipeline(pigment, pipeline);
     pigment_destroy_pipeline(pigment, skybox_pipeline);
     pigment_destroy_pipeline(pigment, crt_pipeline);
+    pigment_std_destroy_canvas(pigment, canvas);
     pigment_renderer_destroy(pigment, renderer);
     pigment_destroy_command_pool(pigment, pool);
     pigment_std_destroy_render_target(pigment, rt);

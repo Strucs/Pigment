@@ -22,6 +22,7 @@
 
 #include "pigment.h"
 
+#include "std/canvas/canvas.h"
 #include "std/bindless.h"
 #include "std/camera.h"
 #include "std/camera_math.h"

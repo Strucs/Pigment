@@ -88,7 +88,7 @@ void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bin
     PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
     uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, current_frame);
+    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, cmd, current_frame);
     pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &bindless_set, 1, NULL, 0);
 
     if(current_frame != ring->last_seen_frame)
@@ -157,7 +157,7 @@ void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBi
     PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
     uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, current_frame);
+    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, cmd, current_frame);
     pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &bindless_set, 1, NULL, 0);
 
     pigment_std_camera_upload(pigment, camera, current_frame);
@@ -188,7 +188,7 @@ void pigment_std_draw_crt(Pigment* pigment, PWindowRenderer* renderer, PStdBindl
     uint32_t h = 0;
     pigment_get_swapchain_size(renderer, &w, &h);
 
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, current_frame);
+    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, cmd, current_frame);
     pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &bindless_set, 1, NULL, 0);
 
     PStdCrtPushConstants push = {

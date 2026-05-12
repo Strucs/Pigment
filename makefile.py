@@ -58,7 +58,7 @@ def build_shaders(shaders_dir: str):
             any_shader_rebuilt = True
 
     if any_shader_rebuilt:
-        for c_file in ["src/std/pipeline_loader.c"]:
+        for c_file in ["src/std/pipeline_loader.c", "src/std/canvas/canvas.c"]:
             if os.path.exists(c_file):
                 os.utime(c_file, None)
 

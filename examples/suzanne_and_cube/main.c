@@ -151,21 +151,14 @@ int main(void)
     PFormat color_format        = pigment_get_color_format(renderer);
     PSampleCount samples        = pigment_get_sample_count(renderer);
     PPipelineDesc pipeline_desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer), samples);
-    PPipelineBuild* build       = pigment_pipeline_build_from_desc(pigment, &pipeline_desc);
-    if(build == NULL)
-    {
-        fprintf(stderr, "Failed to build pipeline!\n");
-        goto FREE;
-    }
-    if(pigment_create_graphic_pipelines(pigment, &build, 1, &pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, &pipeline_desc, 1, &pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
         goto FREE;
     }
 
-    PPipelineDesc gizmo_desc    = default_light_gizmo_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer), samples);
-    PPipelineBuild* gizmo_build = pigment_pipeline_build_from_desc(pigment, &gizmo_desc);
-    if(gizmo_build == NULL || pigment_create_graphic_pipelines(pigment, &gizmo_build, 1, &gizmo_pipeline) != PIGMENT_SUCCESS)
+    PPipelineDesc gizmo_desc = default_light_gizmo_pipeline_desc(pigment, bindless, &color_format, 1, pigment_get_depth_format(renderer), samples);
+    if(pigment_create_graphic_pipelines(pigment, &gizmo_desc, 1, &gizmo_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create gizmo pipeline!\n");
         goto FREE;

@@ -30,7 +30,6 @@ int main(void)
     PDrawCall* draw_calls2           = NULL;
     PInstanceData* instance_storage  = NULL;
     PInstanceData* instance_storage2 = NULL;
-    PPipelineBuild* builds[2]        = {NULL, NULL};
     int error_code                   = 1;
 
     if(!SDL_Init(SDL_INIT_VIDEO))
@@ -153,16 +152,8 @@ int main(void)
     desc_additive.blend_modes      = &additive_blend;
     desc_additive.blend_mode_count = 1;
 
-    builds[0] = pigment_pipeline_build_from_desc(pigment, &desc_opaque);
-    builds[1] = pigment_pipeline_build_from_desc(pigment, &desc_additive);
-
-    if(builds[0] == NULL || builds[1] == NULL)
-    {
-        fprintf(stderr, "Failed to build pipelines!\n");
-        goto FREE;
-    }
-
-    if(pigment_create_graphic_pipelines(pigment, builds, 2, pipelines) != PIGMENT_SUCCESS)
+    PPipelineDesc descs[2] = {desc_opaque, desc_additive};
+    if(pigment_create_graphic_pipelines(pigment, descs, 2, pipelines) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
         goto FREE;

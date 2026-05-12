@@ -19,6 +19,8 @@
 #include "deletion.h"
 #include "internal.h"
 
+static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc);
+static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
 static VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point);
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void);
@@ -33,7 +35,7 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
 static void destroy_pipeline_immediate(Pigment* pigment, void* resource);
 static void destroy_layout_immediate(Pigment* pigment, void* resource);
 
-PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc* desc)
+static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc)
 {
     if(pigment == NULL || desc == NULL || desc->vertex_spv == NULL)
     {
@@ -159,11 +161,11 @@ PPipelineBuild* pigment_pipeline_build_from_desc(Pigment* pigment, PPipelineDesc
     return build;
 
 ERROR:
-    pigment_pipeline_build_destroy(pigment, build);
+    pipeline_build_destroy(pigment, build);
     return NULL;
 }
 
-void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
+static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
 {
     if(pigment == NULL || build == NULL)
     {
@@ -187,48 +189,43 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
     P_FREE(pigment, build);
 }
 
-PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** builds, uint32_t count, PPipeline** out)
+PResult pigment_create_graphic_pipelines(Pigment* pigment, const PPipelineDesc* descs, uint32_t count, PPipeline** out)
 {
-    VkGraphicsPipelineCreateInfo* pipeline_create_infos = NULL;
-    VkPipeline* vk_pipelines                            = NULL;
-    PPipeline** temp_pipelines                          = NULL;
-    uint32_t temp_pipelines_allocated                   = 0;
-    PResult status                                      = PIGMENT_ERROR;
-
-    if(pigment == NULL || builds == NULL || out == NULL || count == 0)
+    if(pigment == NULL || descs == NULL || out == NULL || count == 0)
     {
         return PIGMENT_ERROR;
     }
 
-    for(uint32_t i = 0; i < count; i++)
-    {
-        if(builds[i] == NULL)
-        {
-            PLOG_ERROR(pigment, "pigment_create_graphic_pipelines: builds[%u] is NULL", i);
-            goto FREE;
-        }
-    }
+    PResult status               = PIGMENT_ERROR_OUT_OF_MEMORY;
+    uint32_t builds_done         = 0;
+    uint32_t temp_pipelines_done = 0;
 
-    status = PIGMENT_ERROR_OUT_OF_MEMORY;
-
-    VkDevice device = pigment->device->logical_device;
-
-    vk_pipelines          = P_NEW_ARRAY_FOR_COMMAND(pigment, vk_pipelines, count);
-    temp_pipelines        = P_NEW_ARRAY_FOR_COMMAND(pigment, temp_pipelines, count);
-    pipeline_create_infos = P_NEW_ARRAY_FOR_COMMAND(pigment, pipeline_create_infos, count);
-    if(vk_pipelines == NULL || temp_pipelines == NULL || pipeline_create_infos == NULL)
+    P_STACK_OR_HEAP(PPipelineBuild*, builds, count);
+    P_STACK_OR_HEAP(VkGraphicsPipelineCreateInfo, pipeline_create_infos, count);
+    P_STACK_OR_HEAP(VkPipeline, vk_pipelines, count);
+    P_STACK_OR_HEAP(PPipeline*, temp_pipelines, count);
+    if(builds == NULL || pipeline_create_infos == NULL || vk_pipelines == NULL || temp_pipelines == NULL)
     {
         goto FREE;
     }
 
+    VkDevice device = pigment->device->logical_device;
+
     for(uint32_t i = 0; i < count; i++)
     {
+        builds[i] = pipeline_build_from_desc(pigment, &descs[i]);
+        if(builds[i] == NULL)
+        {
+            goto FREE;
+        }
+        builds_done++;
+
         temp_pipelines[i] = P_NEW_FOR_OBJECT(pigment, temp_pipelines[i]);
         if(temp_pipelines[i] == NULL)
         {
             goto FREE;
         }
-        temp_pipelines_allocated++;
+        temp_pipelines_done++;
 
         pipeline_create_infos[i] = (VkGraphicsPipelineCreateInfo) {
             .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -245,7 +242,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
             .pDynamicState       = &builds[i]->dynamic,
             .layout              = builds[i]->layout->layout,
             .renderPass          = VK_NULL_HANDLE,
-            .basePipelineHandle  = VK_NULL_HANDLE
+            .basePipelineHandle  = VK_NULL_HANDLE,
         };
     }
 
@@ -274,30 +271,25 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
 
-    temp_pipelines_allocated = 0;
-
-    status = PIGMENT_SUCCESS;
+    temp_pipelines_done = 0;
+    status              = PIGMENT_SUCCESS;
 
 FREE:
     if(status != PIGMENT_SUCCESS)
     {
-        for(uint32_t i = 0; i < temp_pipelines_allocated; i++)
+        for(uint32_t i = 0; i < temp_pipelines_done; i++)
         {
             P_FREE(pigment, temp_pipelines[i]);
         }
     }
-    P_FREE(pigment, temp_pipelines);
-    P_FREE(pigment, vk_pipelines);
-    P_FREE(pigment, pipeline_create_infos);
-
-    for(uint32_t i = 0; i < count; i++)
+    for(uint32_t i = 0; i < builds_done; i++)
     {
-        if(builds[i] != NULL)
-        {
-            pigment_pipeline_build_destroy(pigment, builds[i]);
-            builds[i] = NULL;
-        }
+        pipeline_build_destroy(pigment, builds[i]);
     }
+    P_STACK_OR_HEAP_FREE(pigment, temp_pipelines);
+    P_STACK_OR_HEAP_FREE(pigment, vk_pipelines);
+    P_STACK_OR_HEAP_FREE(pigment, pipeline_create_infos);
+    P_STACK_OR_HEAP_FREE(pigment, builds);
 
     return status;
 }

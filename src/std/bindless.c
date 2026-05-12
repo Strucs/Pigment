@@ -15,6 +15,7 @@
  */
 
 #include "bindless.h"
+#include "commands.h"
 #include "internal.h"
 #include "pigment.h"
 #include "std_internal.h"
@@ -514,7 +515,7 @@ PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless)
     return (bindless != NULL) ? bindless->layout : NULL;
 }
 
-PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, uint32_t current_frame)
+PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame)
 {
     if(bindless == NULL)
     {
@@ -527,6 +528,26 @@ PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindles
     }
 
     sync_tracked_rts(pigment, bindless);
+
+    if(cmd != NULL)
+    {
+        for(uint32_t i = 0; i < bindless->images.count; i++)
+        {
+            pigment_cmd_use_image(pigment, cmd, bindless->images.images[i]);
+        }
+        for(uint32_t i = 0; i < bindless->cubemaps.count; i++)
+        {
+            pigment_cmd_use_image(pigment, cmd, bindless->cubemaps.images[i]);
+        }
+        for(uint32_t i = 0; i < bindless->render_targets.count; i++)
+        {
+            pigment_cmd_use_image(pigment, cmd, bindless->render_targets.images[i]);
+        }
+        for(uint32_t i = 0; i < bindless->samplers.count; i++)
+        {
+            pigment_cmd_use_sampler(pigment, cmd, bindless->samplers.samplers[i]);
+        }
+    }
 
     return bindless->sets[current_frame];
 }

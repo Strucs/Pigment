@@ -46,6 +46,12 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
 uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
 
 PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
-PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, uint32_t current_frame);
+
+/**
+ * Return the bindless descriptor set for the current frame and stamp all registered resources
+ * (images, cubemaps, render targets, samplers) as in-use on the given command buffer.
+ * It allows the user to delete resources without causing use-after-free on the GPU on runtime.
+ */
+PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame);
 
 #endif
