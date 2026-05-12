@@ -62,7 +62,7 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
 static void destroy_command_pool_immediate(Pigment* pigment, void* resource)
 {
     PCommandPool* pool = (PCommandPool*) resource;
-    vkDestroyCommandPool(pigment->device->logical_device, pool->pool, NULL);
+    vkDestroyCommandPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
     for(uint32_t i = 0; i < pool->buffer_count; i++)
     {
         free(pool->buffers[i]->uses);
@@ -609,7 +609,7 @@ static PCommandPool* create_command_pool_internal(Pigment* pigment, const PComma
 ERROR:
     if(pool != NULL)
     {
-        vkDestroyCommandPool(device->logical_device, pool, NULL);
+        vkDestroyCommandPool(device->logical_device, pool, &pigment->vk_alloc);
     }
     return NULL;
 }
@@ -624,7 +624,7 @@ static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_fam
         .queueFamilyIndex = queue_family_index,
     };
 
-    VkResult result = vkCreateCommandPool(pigment->device->logical_device, &create_info, NULL, &command_pool);
+    VkResult result = vkCreateCommandPool(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &command_pool);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create command pool! (result: %d)", result);

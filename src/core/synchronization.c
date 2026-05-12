@@ -101,14 +101,14 @@ ERROR:
         {
             for(size_t i = 0; i < max_frame; i++)
             {
-                vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
+                vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], &pigment->vk_alloc);
             }
         }
         if(sync->render_finished_semaphores != NULL)
         {
             for(size_t i = 0; i < swapchain_image_count; i++)
             {
-                vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
+                vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
             }
         }
         if(sync->present_fences != NULL)
@@ -117,7 +117,7 @@ ERROR:
             {
                 if(sync->present_fences[i] != NULL)
                 {
-                    vkDestroyFence(device->logical_device, sync->present_fences[i], NULL);
+                    vkDestroyFence(device->logical_device, sync->present_fences[i], &pigment->vk_alloc);
                 }
             }
             free(sync->present_fences);
@@ -140,16 +140,16 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
 
     for(size_t i = 0; i < max_frame; i++)
     {
-        vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], NULL);
+        vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], &pigment->vk_alloc);
         if(sync->present_fences != NULL)
         {
-            vkDestroyFence(device->logical_device, sync->present_fences[i], NULL);
+            vkDestroyFence(device->logical_device, sync->present_fences[i], &pigment->vk_alloc);
         }
     }
 
     for(size_t i = 0; i < swapchain->image_count; i++)
     {
-        vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
+        vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
     }
 
     free(sync->present_fences);
@@ -168,7 +168,7 @@ PResult recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32
         return PIGMENT_ERROR_VULKAN;
     }
 
-    vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[index], NULL);
+    vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[index], &pigment->vk_alloc);
     sync->image_available_semaphores[index] = fresh;
 
     return PIGMENT_SUCCESS;
@@ -196,7 +196,7 @@ PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint3
 
     for(uint32_t i = 0; i < old_count; i++)
     {
-        vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], NULL);
+        vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
     }
 
     free(sync->render_finished_semaphores);
@@ -215,7 +215,7 @@ ERROR:
     {
         if(new_semaphores[i] != NULL)
         {
-            vkDestroySemaphore(device->logical_device, new_semaphores[i], NULL);
+            vkDestroySemaphore(device->logical_device, new_semaphores[i], &pigment->vk_alloc);
         }
     }
     free(new_semaphores);
@@ -230,7 +230,7 @@ static VkSemaphore create_semaphore(Pigment* pigment)
     VkSemaphoreCreateInfo semaphore_create_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
 
     VkResult result;
-    if((result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, NULL, &semaphore)) != VK_SUCCESS)
+    if((result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, &pigment->vk_alloc, &semaphore)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create semaphore (result: %d)", result);
         return NULL;
@@ -249,7 +249,7 @@ static VkFence create_fence(Pigment* pigment)
     };
 
     VkResult result;
-    if((result = vkCreateFence(pigment->device->logical_device, &fence_create_info, NULL, &fence)) != VK_SUCCESS)
+    if((result = vkCreateFence(pigment->device->logical_device, &fence_create_info, &pigment->vk_alloc, &fence)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create fence (result: %d)", result);
         return NULL;

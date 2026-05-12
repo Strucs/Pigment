@@ -106,8 +106,8 @@ struct Pigment {
 
     PInstance* instance;
     PDevice* device;
-    PVkAllocator* vk_allocator;
-    PBool owns_vk_allocator;
+    PVkAllocator* gpu_allocator;
+    PBool owns_gpu_allocator;
 
 
     PSwapchainCallbackList* swapchain_callbacks;

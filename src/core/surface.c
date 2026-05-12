@@ -25,7 +25,7 @@
 
 static void destroy_renderer_immediate(Pigment* pigment, void* resource);
 static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);
-static void destroy_swapchain_image_views(PSwapchain* swapchain, PDevice* device);
+static void destroy_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);
 static const VkFormat* preferred_formats_for_color_space(VkColorSpaceKHR color_space, uint32_t* out_count);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred);
 static VkPresentModeKHR choose_surface_present_mode(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
@@ -135,7 +135,7 @@ ERROR:
     }
     else if(vk_surface != VK_NULL_HANDLE)
     {
-        vkDestroySurfaceKHR(pigment->instance->vulkan_instance, vk_surface, NULL);
+        vkDestroySurfaceKHR(pigment->instance->vulkan_instance, vk_surface, &pigment->vk_alloc);
     }
 
     return NULL;
@@ -217,7 +217,7 @@ static void destroy_surface(Pigment* pigment, PSurface* surface)
     {
         return;
     }
-    vkDestroySurfaceKHR(pigment->instance->vulkan_instance, surface->surface, NULL);
+    vkDestroySurfaceKHR(pigment->instance->vulkan_instance, surface->surface, &pigment->vk_alloc);
     free(surface);
 }
 
@@ -647,7 +647,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     create_info.oldSwapchain = (old_swapchain != NULL) ? old_swapchain->swapchain : VK_NULL_HANDLE;
 
     VkResult result;
-    if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, NULL, &(swapchain->swapchain))) != VK_SUCCESS)
+    if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, &pigment->vk_alloc, &(swapchain->swapchain))) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create swap chain! (result: %d)", result);
         goto ERROR;
@@ -696,7 +696,7 @@ ERROR:
     destroy_support_details(support_details);
     if(swapchain != NULL)
     {
-        vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
+        vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
         free(swapchain);
     }
     return NULL;
@@ -709,8 +709,8 @@ static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
         PDevice* device = pigment->device;
         destroy_swapchain_color_multisample(pigment, swapchain);
         destroy_swapchain_depth(pigment, swapchain);
-        destroy_swapchain_image_views(swapchain, device);
-        vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, NULL);
+        destroy_swapchain_image_views(pigment, swapchain);
+        vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
         free(swapchain);
     }
 }
@@ -841,7 +841,7 @@ static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapch
     return PIGMENT_SUCCESS;
 }
 
-static void destroy_swapchain_image_views(PSwapchain* swapchain, PDevice* device)
+static void destroy_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain)
 {
     if(swapchain == NULL || swapchain->image_views == NULL)
     {
@@ -849,7 +849,7 @@ static void destroy_swapchain_image_views(PSwapchain* swapchain, PDevice* device
     }
     for(size_t i = 0; i < swapchain->image_count; i++)
     {
-        vkDestroyImageView(device->logical_device, swapchain->image_views[i], NULL);
+        vkDestroyImageView(pigment->device->logical_device, swapchain->image_views[i], &pigment->vk_alloc);
     }
 
     free(swapchain->image_views);

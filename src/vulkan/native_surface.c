@@ -60,7 +60,7 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
                     .hinstance = (HINSTANCE) handles->win32.hinstance,
                     .hwnd      = (HWND) handles->win32.hwnd,
                 };
-                result = vkCreateWin32SurfaceKHR_func(instance, &info, NULL, &surface);
+                result = vkCreateWin32SurfaceKHR_func(instance, &info, &pigment->vk_alloc, &surface);
                 break;
             }
 #endif
@@ -74,7 +74,7 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
                     .dpy    = (Display*) handles->xlib.display,
                     .window = (Window) handles->xlib.window,
                 };
-                result = vkCreateXlibSurfaceKHR_func(instance, &info, NULL, &surface);
+                result = vkCreateXlibSurfaceKHR_func(instance, &info, &pigment->vk_alloc, &surface);
                 break;
             }
 #endif
@@ -88,7 +88,7 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
                     .connection = (xcb_connection_t*) handles->xcb.connection,
                     .window     = (xcb_window_t) handles->xcb.window,
                 };
-                result = vkCreateXcbSurfaceKHR_func(instance, &info, NULL, &surface);
+                result = vkCreateXcbSurfaceKHR_func(instance, &info, &pigment->vk_alloc, &surface);
                 break;
             }
 #endif
@@ -102,7 +102,7 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
                     .display = (struct wl_display*) handles->wayland.display,
                     .surface = (struct wl_surface*) handles->wayland.surface,
                 };
-                result = vkCreateWaylandSurfaceKHR_func(instance, &info, NULL, &surface);
+                result = vkCreateWaylandSurfaceKHR_func(instance, &info, &pigment->vk_alloc, &surface);
                 break;
             }
 #endif
@@ -115,7 +115,7 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
                     .sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
                     .pLayer = (const CAMetalLayer*) handles->metal.ca_metal_layer,
                 };
-                result = vkCreateMetalSurfaceEXT_func(instance, &info, NULL, &surface);
+                result = vkCreateMetalSurfaceEXT_func(instance, &info, &pigment->vk_alloc, &surface);
                 break;
             }
 #endif
@@ -128,7 +128,7 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
                     .sType  = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
                     .window = (struct ANativeWindow*) handles->android.a_native_window,
                 };
-                result = vkCreateAndroidSurfaceKHR_func(instance, &info, NULL, &surface);
+                result = vkCreateAndroidSurfaceKHR_func(instance, &info, &pigment->vk_alloc, &surface);
                 break;
             }
 #endif

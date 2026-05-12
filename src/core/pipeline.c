@@ -175,11 +175,11 @@ void pigment_pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
 
     if(build->vertex_module != NULL)
     {
-        vkDestroyShaderModule(device, build->vertex_module, NULL);
+        vkDestroyShaderModule(device, build->vertex_module, &pigment->vk_alloc);
     }
     if(build->fragment_module != NULL)
     {
-        vkDestroyShaderModule(device, build->fragment_module, NULL);
+        vkDestroyShaderModule(device, build->fragment_module, &pigment->vk_alloc);
     }
 
     free(build->color_formats);
@@ -251,7 +251,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
     }
 
     status          = PIGMENT_ERROR_VULKAN;
-    VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, NULL, vk_pipelines);
+    VkResult result = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, &pigment->vk_alloc, vk_pipelines);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create graphics pipelines! (result: %d)", result);
@@ -259,7 +259,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineBuild** buil
         {
             if(vk_pipelines[i] != VK_NULL_HANDLE)
             {
-                vkDestroyPipeline(device, vk_pipelines[i], NULL);
+                vkDestroyPipeline(device, vk_pipelines[i], &pigment->vk_alloc);
             }
         }
         goto FREE;
@@ -318,7 +318,7 @@ static void destroy_pipeline_immediate(Pigment* pigment, void* resource)
     PPipeline* pipeline = (PPipeline*) resource;
     if(pipeline->pipeline != VK_NULL_HANDLE)
     {
-        vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, NULL);
+        vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, &pigment->vk_alloc);
     }
     free(pipeline);
 }
@@ -365,7 +365,7 @@ static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* cod
         .pCode    = code
     };
 
-    if(vkCreateShaderModule(pigment->device->logical_device, &create_info, NULL, &shader_module) != VK_SUCCESS)
+    if(vkCreateShaderModule(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &shader_module) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create shader module!");
         return NULL;
@@ -595,7 +595,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     };
 
     VkPipelineLayout vk_layout = VK_NULL_HANDLE;
-    VkResult result            = vkCreatePipelineLayout(pigment->device->logical_device, &create_info, NULL, &vk_layout);
+    VkResult result            = vkCreatePipelineLayout(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &vk_layout);
 
     free(vk_set_layouts);
 
@@ -608,7 +608,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     PLayout* layout = calloc(1, sizeof(*layout));
     if(layout == NULL)
     {
-        vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, NULL);
+        vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, &pigment->vk_alloc);
         return NULL;
     }
 
@@ -636,7 +636,7 @@ static void destroy_layout_immediate(Pigment* pigment, void* resource)
     PLayout* layout = (PLayout*) resource;
     if(layout->layout != VK_NULL_HANDLE)
     {
-        vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, NULL);
+        vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, &pigment->vk_alloc);
     }
     free(layout);
 }

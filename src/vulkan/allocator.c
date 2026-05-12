@@ -180,7 +180,7 @@ static void destroy_block(DefaultAllocator* alloc, DefaultBlock* block)
     }
     if(block->memory != VK_NULL_HANDLE)
     {
-        vkFreeMemory(alloc->device, block->memory, NULL);
+        vkFreeMemory(alloc->device, block->memory, &alloc->pigment->vk_alloc);
     }
     free(block->free_ranges);
     free(block);
@@ -206,7 +206,7 @@ static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_
     };
 
     VkResult result;
-    if((result = vkAllocateMemory(alloc->device, &alloc_info, NULL, &block->memory)) != VK_SUCCESS)
+    if((result = vkAllocateMemory(alloc->device, &alloc_info, &alloc->pigment->vk_alloc, &block->memory)) != VK_SUCCESS)
     {
         PLOG_DEBUG(alloc->pigment, "vkAllocateMemory failed for block (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type.", (unsigned long long) size, memory_type_index, result);
         goto ERROR;
@@ -414,7 +414,7 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
     VkDeviceMemory memory = VK_NULL_HANDLE;
 
     VkResult result;
-    if((result = vkAllocateMemory(alloc->device, &info, NULL, &memory)) != VK_SUCCESS)
+    if((result = vkAllocateMemory(alloc->device, &info, &alloc->pigment->vk_alloc, &memory)) != VK_SUCCESS)
     {
         PLOG_DEBUG(alloc->pigment, "vkAllocateMemory failed for dedicated alloc (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type.", (unsigned long long) size, memory_type_index, result);
         return NULL;
@@ -436,7 +436,7 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
         {
             vkUnmapMemory(alloc->device, memory);
         }
-        vkFreeMemory(alloc->device, memory, NULL);
+        vkFreeMemory(alloc->device, memory, &alloc->pigment->vk_alloc);
         return NULL;
     }
 
@@ -456,7 +456,7 @@ static void release_allocation(DefaultAllocator* allocator, PVkAllocation* alloc
         {
             vkUnmapMemory(allocator->device, allocation->memory);
         }
-        vkFreeMemory(allocator->device, allocation->memory, NULL);
+        vkFreeMemory(allocator->device, allocation->memory, &allocator->pigment->vk_alloc);
     }
     else
     {
@@ -492,7 +492,7 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     *out_buffer             = VK_NULL_HANDLE;
     *out_allocation         = NULL;
 
-    VkResult result = vkCreateBuffer(alloc->device, buffer_info, NULL, out_buffer);
+    VkResult result = vkCreateBuffer(alloc->device, buffer_info, &alloc->pigment->vk_alloc, out_buffer);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(alloc->pigment, "vkCreateBuffer failed (result=%d)", result);
@@ -560,7 +560,7 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     return VK_SUCCESS;
 
 ERROR:
-    vkDestroyBuffer(alloc->device, *out_buffer, NULL);
+    vkDestroyBuffer(alloc->device, *out_buffer, &alloc->pigment->vk_alloc);
     *out_buffer = VK_NULL_HANDLE;
     return result;
 }
@@ -570,7 +570,7 @@ static void default_destroy_buffer(void* user_data, VkBuffer buffer, PVkAllocati
     DefaultAllocator* alloc = (DefaultAllocator*) user_data;
     if(buffer != VK_NULL_HANDLE)
     {
-        vkDestroyBuffer(alloc->device, buffer, NULL);
+        vkDestroyBuffer(alloc->device, buffer, &alloc->pigment->vk_alloc);
     }
 
     pigment_rwlock_wrlock(&alloc->lock);
@@ -584,7 +584,7 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     *out_image              = VK_NULL_HANDLE;
     *out_allocation         = NULL;
 
-    VkResult result = vkCreateImage(alloc->device, image_info, NULL, out_image);
+    VkResult result = vkCreateImage(alloc->device, image_info, &alloc->pigment->vk_alloc, out_image);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(alloc->pigment, "vkCreateImage failed (result=%d)", result);
@@ -652,7 +652,7 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     return VK_SUCCESS;
 
 ERROR:
-    vkDestroyImage(alloc->device, *out_image, NULL);
+    vkDestroyImage(alloc->device, *out_image, &alloc->pigment->vk_alloc);
     *out_image = VK_NULL_HANDLE;
     return result;
 }
@@ -662,7 +662,7 @@ static void default_destroy_image(void* user_data, VkImage image, PVkAllocation*
     DefaultAllocator* alloc = (DefaultAllocator*) user_data;
     if(image != VK_NULL_HANDLE)
     {
-        vkDestroyImage(alloc->device, image, NULL);
+        vkDestroyImage(alloc->device, image, &alloc->pigment->vk_alloc);
     }
 
     pigment_rwlock_wrlock(&alloc->lock);

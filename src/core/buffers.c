@@ -68,7 +68,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
             break;
     }
 
-    PVkAllocator* alloc = pigment->vk_allocator;
+    PVkAllocator* alloc = pigment->gpu_allocator;
     VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, &alloc_info, &buffer->buffer, &buffer->allocation);
     if(result != VK_SUCCESS)
     {
@@ -116,7 +116,7 @@ void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer)
 static void destroy_buffer_immediate(Pigment* pigment, void* resource)
 {
     PBuffer* buffer     = (PBuffer*) resource;
-    PVkAllocator* alloc = pigment->vk_allocator;
+    PVkAllocator* alloc = pigment->gpu_allocator;
     if(buffer->mapped != NULL)
     {
         alloc->unmap(alloc->user_data, buffer->allocation);
@@ -152,7 +152,7 @@ void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, ui
         return;
     }
 
-    PVkAllocator* alloc = pigment->vk_allocator;
+    PVkAllocator* alloc = pigment->gpu_allocator;
     alloc->flush(alloc->user_data, buffer->allocation, (VkDeviceSize) offset, (size == 0) ? VK_WHOLE_SIZE : (VkDeviceSize) size);
 }
 
@@ -168,7 +168,7 @@ void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offse
         return;
     }
 
-    PVkAllocator* alloc = pigment->vk_allocator;
+    PVkAllocator* alloc = pigment->gpu_allocator;
     alloc->invalidate(alloc->user_data, buffer->allocation, (VkDeviceSize) offset, (size == 0) ? VK_WHOLE_SIZE : (VkDeviceSize) size);
 }
 

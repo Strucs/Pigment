@@ -160,7 +160,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     }
 
     VkResult result;
-    if((result = vkCreateInstance(&create_info, NULL, &(instance->vulkan_instance))) != VK_SUCCESS)
+    if((result = vkCreateInstance(&create_info, &pigment->vk_alloc, &(instance->vulkan_instance))) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create an instance. (result: %d)", result);
         goto ERROR;
@@ -418,9 +418,9 @@ void destroy_instance(Pigment* pigment)
     }
     if(pigment->config.validation_enabled)
     {
-        destroy_debug_utils_messenger(instance->vulkan_instance, instance->debug_messenger, NULL);
+        destroy_debug_utils_messenger(instance->vulkan_instance, instance->debug_messenger, &pigment->vk_alloc);
     }
-    vkDestroyInstance(instance->vulkan_instance, NULL);
+    vkDestroyInstance(instance->vulkan_instance, &pigment->vk_alloc);
     free(instance->layers->names);
     free(instance->layers);
     free(instance->extensions->names);
@@ -522,7 +522,7 @@ void setup_debug_messenger(Pigment* pigment)
 
     PInstance* instance = pigment->instance;
     VkResult result;
-    if((result = create_debug_utils_messenger(instance->vulkan_instance, &create_info, NULL, &instance->debug_messenger)) != VK_SUCCESS)
+    if((result = create_debug_utils_messenger(instance->vulkan_instance, &create_info, &pigment->vk_alloc, &instance->debug_messenger)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to set up debug messenger! (result: %d)", result);
     }

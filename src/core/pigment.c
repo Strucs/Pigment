@@ -73,16 +73,16 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
     if(vk_init != NULL && vk_init->allocator != NULL)
     {
-        pigment->vk_allocator      = vk_init->allocator;
-        pigment->owns_vk_allocator = P_FALSE;
+        pigment->gpu_allocator      = vk_init->allocator;
+        pigment->owns_gpu_allocator = P_FALSE;
     }
     else
     {
-        pigment->vk_allocator      = pigment_vk_create_default_allocator(pigment, NULL);
-        pigment->owns_vk_allocator = P_TRUE;
+        pigment->gpu_allocator      = pigment_vk_create_default_allocator(pigment, NULL);
+        pigment->owns_gpu_allocator = P_TRUE;
     }
 
-    if(pigment->vk_allocator == NULL)
+    if(pigment->gpu_allocator == NULL)
     {
         goto ERROR;
     }
@@ -119,9 +119,9 @@ void destroy_pigment(Pigment* pigment)
     destroy_deletion_queue(pigment, pigment->deletions);
 
     destroy_swapchain_callback_list(pigment->swapchain_callbacks);
-    if(pigment->owns_vk_allocator)
+    if(pigment->owns_gpu_allocator)
     {
-        pigment_vk_destroy_allocator(pigment->vk_allocator);
+        pigment_vk_destroy_allocator(pigment->gpu_allocator);
     }
     destroy_device(pigment);
     destroy_instance(pigment);

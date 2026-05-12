@@ -67,7 +67,7 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
         .maxLod                  = VK_LOD_CLAMP_NONE,
     };
 
-    VkResult result = vkCreateSampler(device->logical_device, &sampler_create_info, NULL, &sampler->sampler);
+    VkResult result = vkCreateSampler(device->logical_device, &sampler_create_info, &pigment->vk_alloc, &sampler->sampler);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create sampler! (result: %d)", result);
@@ -93,6 +93,6 @@ void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler)
 static void destroy_sampler_immediate(Pigment* pigment, void* resource)
 {
     PSampler* sampler = (PSampler*) resource;
-    vkDestroySampler(pigment->device->logical_device, sampler->sampler, NULL);
+    vkDestroySampler(pigment->device->logical_device, sampler->sampler, &pigment->vk_alloc);
     free(sampler);
 }

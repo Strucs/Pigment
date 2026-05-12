@@ -413,11 +413,11 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
 static void destroy_image_resources(Pigment* pigment, void* resource)
 {
     PImageResources* res = (PImageResources*) resource;
-    PVkAllocator* alloc  = pigment->vk_allocator;
+    PVkAllocator* alloc  = pigment->gpu_allocator;
 
     for(uint32_t i = 0; i < res->view_cache.count; i++)
     {
-        vkDestroyImageView(pigment->device->logical_device, res->view_cache.views[i]->view, NULL);
+        vkDestroyImageView(pigment->device->logical_device, res->view_cache.views[i]->view, &pigment->vk_alloc);
         free(res->view_cache.views[i]);
     }
     free(res->view_cache.views);
@@ -458,7 +458,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
         .flags         = image->vk_create_flags,
     };
 
-    PVkAllocator* alloc = pigment->vk_allocator;
+    PVkAllocator* alloc = pigment->gpu_allocator;
 
     VkResult result = alloc->create_image(alloc->user_data, &image_create_info, alloc_info, &image->image, &image->image_allocation);
     if(result != VK_SUCCESS)
@@ -488,7 +488,7 @@ VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType v
     };
 
     VkResult result;
-    if((result = vkCreateImageView(device, &view_create_info, NULL, &image_view)) != VK_SUCCESS)
+    if((result = vkCreateImageView(device, &view_create_info, &pigment->vk_alloc, &image_view)) != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image view! (result: %d)", result);
         return NULL;
@@ -558,7 +558,7 @@ PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PIma
         PImageView** new_ptr  = realloc(cache->views, new_capacity * sizeof(*new_ptr));
         if(new_ptr == NULL)
         {
-            vkDestroyImageView(pigment->device->logical_device, new_handle, NULL);
+            vkDestroyImageView(pigment->device->logical_device, new_handle, &pigment->vk_alloc);
             return NULL;
         }
         cache->views    = new_ptr;
@@ -568,7 +568,7 @@ PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PIma
     PImageView* view = malloc(sizeof(*view));
     if(view == NULL)
     {
-        vkDestroyImageView(pigment->device->logical_device, new_handle, NULL);
+        vkDestroyImageView(pigment->device->logical_device, new_handle, &pigment->vk_alloc);
         return NULL;
     }
 
@@ -592,7 +592,7 @@ void image_destroy_view_cache(Pigment* pigment, PImage* image)
 
     for(uint32_t i = 0; i < cache->count; i++)
     {
-        vkDestroyImageView(pigment->device->logical_device, cache->views[i]->view, NULL);
+        vkDestroyImageView(pigment->device->logical_device, cache->views[i]->view, &pigment->vk_alloc);
         free(cache->views[i]);
     }
 
@@ -694,7 +694,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
 
     if(image_get_or_create_view(pigment, image, &full_view_desc) == NULL)
     {
-        pigment->vk_allocator->destroy_image(pigment->vk_allocator->user_data, image->image, image->image_allocation);
+        pigment->gpu_allocator->destroy_image(pigment->gpu_allocator->user_data, image->image, image->image_allocation);
         image->image            = VK_NULL_HANDLE;
         image->image_allocation = NULL;
         return PIGMENT_ERROR_VULKAN;
@@ -705,7 +705,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
 
 static void free_resources(Pigment* pigment, PImage* image)
 {
-    PVkAllocator* alloc = pigment->vk_allocator;
+    PVkAllocator* alloc = pigment->gpu_allocator;
 
     image_destroy_view_cache(pigment, image);
 

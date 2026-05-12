@@ -86,7 +86,7 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         .pNext        = &flags_info,
     };
 
-    VkResult result = vkCreateDescriptorSetLayout(pigment->device->logical_device, &layout_info, NULL, &layout->layout);
+    VkResult result = vkCreateDescriptorSetLayout(pigment->device->logical_device, &layout_info, &pigment->vk_alloc, &layout->layout);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create descriptor set layout (result: %d)", result);
@@ -113,7 +113,7 @@ void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayou
         return;
     }
 
-    vkDestroyDescriptorSetLayout(pigment->device->logical_device, layout->layout, NULL);
+    vkDestroyDescriptorSetLayout(pigment->device->logical_device, layout->layout, &pigment->vk_alloc);
     free(layout);
 }
 
@@ -157,7 +157,7 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
         .flags         = vk_flags,
     };
 
-    VkResult result = vkCreateDescriptorPool(pigment->device->logical_device, &pool_info, NULL, &pool->pool);
+    VkResult result = vkCreateDescriptorPool(pigment->device->logical_device, &pool_info, &pigment->vk_alloc, &pool->pool);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create descriptor pool (result: %d)", result);
@@ -190,7 +190,7 @@ void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
 static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource)
 {
     PDescriptorPool* pool = (PDescriptorPool*) resource;
-    vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, NULL);
+    vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
     for(uint32_t i = 0; i < pool->set_count; i++)
     {
         free(pool->sets[i]);
