@@ -17,21 +17,29 @@
 #include "pigment.h"
 
 #include "internal.h"
+#include "internal_alloc.h"
 #include "log_internal.h"
 #include "instance.h"
 #include "device.h"
 
+#include <string.h>
+
 Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
 {
-    Pigment* pigment = calloc(1, sizeof(*pigment));
+    PAllocator cpu_alloc = (config != NULL && config->allocator != NULL) ? *config->allocator : pigment_default_allocator;
+
+    Pigment* pigment = cpu_alloc.alloc(cpu_alloc.user_data, sizeof(*pigment), _Alignof(Pigment), P_ALLOC_SCOPE_INSTANCE);
     if(pigment == NULL)
     {
         return NULL;
     }
+    memset(pigment, 0, sizeof(*pigment));
+    pigment->cpu_allocator = cpu_alloc;
+    pigment_vk_build_allocation_callbacks(&pigment->cpu_allocator, &pigment->vk_alloc);
 
     if(pigment_log_init(pigment) != PIGMENT_SUCCESS)
     {
-        free(pigment);
+        cpu_alloc.free(cpu_alloc.user_data, pigment);
         return NULL;
     }
 
@@ -65,16 +73,16 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
     if(vk_init != NULL && vk_init->allocator != NULL)
     {
-        pigment->allocator      = vk_init->allocator;
-        pigment->owns_allocator = P_FALSE;
+        pigment->vk_allocator      = vk_init->allocator;
+        pigment->owns_vk_allocator = P_FALSE;
     }
     else
     {
-        pigment->allocator      = pigment_vk_create_default_allocator(pigment, NULL);
-        pigment->owns_allocator = P_TRUE;
+        pigment->vk_allocator      = pigment_vk_create_default_allocator(pigment, NULL);
+        pigment->owns_vk_allocator = P_TRUE;
     }
 
-    if(pigment->allocator == NULL)
+    if(pigment->vk_allocator == NULL)
     {
         goto ERROR;
     }
@@ -111,15 +119,17 @@ void destroy_pigment(Pigment* pigment)
     destroy_deletion_queue(pigment, pigment->deletions);
 
     destroy_swapchain_callback_list(pigment->swapchain_callbacks);
-    if(pigment->owns_allocator)
+    if(pigment->owns_vk_allocator)
     {
-        pigment_vk_destroy_allocator(pigment->allocator);
+        pigment_vk_destroy_allocator(pigment->vk_allocator);
     }
     destroy_device(pigment);
     destroy_instance(pigment);
 
     pigment_log_destroy(pigment);
-    free(pigment);
+
+    PAllocator cpu_alloc = pigment->cpu_allocator;
+    cpu_alloc.free(cpu_alloc.user_data, pigment);
 }
 
 void pigment_wait_idle(Pigment* pigment)

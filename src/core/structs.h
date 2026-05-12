@@ -101,10 +101,14 @@ typedef struct PRuntimeConfig {
 } PRuntimeConfig;
 
 struct Pigment {
+    PAllocator cpu_allocator;          // CPU allocator (user-provided or default malloc/free)
+    VkAllocationCallbacks vk_alloc;    // built from cpu_allocator, passed to all vkCreate*/vkDestroy*
+
     PInstance* instance;
     PDevice* device;
-    PVkAllocator* allocator;
-    PBool owns_allocator;
+    PVkAllocator* vk_allocator;
+    PBool owns_vk_allocator;
+
 
     PSwapchainCallbackList* swapchain_callbacks;
 

@@ -376,13 +376,41 @@ typedef enum PImageViewType {
     P_IMAGE_VIEW_TYPE_3D         = 5,
 } PImageViewType;
 
+typedef enum PAllocScope {
+    P_ALLOC_SCOPE_COMMAND  = 0,    // temporary within a function
+    P_ALLOC_SCOPE_OBJECT   = 1,    // lifetime of a single RHI object
+    P_ALLOC_SCOPE_CACHE    = 2,    // pools / caches
+    P_ALLOC_SCOPE_DEVICE   = 3,    // lifetime of the device
+    P_ALLOC_SCOPE_INSTANCE = 4,    // lifetime of the Pigment instance
+} PAllocScope;
+
+typedef enum PInternalAllocationType {
+    P_INTERNAL_ALLOCATION_TYPE_EXECUTABLE = 0,
+} PInternalAllocationType;
+
+typedef struct PAllocator {
+    void* (*alloc)(void* user_data, uint64_t size, uint64_t alignment, PAllocScope scope);
+    void* (*calloc)(void* user_data, uint64_t size, uint64_t alignment, PAllocScope scope);
+    void* (*realloc)(void* user_data, void* ptr, uint64_t old_size, uint64_t new_size, uint64_t alignment, PAllocScope scope);
+    void (*free)(void* user_data, void* ptr);
+
+    // Optional callbacks for driver-internal allocations. NULL = not tracked.
+    void (*internal_alloc_notify)(void* user_data, uint64_t size, PInternalAllocationType type, PAllocScope scope);
+    void (*internal_free_notify)(void* user_data, uint64_t size, PInternalAllocationType type, PAllocScope scope);
+
+    void* user_data;
+} PAllocator;
+
+extern const PAllocator pigment_default_allocator;
+
 typedef struct PigmentConfig {
     uint32_t max_frames_in_flight;
     const PigmentLoggerCreateInfo* loggers;
     uint32_t logger_count;
     PBool enable_validation;
     PBool enable_best_practices;
-    float depth_clear_value;    // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    float depth_clear_value;            // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    const PAllocator* allocator;        // NULL = uses pigment_default_allocator (malloc/free)
     const void* extra;
 } PigmentConfig;
 

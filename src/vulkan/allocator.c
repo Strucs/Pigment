@@ -20,7 +20,7 @@
 #include "internal.h"
 #include "log_internal.h"
 
-#define DEFAULT_BLOCK_SIZE (64ULL * 1024 * 1024)    // 64 MiB
+#define DEFAULT_BLOCK_SIZE (4ULL * 1024 * 1024)    // 4 MiB
 #define DEDICATED_THRESHOLD_DIVISOR 4ULL
 #define INITIAL_FREE_RANGE_CAPACITY 16
 
@@ -208,7 +208,7 @@ static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_
     VkResult result;
     if((result = vkAllocateMemory(alloc->device, &alloc_info, NULL, &block->memory)) != VK_SUCCESS)
     {
-        PLOG_ERROR(alloc->pigment, "Failed to allocate memory block (size=%llu, type=%u, result=%d)", (unsigned long long) size, memory_type_index, result);
+        PLOG_DEBUG(alloc->pigment, "vkAllocateMemory failed for block (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type.", (unsigned long long) size, memory_type_index, result);
         goto ERROR;
     }
 
@@ -416,7 +416,7 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
     VkResult result;
     if((result = vkAllocateMemory(alloc->device, &info, NULL, &memory)) != VK_SUCCESS)
     {
-        PLOG_ERROR(alloc->pigment, "Failed to allocate dedicated memory (size=%llu, type=%u, result=%d)", (unsigned long long) size, memory_type_index, result);
+        PLOG_DEBUG(alloc->pigment, "vkAllocateMemory failed for dedicated alloc (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type.", (unsigned long long) size, memory_type_index, result);
         return NULL;
     }
 
@@ -506,16 +506,13 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     VkMemoryPropertyFlags preferred_flags = (alloc_info != NULL) ? alloc_info->preferred_flags : 0;
     PVkAllocationFlags allocation_flags   = (alloc_info != NULL) ? alloc_info->flags : 0;
 
-    uint32_t memory_type_index = UINT32_MAX;
+    uint32_t preferred_type_index = UINT32_MAX;
+    uint32_t fallback_type_index  = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags);
     if(preferred_flags != 0)
     {
-        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags | preferred_flags);
+        preferred_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags | preferred_flags);
     }
-    if(memory_type_index == UINT32_MAX)
-    {
-        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags);
-    }
-    if(memory_type_index == UINT32_MAX)
+    if(preferred_type_index == UINT32_MAX && fallback_type_index == UINT32_MAX)
     {
         PLOG_ERROR(alloc->pigment, "Failed to find suitable memory type for buffer");
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -526,11 +523,21 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
                             || requirements.size > alloc->dedicated_threshold;
 
     pigment_rwlock_wrlock(&alloc->lock);
-    PVkAllocation* allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, memory_type_index)
-                                                : allocate_pooled(alloc, requirements.size, requirements.alignment, memory_type_index);
+    PVkAllocation* allocation = NULL;
+    if(preferred_type_index != UINT32_MAX)
+    {
+        allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, preferred_type_index)
+                                     : allocate_pooled(alloc, requirements.size, requirements.alignment, preferred_type_index);
+    }
+    if(allocation == NULL && fallback_type_index != UINT32_MAX && fallback_type_index != preferred_type_index)
+    {
+        allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, fallback_type_index)
+                                     : allocate_pooled(alloc, requirements.size, requirements.alignment, fallback_type_index);
+    }
     if(allocation == NULL)
     {
         pigment_rwlock_wrunlock(&alloc->lock);
+        PLOG_ERROR(alloc->pigment, "Failed to allocate buffer memory (size=%llu, preferred_type=%u, fallback_type=%u)", (unsigned long long) requirements.size, preferred_type_index, fallback_type_index);
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         goto ERROR;
     }
@@ -591,16 +598,13 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     VkMemoryPropertyFlags preferred_flags = (alloc_info != NULL) ? alloc_info->preferred_flags : 0;
     PVkAllocationFlags allocation_flags   = (alloc_info != NULL) ? alloc_info->flags : 0;
 
-    uint32_t memory_type_index = UINT32_MAX;
+    uint32_t preferred_type_index = UINT32_MAX;
+    uint32_t fallback_type_index  = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags);
     if(preferred_flags != 0)
     {
-        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags | preferred_flags);
+        preferred_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags | preferred_flags);
     }
-    if(memory_type_index == UINT32_MAX)
-    {
-        memory_type_index = find_memory_type_index(&alloc->memory_properties, requirements.memoryTypeBits, required_flags);
-    }
-    if(memory_type_index == UINT32_MAX)
+    if(preferred_type_index == UINT32_MAX && fallback_type_index == UINT32_MAX)
     {
         PLOG_ERROR(alloc->pigment, "Failed to find suitable memory type for image");
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -611,11 +615,21 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
                             || requirements.size > alloc->dedicated_threshold;
 
     pigment_rwlock_wrlock(&alloc->lock);
-    PVkAllocation* allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, memory_type_index)
-                                                : allocate_pooled(alloc, requirements.size, requirements.alignment, memory_type_index);
+    PVkAllocation* allocation = NULL;
+    if(preferred_type_index != UINT32_MAX)
+    {
+        allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, preferred_type_index)
+                                     : allocate_pooled(alloc, requirements.size, requirements.alignment, preferred_type_index);
+    }
+    if(allocation == NULL && fallback_type_index != UINT32_MAX && fallback_type_index != preferred_type_index)
+    {
+        allocation = needs_dedicated ? allocate_dedicated(alloc, requirements.size, fallback_type_index)
+                                     : allocate_pooled(alloc, requirements.size, requirements.alignment, fallback_type_index);
+    }
     if(allocation == NULL)
     {
         pigment_rwlock_wrunlock(&alloc->lock);
+        PLOG_ERROR(alloc->pigment, "Failed to allocate image memory (size=%llu, preferred_type=%u, fallback_type=%u)", (unsigned long long) requirements.size, preferred_type_index, fallback_type_index);
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         goto ERROR;
     }

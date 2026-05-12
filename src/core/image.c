@@ -413,7 +413,7 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
 static void destroy_image_resources(Pigment* pigment, void* resource)
 {
     PImageResources* res = (PImageResources*) resource;
-    PVkAllocator* alloc  = pigment->allocator;
+    PVkAllocator* alloc  = pigment->vk_allocator;
 
     for(uint32_t i = 0; i < res->view_cache.count; i++)
     {
@@ -458,7 +458,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
         .flags         = image->vk_create_flags,
     };
 
-    PVkAllocator* alloc = pigment->allocator;
+    PVkAllocator* alloc = pigment->vk_allocator;
 
     VkResult result = alloc->create_image(alloc->user_data, &image_create_info, alloc_info, &image->image, &image->image_allocation);
     if(result != VK_SUCCESS)
@@ -694,7 +694,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
 
     if(image_get_or_create_view(pigment, image, &full_view_desc) == NULL)
     {
-        pigment->allocator->destroy_image(pigment->allocator->user_data, image->image, image->image_allocation);
+        pigment->vk_allocator->destroy_image(pigment->vk_allocator->user_data, image->image, image->image_allocation);
         image->image            = VK_NULL_HANDLE;
         image->image_allocation = NULL;
         return PIGMENT_ERROR_VULKAN;
@@ -705,7 +705,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
 
 static void free_resources(Pigment* pigment, PImage* image)
 {
-    PVkAllocator* alloc = pigment->allocator;
+    PVkAllocator* alloc = pigment->vk_allocator;
 
     image_destroy_view_cache(pigment, image);
 

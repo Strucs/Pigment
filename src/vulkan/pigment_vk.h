@@ -112,6 +112,19 @@ typedef struct PVkDefaultAllocatorCreateInfo {
 PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info);
 void pigment_vk_destroy_allocator(PVkAllocator* allocator);
 
+/**
+ * @brief Build a VkAllocationCallbacks from a PAllocator. Use to plug a
+ * Pigment CPU allocator into third-party GPU allocators (VMA, custom backends)
+ * that need VkAllocationCallbacks before init_pigment is called.
+ *
+ * The resulting callbacks capture &allocator in pUserData, so allocator must
+ * stay alive at least as long as any consumer of out.
+ *
+ * @param allocator The Pigment CPU allocator to bridge.
+ * @param out The output VkAllocationCallbacks struct to populate.
+ */
+void pigment_vk_build_allocation_callbacks(const PAllocator* allocator, VkAllocationCallbacks* out);
+
 VkBuffer pigment_vk_buffer(PBuffer* buffer);
 
 /**
