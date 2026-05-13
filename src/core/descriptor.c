@@ -192,6 +192,7 @@ static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource)
     vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
     for(uint32_t i = 0; i < pool->set_count; i++)
     {
+        pigment_resource_tracker_destroy(pigment, &pool->sets[i]->tracker);
         P_FREE(pigment, pool->sets[i]);
     }
     P_FREE(pigment, pool->sets);
@@ -214,6 +215,7 @@ void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
 
     for(uint32_t i = 0; i < pool->set_count; i++)
     {
+        pigment_resource_tracker_destroy(pigment, &pool->sets[i]->tracker);
         P_FREE(pigment, pool->sets[i]);
     }
     pool->set_count = 0;
@@ -225,6 +227,7 @@ static void destroy_descriptor_sets_immediate(Pigment* pigment, void* resource)
     vkFreeDescriptorSets(pigment->device->logical_device, batch->pool->pool, batch->count, batch->vk_sets);
     for(uint32_t i = 0; i < batch->count; i++)
     {
+        pigment_resource_tracker_destroy(pigment, &batch->wrappers[i]->tracker);
         P_FREE(pigment, batch->wrappers[i]);
     }
     P_FREE(pigment, batch->vk_sets);
@@ -272,22 +275,42 @@ void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, ui
     batch->pool  = pool;
     batch->count = count;
 
+    uint32_t queue_count      = pigment->device->queue_count;
     PResourceTracker combined = {0};
-    uint64_t max_value        = 0;
+    if(pigment_resource_tracker_init(pigment, &combined) != PIGMENT_SUCCESS)
+    {
+        for(uint32_t i = 0; i < count; i++)
+        {
+            batch->vk_sets[i]  = sets[i]->set;
+            batch->wrappers[i] = sets[i];
+            pool_remove_set(pool, sets[i]);
+        }
+        pigment_defer_destroy(pigment, destroy_descriptor_sets_immediate, batch);
+        return;
+    }
+
     for(uint32_t i = 0; i < count; i++)
     {
-        uint64_t v = atomic_load_explicit(&sets[i]->tracker.last_used_submit, memory_order_relaxed);
-        if(v > max_value)
+        _Atomic uint64_t* table = sets[i]->tracker.last_used;
+        if(table != NULL)
         {
-            max_value = v;
+            for(uint32_t q = 0; q < queue_count; q++)
+            {
+                uint64_t value   = atomic_load_explicit(&table[q], memory_order_relaxed);
+                uint64_t current = atomic_load_explicit(&combined.last_used[q], memory_order_relaxed);
+                if(value > current)
+                {
+                    atomic_store_explicit(&combined.last_used[q], value, memory_order_relaxed);
+                }
+            }
         }
         batch->vk_sets[i]  = sets[i]->set;
         batch->wrappers[i] = sets[i];
         pool_remove_set(pool, sets[i]);
     }
-    atomic_store_explicit(&combined.last_used_submit, max_value, memory_order_relaxed);
 
     pigment_defer_destroy_tracked(pigment, destroy_descriptor_sets_immediate, batch, &combined);
+    pigment_resource_tracker_destroy(pigment, &combined);
 }
 
 PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets)
@@ -329,6 +352,14 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
         if(temp_sets[i] == NULL)
         {
             status = PIGMENT_ERROR_OUT_OF_MEMORY;
+            goto FREE;
+        }
+
+        if(pigment_resource_tracker_init(pigment, &temp_sets[i]->tracker) != PIGMENT_SUCCESS)
+        {
+            P_FREE(pigment, temp_sets[i]);
+            temp_sets[i] = NULL;
+            status       = PIGMENT_ERROR_OUT_OF_MEMORY;
             goto FREE;
         }
         temp_allocated++;
@@ -382,9 +413,13 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
     status = PIGMENT_SUCCESS;
 
 FREE:
-    for(uint32_t i = 0; i < temp_allocated; i++)
+    if(status != PIGMENT_SUCCESS)
     {
-        P_FREE(pigment, temp_sets[i]);
+        for(uint32_t i = 0; i < temp_allocated; i++)
+        {
+            pigment_resource_tracker_destroy(pigment, &temp_sets[i]->tracker);
+            P_FREE(pigment, temp_sets[i]);
+        }
     }
     P_STACK_OR_HEAP_FREE(pigment, temp_sets);
     P_STACK_OR_HEAP_FREE(pigment, vk_sets);

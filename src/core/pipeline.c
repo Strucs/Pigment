@@ -225,6 +225,14 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, const PPipelineDesc* 
         {
             goto FREE;
         }
+
+        if(pigment_resource_tracker_init(pigment, &temp_pipelines[i]->tracker) != PIGMENT_SUCCESS)
+        {
+            P_FREE(pigment, temp_pipelines[i]);
+            temp_pipelines[i] = NULL;
+            goto FREE;
+        }
+
         temp_pipelines_done++;
 
         pipeline_create_infos[i] = (VkGraphicsPipelineCreateInfo) {
@@ -279,6 +287,7 @@ FREE:
     {
         for(uint32_t i = 0; i < temp_pipelines_done; i++)
         {
+            pigment_resource_tracker_destroy(pigment, &temp_pipelines[i]->tracker);
             P_FREE(pigment, temp_pipelines[i]);
         }
     }
@@ -311,6 +320,7 @@ static void destroy_pipeline_immediate(Pigment* pigment, void* resource)
     {
         vkDestroyPipeline(pigment->device->logical_device, pipeline->pipeline, &pigment->vk_alloc);
     }
+    pigment_resource_tracker_destroy(pigment, &pipeline->tracker);
     P_FREE(pigment, pipeline);
 }
 

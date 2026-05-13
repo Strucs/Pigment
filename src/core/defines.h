@@ -49,7 +49,7 @@ typedef struct PSubmitHandle {
 } PSubmitHandle;
 
 typedef struct PResourceTracker {
-    _Atomic uint64_t last_used_submit;
+    _Atomic uint64_t* last_used;
 } PResourceTracker;
 
 typedef enum PigmentLogSeverity {
@@ -98,6 +98,17 @@ typedef enum PQueueFlags {
     P_QUEUE_COMPUTE_BIT  = 1 << 1,
     P_QUEUE_TRANSFER_BIT = 1 << 2,
 } PQueueFlags;
+
+/**
+ * One queue to create at device init. The queue can be accessed via pigment_get_queue_at by the
+ * same index in the queue_requests array. Multiple requests can target the same family, up to
+ * the per-family hardware limit.
+ */
+typedef struct PQueueRequest {
+    PQueueFlags required;
+    PQueueFlags forbidden;
+    float priority;
+} PQueueRequest;
 
 typedef enum PCommandPoolFlags {
     P_COMMAND_POOL_FLAG_NONE         = 0,
@@ -421,8 +432,10 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     PBool enable_validation;
     PBool enable_best_practices;
-    float depth_clear_value;        // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
-    const PAllocator* allocator;    // NULL = uses pigment_default_allocator (malloc/free)
+    float depth_clear_value;                // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
+    const PAllocator* allocator;            // NULL = uses pigment_default_allocator (malloc/free)
+    const PQueueRequest* queue_requests;    // explicit queue layout. NULL or count=0 = default policy (1 graphics + 1 dedicated compute + 1 dedicated transfer when hardware exposes them).
+    uint32_t queue_request_count;
     const void* extra;
 } PigmentConfig;
 

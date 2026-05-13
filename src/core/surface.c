@@ -20,6 +20,7 @@
 #include "image.h"
 #include "internal.h"
 #include "native_surface.h"
+#include "swapchain_event.h"
 #include "synchronization.h"
 
 static void destroy_renderer_immediate(Pigment* pigment, void* resource);
@@ -102,6 +103,11 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, c
     renderer->desc         = *desc;
     renderer->desc.width   = width;
     renderer->desc.height  = height;
+
+    if(pigment_resource_tracker_init(pigment, &renderer->tracker) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
 
     renderer->swapchain = create_swapchain(pigment, &renderer->desc, surface, NULL);
     if(renderer->swapchain == NULL)
@@ -288,7 +294,36 @@ void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, 
 
 PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
 {
-    device_wait_idle(pigment);
+    PDevice* device = pigment->device;
+
+    if(renderer->sync->present_fences != NULL)
+    {
+        // VK_EXT_swapchain_maintenance1 path: wait only on the renderer's own GPU work + pending
+        // presents, no device-wide block. This makes recreate safe to call alongside other threads
+        // submitting on non-renderer queues.
+        for(uint32_t i = 0; i < device->queue_count; i++)
+        {
+            PDeviceQueue* queue = &device->queues[i];
+            uint64_t value      = atomic_load_explicit(&renderer->tracker.last_used[queue->slot], memory_order_relaxed);
+            if(value == 0 || queue->timeline == VK_NULL_HANDLE)
+            {
+                continue;
+            }
+            VkSemaphoreWaitInfo info = {
+                .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                .semaphoreCount = 1,
+                .pSemaphores    = &queue->timeline,
+                .pValues        = &value,
+            };
+            vkWaitSemaphores(device->logical_device, &info, UINT64_MAX);
+        }
+        vkWaitForFences(device->logical_device, pigment->config.max_frames_in_flight, renderer->sync->present_fences, VK_TRUE, UINT64_MAX);
+    }
+    else
+    {
+        // Fallback: no way to track present completion without the extension, block the device.
+        device_wait_idle(pigment);
+    }
 
     PSwapchain* old_swapchain = renderer->swapchain;
     PSwapchain* new_swapchain = create_swapchain(pigment, &renderer->desc, renderer->surface, old_swapchain);
@@ -300,6 +335,54 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
 
     renderer->swapchain = new_swapchain;
     destroy_swapchain(pigment, old_swapchain);
+    return PIGMENT_SUCCESS;
+}
+
+PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
+{
+    if(pigment == NULL || renderer == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    if(!renderer->needs_recreate)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    renderer->needs_recreate = P_FALSE;
+
+    VkSurfaceCapabilitiesKHR caps;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pigment->device->physical_device, renderer->surface->surface, &caps);
+    if(caps.currentExtent.width != 0xFFFFFFFF)
+    {
+        renderer->desc.width  = caps.currentExtent.width;
+        renderer->desc.height = caps.currentExtent.height;
+    }
+    if(renderer->desc.width == 0 || renderer->desc.height == 0)
+    {
+        renderer->needs_recreate = P_TRUE;
+        return PIGMENT_ERROR;
+    }
+
+    uint32_t old_image_count = renderer->swapchain->image_count;
+    if(recreate_swapchain(pigment, renderer) != PIGMENT_SUCCESS)
+    {
+        renderer->needs_recreate = P_TRUE;
+        return PIGMENT_ERROR;
+    }
+    if(old_image_count != renderer->swapchain->image_count)
+    {
+        recreate_render_finished_semaphores(pigment, renderer->sync, old_image_count, renderer->swapchain->image_count);
+    }
+
+    PSwapchainRecreateEvent event = {
+        .renderer = renderer,
+        .width    = renderer->swapchain->extent.width,
+        .height   = renderer->swapchain->extent.height,
+    };
+    dispatch_swapchain_recreate(pigment, &event);
+
     return PIGMENT_SUCCESS;
 }
 
@@ -866,5 +949,6 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     destroy_command_buffers(pigment, renderer->command_buffers, pigment->config.max_frames_in_flight);
     destroy_swapchain(pigment, renderer->swapchain);
     destroy_surface(pigment, renderer->surface);
+    pigment_resource_tracker_destroy(pigment, &renderer->tracker);
     P_FREE(pigment, renderer);
 }

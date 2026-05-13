@@ -26,6 +26,20 @@ void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);
 void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace color_space);
 void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples);
 
+/**
+ * @brief Recreate the renderer's swapchain if it was flagged dirty by an acquire failure or a
+ *        pigment_renderer_resize / present_mode / sample_count / color_space change.
+ *
+ * Dispatches the swapchain recreate callbacks at the end.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer to recreate the swapchain for.
+ *
+ * @return PIGMENT_SUCCESS on success or no-op. On failure the renderer keeps a old swapchain
+ *         and stays flagged so the user can retry next frame.
+ */
+PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
+
 PFormat pigment_get_color_format(PWindowRenderer* renderer);
 PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 PColorSpace pigment_get_color_space(PWindowRenderer* renderer);

@@ -35,6 +35,12 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
         return NULL;
     }
 
+    if(pigment_resource_tracker_init(pigment, &sampler->tracker) != PIGMENT_SUCCESS)
+    {
+        P_FREE(pigment, sampler);
+        return NULL;
+    }
+
     PDevice* device                       = pigment->device;
     VkPhysicalDeviceProperties properties = {0};
     vkGetPhysicalDeviceProperties(device->physical_device, &properties);
@@ -68,6 +74,7 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create sampler! (result: %d)", result);
+        pigment_resource_tracker_destroy(pigment, &sampler->tracker);
         P_FREE(pigment, sampler);
         return NULL;
     }
@@ -91,5 +98,6 @@ static void destroy_sampler_immediate(Pigment* pigment, void* resource)
 {
     PSampler* sampler = (PSampler*) resource;
     vkDestroySampler(pigment->device->logical_device, sampler->sampler, &pigment->vk_alloc);
+    pigment_resource_tracker_destroy(pigment, &sampler->tracker);
     P_FREE(pigment, sampler);
 }

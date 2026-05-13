@@ -35,6 +35,12 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         return NULL;
     }
 
+    if(pigment_resource_tracker_init(pigment, &buffer->tracker) != PIGMENT_SUCCESS)
+    {
+        P_FREE(pigment, buffer);
+        return NULL;
+    }
+
     VkBufferUsageFlags vk_usage = translate_usage(desc->usage);
 
     VkBufferCreateInfo buffer_create_info = {
@@ -70,6 +76,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);
+        pigment_resource_tracker_destroy(pigment, &buffer->tracker);
         P_FREE(pigment, buffer);
         return NULL;
     }
@@ -84,6 +91,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         {
             PLOG_ERROR(pigment, "Failed to map buffer (result: %d)", result);
             alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
+            pigment_resource_tracker_destroy(pigment, &buffer->tracker);
             P_FREE(pigment, buffer);
             return NULL;
         }
@@ -119,6 +127,7 @@ static void destroy_buffer_immediate(Pigment* pigment, void* resource)
         alloc->unmap(alloc->user_data, buffer->allocation);
     }
     alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
+    pigment_resource_tracker_destroy(pigment, &buffer->tracker);
     P_FREE(pigment, buffer);
 }
 

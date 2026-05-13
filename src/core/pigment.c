@@ -53,6 +53,8 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     pigment->config.validation_enabled     = config && config->enable_validation;
     pigment->config.best_practices_enabled = config && config->enable_best_practices;
     pigment->config.depth_clear_value      = config ? config->depth_clear_value : 0.0f;
+    pigment->config.queue_requests         = config ? config->queue_requests : NULL;
+    pigment->config.queue_request_count    = config ? config->queue_request_count : 0;
     pigment->config.extra                  = config ? config->extra : NULL;
 
     pigment->instance = create_instance(pigment, app_info);

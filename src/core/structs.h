@@ -94,6 +94,8 @@ typedef struct PRuntimeConfig {
     PBool validation_enabled;
     PBool best_practices_enabled;
     float depth_clear_value;
+    const PQueueRequest* queue_requests;
+    uint32_t queue_request_count;
     const void* extra;
 } PRuntimeConfig;
 
@@ -147,6 +149,7 @@ struct ExtensionList {
 struct PDeviceQueue {
     VkQueue queue;
     uint32_t family_index;
+    uint32_t slot;
     PQueueFlags flags;
     VkSemaphore timeline;
     _Atomic uint64_t next_value;
@@ -248,7 +251,7 @@ struct PCommandBuffer {
 struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
-    uint64_t* per_slot_value;
+    PSubmitHandle* per_slot_handle;
     VkFence* present_fences;
 };
 

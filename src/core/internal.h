@@ -211,7 +211,7 @@ VkSampleCountFlags supported_sample_counts(Pigment* pigment);
 // commands.c
 PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count);
 void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count);
-void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint64_t value);
+void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint32_t queue_slot, uint64_t value);
 
 // image.c
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);

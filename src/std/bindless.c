@@ -337,7 +337,7 @@ uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless
     pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     PResult result = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
     pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, NULL);
     pigment_destroy_command_buffers(pigment, &cmd, 1);
 
     if(result == PIGMENT_SUCCESS)
@@ -424,7 +424,7 @@ uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, co
     pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     record_image_upload(pigment, cmd, image, staging, face_width, face_height, 6, face_size);
     pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, NULL);
     pigment_destroy_command_buffers(pigment, &cmd, 1);
     pigment_destroy_buffer(pigment, staging);
 
@@ -642,7 +642,7 @@ static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, c
     pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     record_image_upload(pigment, cmd, image, staging, width, height, 1, 0);
     pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, NULL);
     pigment_destroy_command_buffers(pigment, &cmd, 1);
 
     pigment_destroy_buffer(pigment, staging);

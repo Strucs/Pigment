@@ -20,11 +20,23 @@
 #include "defines.h"
 
 /**
- * @brief Submit description for command buffer submissions.
+ * @brief One batch of command buffers to submit on a queue.
  */
 typedef struct PSubmit {
+
+    /**
+     * @brief The target queue, NULL to default to graphics.
+     */
+    PDeviceQueue* queue;
     PCommandBuffer** cmds;
     uint32_t cmd_count;
+
+    /**
+     * @brief List of prior submits this batch should wait on before executing.
+     *        Only necesarry for cross-queue synchronization.
+     */
+    const PSubmitHandle* waits;
+    uint32_t wait_count;
 } PSubmit;
 
 /**
@@ -131,23 +143,25 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
 void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
 
 /**
- * @brief Submit one or more command-buffer batches to the GPU in a single call. Batches execute
- *        in array order on the queue. Each batch is tracked independently, the returned handle
- *        signals when the LAST batch is GPU-done.
+ * @brief Batched submit. Consecutive submits on the same queue are coalesced into one
+ *        vkQueueSubmit2 call, cross-queue splits per queue.
  *
  * @param pigment Pigment instance.
- * @param submits Array of submit descriptors. Each one is an independent group of command buffers.
+ * @param submits Array of submit descriptors.
  * @param submit_count Number of submits in the array.
+ * @param handles_out Optional output array (size submit_count) filled with one handle per submit. NULL to skip.
  *
- * @return Handle to wait for the entire submission to complete (= last batch signaled).
+ * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PSubmitHandle pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count);
+PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count, PSubmitHandle* handles_out);
 
 /**
  * @brief Returns P_TRUE if the GPU has completed all work tracked by this handle.
  *
  * @param pigment Pigment instance.
  * @param handle Submit handle returned by pigment_queue_submit.
+ *
+ * @return P_TRUE if the submit is complete, P_FALSE otherwise.
  */
 PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle);
 
@@ -162,6 +176,30 @@ void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
 void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
 void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
 void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
+
+/**
+ * @brief Initialize a custom PResourceTracker so it can be stamped via pigment_cmd_use.
+ *
+ * Allocatate an array of timeline values per device queue.
+ *
+ * Pigment's built-in resource types (PBuffer, PImage, PSampler, PPipeline, PDescriptorSet,
+ * PWindowRenderer) initialize their tracker internally, so this is only needed for user types
+ * that embed a PResourceTracker.
+ *
+ * @param pigment Pigment instance.
+ * @param tracker Tracker to initialize. Safe to call on a zero-initialized struct.
+ *
+ * @return PIGMENT_SUCCESS on success.
+ */
+PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracker);
+
+/**
+ * @brief Release the per-queue array allocated by pigment_resource_tracker_init.
+ *
+ * @param pigment Pigment instance.
+ * @param tracker Tracker to release.
+ */
+void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracker);
 
 /**
  * @brief Stamp a custom resource tracker at submit time.

@@ -325,6 +325,12 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
+    if(pigment_resource_tracker_init(pigment, &image->tracker) != PIGMENT_SUCCESS)
+    {
+        P_FREE(pigment, image);
+        return NULL;
+    }
+
     image->vk_format       = (VkFormat) desc->format;
     image->vk_usage        = translate_usage(desc->usage);
     image->vk_samples      = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
@@ -345,6 +351,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d)", desc->width, desc->height, desc->format);
+        pigment_resource_tracker_destroy(pigment, &image->tracker);
         P_FREE(pigment, image);
         return NULL;
     }
@@ -366,6 +373,7 @@ static void destroy_image_immediate(Pigment* pigment, void* resource)
 {
     PImage* image = (PImage*) resource;
     free_resources(pigment, image);
+    pigment_resource_tracker_destroy(pigment, &image->tracker);
     P_FREE(pigment, image);
 }
 

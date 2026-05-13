@@ -30,6 +30,7 @@
 #include "commands.h"
 #include "cmd_sync.h"
 #include "deletion.h"
+#include "queue.h"
 
 Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);

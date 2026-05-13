@@ -31,14 +31,8 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
     }
 
     uint32_t current_frame = renderer->swapchain->current_frame;
-    uint64_t wait_value    = renderer->sync->per_slot_value[current_frame];
-    if(wait_value == 0)
-    {
-        return;
-    }
-
-    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
-    if(graphics == NULL || graphics->timeline == VK_NULL_HANDLE)
+    PSubmitHandle slot     = renderer->sync->per_slot_handle[current_frame];
+    if(slot.queue == NULL || slot.value == 0 || slot.queue->timeline == VK_NULL_HANDLE)
     {
         return;
     }
@@ -46,8 +40,8 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
     VkSemaphoreWaitInfo wait_info = {
         .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
-        .pSemaphores    = &graphics->timeline,
-        .pValues        = &wait_value,
+        .pSemaphores    = &slot.queue->timeline,
+        .pValues        = &slot.value,
     };
     vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
 }
@@ -61,45 +55,12 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
 
     drain_deletion_queue(pigment);
 
-    PDevice* device = pigment->device;
     if(renderer->needs_recreate)
     {
-        renderer->needs_recreate = P_FALSE;
-
-        VkSurfaceCapabilitiesKHR caps;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->physical_device, renderer->surface->surface, &caps);
-        if(caps.currentExtent.width != 0xFFFFFFFF)
-        {
-            renderer->desc.width  = caps.currentExtent.width;
-            renderer->desc.height = caps.currentExtent.height;
-        }
-        if(renderer->desc.width == 0 || renderer->desc.height == 0)
-        {
-            renderer->needs_recreate = P_TRUE;
-            return NULL;
-        }
-
-        uint32_t old_image_count = renderer->swapchain->image_count;
-        if(recreate_swapchain(pigment, renderer) != PIGMENT_SUCCESS)
-        {
-            renderer->needs_recreate = P_TRUE;
-            return NULL;
-        }
-        if(old_image_count != renderer->swapchain->image_count)
-        {
-            recreate_render_finished_semaphores(pigment, renderer->sync, old_image_count, renderer->swapchain->image_count);
-        }
-
-        PSwapchainRecreateEvent event = {
-            .renderer = renderer,
-            .width    = renderer->swapchain->extent.width,
-            .height   = renderer->swapchain->extent.height,
-        };
-        dispatch_swapchain_recreate(pigment, &event);
-
         return NULL;
     }
 
+    PDevice* device        = pigment->device;
     uint32_t current_frame = renderer->swapchain->current_frame;
 
     VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, UINT64_MAX, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, &renderer->current_image_index);
@@ -712,10 +673,21 @@ void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer)
     }
 }
 
-PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer)
+PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue)
 {
     if(pigment == NULL || renderer == NULL)
     {
+        return (PSubmitHandle) {0};
+    }
+
+    if(queue == NULL)
+    {
+        queue = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
+    }
+
+    if(queue == NULL || queue->timeline == VK_NULL_HANDLE)
+    {
+        PLOG_ERROR(pigment, "Frame submit queue unavailable, frame submit aborted.");
         return (PSubmitHandle) {0};
     }
 
@@ -723,18 +695,11 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
     uint32_t image_index      = renderer->current_image_index;
     PCommandBuffer* frame_cmd = renderer->command_buffers[current_frame];
 
-    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
-    if(graphics == NULL || graphics->timeline == VK_NULL_HANDLE)
-    {
-        PLOG_ERROR(pigment, "Graphics queue timeline unavailable, frame submit aborted.");
-        return (PSubmitHandle) {0};
-    }
+    PSubmitHandle handle                           = {.queue = queue, .value = device_queue_acquire_value(queue)};
+    renderer->sync->per_slot_handle[current_frame] = handle;
+    atomic_store_explicit(&renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
 
-    uint64_t submit_value                         = device_queue_acquire_value(graphics);
-    renderer->sync->per_slot_value[current_frame] = submit_value;
-    atomic_store_explicit(&renderer->tracker.last_used_submit, submit_value, memory_order_relaxed);
-
-    stamp_uses_submit(&frame_cmd, 1, submit_value);
+    stamp_uses_submit(&frame_cmd, 1, queue->slot, handle.value);
 
     VkSemaphoreSubmitInfo wait_info = {
         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -750,8 +715,8 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
          },
         {
          .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-         .semaphore = graphics->timeline,
-         .value     = submit_value,
+         .semaphore = queue->timeline,
+         .value     = handle.value,
          .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
          },
     };
@@ -771,14 +736,14 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
         .pSignalSemaphoreInfos    = signal_infos,
     };
 
-    VkResult result = vkQueueSubmit2(graphics->queue, 1, &submit_info, VK_NULL_HANDLE);
+    VkResult result = vkQueueSubmit2(queue->queue, 1, &submit_info, VK_NULL_HANDLE);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return (PSubmitHandle) {0};
     }
 
-    return (PSubmitHandle) {.queue = graphics, .value = submit_value};
+    return handle;
 }
 
 void pigment_present(Pigment* pigment, PWindowRenderer* renderer)

@@ -81,10 +81,16 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer*
 
     pigment_end_recording(pigment, cmd);
 
-    PSubmitHandle handle = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1);
+    PSubmitHandle handle = {0};
+    PResult submit_result = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, &handle);
 
     pigment_destroy_command_buffers(pigment, &cmd, 1);
     pigment_destroy_buffer(pigment, staging);
+
+    if(submit_result != PIGMENT_SUCCESS)
+    {
+        return submit_result;
+    }
 
     if(out_handle != NULL)
     {

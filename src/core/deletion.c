@@ -165,32 +165,49 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
         return;
     }
 
-    if(pigment->deletions == NULL || tracker == NULL)
+    if(pigment->deletions == NULL || tracker == NULL || tracker->last_used == NULL || pigment->device == NULL || pigment->device->queues == NULL)
     {
         pigment_defer_destroy(pigment, destroy_fn, resource);
         return;
     }
 
-    uint64_t submit_value = atomic_load_explicit(&tracker->last_used_submit, memory_order_relaxed);
-    if(submit_value == 0)
+    PDevice* device      = pigment->device;
+    uint32_t queue_count = device->queue_count;
+    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, queue_count);
+    if(targets == NULL)
     {
-        destroy_fn(pigment, resource);
+        pigment_defer_destroy(pigment, destroy_fn, resource);
         return;
     }
 
-    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
-    if(graphics == NULL || graphics->timeline == VK_NULL_HANDLE)
+    uint32_t target_count = 0;
+    for(uint32_t i = 0; i < queue_count; i++)
     {
-        destroy_fn(pigment, resource);
-        return;
+        PDeviceQueue* queue = &device->queues[i];
+        if(queue->timeline == VK_NULL_HANDLE)
+        {
+            continue;
+        }
+        uint64_t value = atomic_load_explicit(&tracker->last_used[queue->slot], memory_order_relaxed);
+        if(value == 0)
+        {
+            continue;
+        }
+        targets[target_count++] = (PWaitTarget) {
+            .kind     = P_WAIT_TIMELINE,
+            .timeline = {.semaphore = queue->timeline, .value = value},
+        };
     }
 
-    PWaitTarget target = {
-        .kind     = P_WAIT_TIMELINE,
-        .timeline = {.semaphore = graphics->timeline, .value = submit_value},
-    };
-
-    enqueue_or_destroy(pigment, destroy_fn, resource, &target, 1);
+    if(target_count == 0)
+    {
+        destroy_fn(pigment, resource);
+    }
+    else
+    {
+        enqueue_or_destroy(pigment, destroy_fn, resource, targets, target_count);
+    }
+    P_FREE(pigment, targets);
 }
 
 void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker, VkFence present_fence)
@@ -206,18 +223,37 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
         return;
     }
 
-    PWaitTarget targets[2] = {0};
-    uint32_t target_count  = 0;
-
-    if(tracker != NULL)
+    uint32_t queue_count = (pigment->device != NULL) ? pigment->device->queue_count : 0;
+    uint32_t cap         = queue_count + 1;
+    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, cap);
+    if(targets == NULL)
     {
-        uint64_t submit_value  = atomic_load_explicit(&tracker->last_used_submit, memory_order_relaxed);
-        PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
-        if(submit_value > 0 && graphics != NULL && graphics->timeline != VK_NULL_HANDLE)
+        destroy_fn(pigment, resource);
+        return;
+    }
+
+    uint32_t target_count = 0;
+
+    if(tracker != NULL && tracker->last_used != NULL && pigment->device != NULL && pigment->device->queues != NULL)
+    {
+        PDevice* device = pigment->device;
+        for(uint32_t i = 0; i < device->queue_count; i++)
         {
+            PDeviceQueue* queue = &device->queues[i];
+            if(queue->timeline == VK_NULL_HANDLE)
+            {
+                continue;
+            }
+
+            uint64_t value = atomic_load_explicit(&tracker->last_used[queue->slot], memory_order_relaxed);
+            if(value == 0)
+            {
+                continue;
+            }
+
             targets[target_count++] = (PWaitTarget) {
                 .kind     = P_WAIT_TIMELINE,
-                .timeline = {.semaphore = graphics->timeline, .value = submit_value},
+                .timeline = {.semaphore = queue->timeline, .value = value},
             };
         }
     }
@@ -233,10 +269,13 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
     if(target_count == 0)
     {
         destroy_fn(pigment, resource);
-        return;
+    }
+    else
+    {
+        enqueue_or_destroy(pigment, destroy_fn, resource, targets, target_count);
     }
 
-    enqueue_or_destroy(pigment, destroy_fn, resource, targets, target_count);
+    P_FREE(pigment, targets);
 }
 
 void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence)

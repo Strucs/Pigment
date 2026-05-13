@@ -147,17 +147,19 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
 void pigment_end_swapchain_pass(PWindowRenderer* renderer);
 
 /**
- * @brief Submit the current frame's command buffer to the GPU.
+ * @brief Submit the current frame's command buffer to the GPU on the chosen queue. NULL queue
+ *        falls back to the first graphics queue.
  *
- * Caller guarantees external sync on the queue (single-thread, submission
- * thread, or external mutex).
+ * Caller guarantees external sync on the queue. Frame submit must run on the same thread as
+ * pigment_begin_frame and pigment_present.
  *
  * @param pigment Pigment instance.
  * @param renderer The renderer whose current frame to submit.
+ * @param queue Queue to submit on. NULL = first graphics queue.
  *
  * @return PSubmitHandle tracking the GPU completion of this frame's submit.
  */
-PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer);
+PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue);
 
 /**
  * @brief Present the swapchain image and cycle to the next slot.

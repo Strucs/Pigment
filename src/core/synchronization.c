@@ -44,8 +44,8 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         goto ERROR;
     }
 
-    sync->per_slot_value = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->per_slot_value, max_frame);
-    if(sync->per_slot_value == NULL)
+    sync->per_slot_handle = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->per_slot_handle, max_frame);
+    if(sync->per_slot_handle == NULL)
     {
         goto ERROR;
     }
@@ -121,7 +121,7 @@ ERROR:
             }
             P_FREE(pigment, sync->present_fences);
         }
-        P_FREE(pigment, sync->per_slot_value);
+        P_FREE(pigment, sync->per_slot_handle);
         P_FREE(pigment, sync->render_finished_semaphores);
         P_FREE(pigment, sync->image_available_semaphores);
         P_FREE(pigment, sync);
@@ -152,7 +152,7 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     }
 
     P_FREE(pigment, sync->present_fences);
-    P_FREE(pigment, sync->per_slot_value);
+    P_FREE(pigment, sync->per_slot_handle);
     P_FREE(pigment, sync->render_finished_semaphores);
     P_FREE(pigment, sync->image_available_semaphores);
     P_FREE(pigment, sync);
