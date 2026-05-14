@@ -156,8 +156,45 @@ typedef struct PLayoutDesc {
 PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc);
 void pigment_destroy_layout(Pigment* pigment, PLayout* layout);
 
-PResult pigment_create_graphic_pipelines(Pigment* pigment, const PPipelineDesc* descs, uint32_t count, PPipeline** out);
-PResult pigment_create_compute_pipelines(Pigment* pigment, const PComputePipelineDesc* descs, uint32_t count, PPipeline** out);
+/**
+ * @brief Create a pipeline cache used to accelerate pigment_create_*_pipelines calls.
+ *
+ * @param pigment Pigment instance.
+ * @param initial_data Bytes from a previous get_data call, or NULL for an empty cache. Bytes from
+ *                     a different GPU / driver / version are silently discarded.
+ * @param size Size of initial_data in bytes (0 if NULL).
+ * @param out Receives the created cache.
+ *
+ * @return PIGMENT_SUCCESS, PIGMENT_ERROR_OUT_OF_MEMORY, or PIGMENT_ERROR_VULKAN.
+ */
+PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data, uint64_t size, PPipelineCache** out);
+
+/**
+ * @brief Destroy a pipeline cache.
+ *
+ * @param pigment Pigment instance.
+ * @param cache Cache to destroy.
+ */
+void pigment_destroy_pipeline_cache(Pigment* pigment, PPipelineCache* cache);
+
+/**
+ * @brief Serialize the cache contents to bytes for persistence on disk.
+ *
+ * Call once with out_data = NULL to receive the required size, then allocate
+ * and call again with the buffer.
+ *
+ * @param pigment Pigment instance.
+ * @param cache Cache to query.
+ * @param out_data Destination buffer, or NULL to only query the size.
+ * @param out_size In: capacity of out_data (ignored if out_data is NULL). Out: required size if
+ *                 out_data was NULL, otherwise bytes actually written.
+ *
+ * @return PIGMENT_SUCCESS or PIGMENT_ERROR_VULKAN.
+ */
+PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache, void* out_data, uint64_t* out_size);
+
+PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache, const PPipelineDesc* descs, uint32_t count, PPipeline** out);
+PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache, const PComputePipelineDesc* descs, uint32_t count, PPipeline** out);
 
 void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
 

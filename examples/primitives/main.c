@@ -237,21 +237,21 @@ int main(void)
     rt_slot = pigment_std_register_render_target(pigment, bindless, rt);
 
     PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
-    if(pigment_create_graphic_pipelines(pigment, &desc, 1, &pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, NULL, &desc, 1, &pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipeline!\n");
         goto FREE;
     }
 
     PPipelineDesc skybox_desc = default_skybox_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
-    if(pigment_create_graphic_pipelines(pigment, &skybox_desc, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, NULL, &skybox_desc, 1, &skybox_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create skybox pipeline!\n");
         goto FREE;
     }
 
     PPipelineDesc crt_desc = default_crt_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, pigment_get_sample_count(renderer));
-    if(pigment_create_graphic_pipelines(pigment, &crt_desc, 1, &crt_pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, NULL, &crt_desc, 1, &crt_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create CRT pipeline!\n");
         goto FREE;
@@ -275,7 +275,7 @@ int main(void)
         .compute_spv_size = (uint32_t) sizeof(wave_compute_spv),
         .name             = "wave_compute",
     };
-    if(pigment_create_compute_pipelines(pigment, &wave_desc, 1, &wave_pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_compute_pipelines(pigment, NULL, &wave_desc, 1, &wave_pipeline) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create wave compute pipeline!\n");
         goto FREE;

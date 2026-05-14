@@ -194,6 +194,8 @@ typedef struct PPipeline PPipeline;
 
 typedef struct PLayout PLayout;
 
+typedef struct PPipelineCache PPipelineCache;
+
 typedef struct PPipelineBuild PPipelineBuild;
 
 typedef struct PCommandPool PCommandPool;

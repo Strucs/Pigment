@@ -206,6 +206,10 @@ struct PLayout {
     VkShaderStageFlags push_stages;
 };
 
+struct PPipelineCache {
+    VkPipelineCache cache;
+};
+
 struct PPipelineBuild {
     VkShaderModule vertex_module;
     VkShaderModule fragment_module;

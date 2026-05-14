@@ -89,7 +89,7 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PS
         .name               = "std_canvas_pipeline",
     };
 
-    if(pigment_create_graphic_pipelines(pigment, &pipeline_desc, 1, &canvas->pipeline) != PIGMENT_SUCCESS)
+    if(pigment_create_graphic_pipelines(pigment, NULL, &pipeline_desc, 1, &canvas->pipeline) != PIGMENT_SUCCESS)
     {
         goto FREE;
     }
