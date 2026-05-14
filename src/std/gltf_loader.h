@@ -21,6 +21,7 @@
 #include "bindless.h"
 #include "material.h"
 #include "vertex.h"
+#include "file_io.h"
 
 #include <cglm/types.h>
 
@@ -63,7 +64,7 @@ typedef struct MeshAsset {
     uint32_t sampler_count;
 } MeshAsset;
 
-MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath);
+MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* filepath);
 void free_mesh_asset(Pigment* pigment, MeshAsset* mesh);
 
 PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);

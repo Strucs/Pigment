@@ -20,7 +20,6 @@
 #include "std_internal.h"
 
 #include <stdalign.h>
-#include <stdio.h>
 #include <string.h>
 #include <shaderc/shaderc.h>
 
@@ -49,26 +48,30 @@ alignas(uint32_t) static constexpr unsigned char crt_fragment_spv[] = {
     #embed <crt_frag.spv>
 };
 
-char* load_shader_code(Pigment* pigment, const char* file_path, uint32_t* shader_size)
+char* load_shader_code(Pigment* pigment, const IOCallbacks* io, const char* file_path, uint32_t* shader_size)
 {
-    FILE* fd = fopen(file_path, "rb");
-    if(fd == NULL)
+    IOCallbacks default_io = pigment_std_default_file_io(pigment);
+    if(io == NULL)
+    {
+        io = &default_io;
+    }
+
+    uint64_t size       = 0;
+    unsigned char* data = io->read_file(io->user_data, file_path, &size);
+    if(data == NULL)
     {
         return NULL;
     }
 
-    fseek(fd, 0l, SEEK_END);
-    *shader_size = (uint32_t) ftell(fd);
-    rewind(fd);
-
-    char* shader_code = P_ALLOC_OBJECT(pigment, (*shader_size) + 1, _Alignof(char));
+    char* shader_code = P_ALLOC_OBJECT(pigment, size + 1, _Alignof(char));
     if(shader_code != NULL)
     {
-        fread(shader_code, 1, *shader_size, fd);
-        shader_code[*shader_size] = '\0';
+        memcpy(shader_code, data, (size_t) size);
+        shader_code[size] = '\0';
+        *shader_size      = (uint32_t) size;
     }
 
-    fclose(fd);
+    io->free_file(io->user_data, data);
 
     return shader_code;
 }

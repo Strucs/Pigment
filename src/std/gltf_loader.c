@@ -40,6 +40,10 @@ static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data*
 static PResult append_surface(Pigment* pigment, MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
 static PResult process_primitive(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
 static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_node* node);
+static cgltf_result io_cgltf_read(const cgltf_memory_options* memory_options, const cgltf_file_options* file, const char* path, cgltf_size* size, void** data);
+static void io_cgltf_release(const cgltf_memory_options* memory_options, const cgltf_file_options* file, void* data);
+static void* pigment_cgltf_alloc(void* user, cgltf_size size);
+static void pigment_cgltf_free(void* user, void* ptr);
 
 static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s)
 {
@@ -401,12 +405,55 @@ static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data
     return PIGMENT_SUCCESS;
 }
 
-MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
+static cgltf_result io_cgltf_read(const cgltf_memory_options* memory_options, const cgltf_file_options* file, const char* path, cgltf_size* size, void** data)
 {
-    cgltf_options options = {0};
-    cgltf_data* data      = NULL;
-    MeshAsset* asset      = NULL;
-    size_t base_len       = 0;
+    (void) memory_options;
+    const IOCallbacks* io = (const IOCallbacks*) file->user_data;
+
+    uint64_t out_size  = 0;
+    unsigned char* buf = io->read_file(io->user_data, path, &out_size);
+    if(buf == NULL)
+    {
+        return cgltf_result_file_not_found;
+    }
+
+    *size = (cgltf_size) out_size;
+    *data = buf;
+    return cgltf_result_success;
+}
+
+static void io_cgltf_release(const cgltf_memory_options* memory_options, const cgltf_file_options* file, void* data)
+{
+    (void) memory_options;
+    const IOCallbacks* io = (const IOCallbacks*) file->user_data;
+    io->free_file(io->user_data, (unsigned char*) data);
+}
+
+static void* pigment_cgltf_alloc(void* user, cgltf_size size)
+{
+    return P_ALLOC_OBJECT((Pigment*) user, size, _Alignof(max_align_t));
+}
+
+static void pigment_cgltf_free(void* user, void* ptr)
+{
+    P_FREE((Pigment*) user, ptr);
+}
+
+MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* filepath)
+{
+    IOCallbacks default_io = pigment_std_default_file_io(pigment);
+    if(io == NULL)
+    {
+        io = &default_io;
+    }
+
+    cgltf_options options = {
+        .memory = {.alloc_func = pigment_cgltf_alloc, .free_func = pigment_cgltf_free,    .user_data = pigment},
+        .file   = {            .read = io_cgltf_read,     .release = io_cgltf_release, .user_data = (void*) io},
+    };
+    cgltf_data* data = NULL;
+    MeshAsset* asset = NULL;
+    size_t base_len  = 0;
 
     if(cgltf_parse_file(&options, filepath, &data) != cgltf_result_success)
     {
@@ -464,7 +511,14 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const char* filepath)
                     {
                         memcpy(full_path, filepath, base_len);
                         memcpy(full_path + base_len, img->uri, uri_len + 1);
-                        pixels = stbi_load(full_path, &w, &h, &channels, STBI_rgb_alpha);
+
+                        uint64_t encoded_size  = 0;
+                        unsigned char* encoded = io->read_file(io->user_data, full_path, &encoded_size);
+                        if(encoded != NULL)
+                        {
+                            pixels = stbi_load_from_memory(encoded, (int) encoded_size, &w, &h, &channels, STBI_rgb_alpha);
+                            io->free_file(io->user_data, encoded);
+                        }
                         P_FREE(pigment, full_path);
                     }
                 }

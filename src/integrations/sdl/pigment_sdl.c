@@ -99,3 +99,40 @@ void pigment_sdl_log_callback(PigmentLogSeverity severity, PigmentLogType type, 
         SDL_LogMessage(SDL_LOG_CATEGORY_GPU, priority, "%s", record->message);
     }
 }
+
+static unsigned char* sdl_read_file(void* user_data, const char* path, uint64_t* out_size)
+{
+    (void) user_data;
+
+    size_t size = 0;
+    void* data  = SDL_LoadFile(path, &size);
+    if(data == NULL)
+    {
+        return NULL;
+    }
+
+    *out_size = (uint64_t) size;
+    return (unsigned char*) data;
+}
+
+static int sdl_write_file(void* user_data, const char* path, const void* data, uint64_t size)
+{
+    (void) user_data;
+    return SDL_SaveFile(path, data, (size_t) size) ? 0 : -1;
+}
+
+static void sdl_free_file(void* user_data, unsigned char* data)
+{
+    (void) user_data;
+    SDL_free(data);
+}
+
+IOCallbacks pigment_sdl_default_file_io(void)
+{
+    return (IOCallbacks) {
+        .read_file  = sdl_read_file,
+        .write_file = sdl_write_file,
+        .free_file  = sdl_free_file,
+        .user_data  = NULL,
+    };
+}

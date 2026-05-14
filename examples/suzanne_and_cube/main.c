@@ -176,7 +176,7 @@ int main(void)
 
     // SUZANNE
 
-    asset = load_gltf_mesh(pigment, "examples/" EXAMPLE_NAME "/models/Suzanne.gltf");
+    asset = load_gltf_mesh(pigment, NULL, "examples/" EXAMPLE_NAME "/models/Suzanne.gltf");
     if(asset == NULL)
     {
         fprintf(stderr, "Failed to load glTF!\n");

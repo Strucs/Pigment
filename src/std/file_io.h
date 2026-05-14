@@ -14,24 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_SDL_H
-#define PIGMENT_SDL_H
+#ifndef PIGMENT_STD_IO_H
+#define PIGMENT_STD_IO_H
 
-#include "defines.h"
-#include "log.h"
-#include "pigment_std.h"
+#include <stdint.h>
 
-#include <SDL3/SDL.h>
+typedef struct Pigment Pigment;
 
-PWindowHandles pigment_sdl_get_window_handles(SDL_Window* window);
+typedef struct IOCallbacks {
+    unsigned char* (*read_file)(void* user_data, const char* path, uint64_t* out_size);
+    int (*write_file)(void* user_data, const char* path, const void* data, uint64_t size);
+    void (*free_file)(void* user_data, unsigned char* data);
 
-void pigment_sdl_log_callback(
-    PigmentLogSeverity severity,
-    PigmentLogType type,
-    const PigmentLogRecord* record,
-    void* user_data
-);
+    void* user_data;
+} IOCallbacks;
 
-IOCallbacks pigment_sdl_default_file_io(void);
+IOCallbacks pigment_std_default_file_io(Pigment* pigment);
 
 #endif

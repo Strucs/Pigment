@@ -99,7 +99,7 @@ def build_sdl_integration(config: powermake.Config):
 
     sdl_config = config.copy()
     sdl_config.target_name = "pigment_sdl"
-    sdl_config.add_includedirs("src/core")
+    sdl_config.add_includedirs("src/core", "src/std", "src")
 
     objects = powermake.compile_files(sdl_config, sdl_files)
     powermake.archive_files(sdl_config, objects)

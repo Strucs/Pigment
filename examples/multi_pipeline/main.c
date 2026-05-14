@@ -161,7 +161,7 @@ int main(void)
 
     // SUZANNE (opaque)
 
-    asset = load_gltf_mesh(pigment, MODELS_DIR "/Suzanne.gltf");
+    asset = load_gltf_mesh(pigment, NULL, MODELS_DIR "/Suzanne.gltf");
     if(asset == NULL)
     {
         fprintf(stderr, "Failed to load Suzanne!\n");
@@ -208,7 +208,7 @@ int main(void)
 
     // CUBE (additive blend)
 
-    asset2 = load_gltf_mesh(pigment, MODELS_DIR "/BoxVertexColors.glb");
+    asset2 = load_gltf_mesh(pigment, NULL, MODELS_DIR "/BoxVertexColors.glb");
     if(asset2 == NULL)
     {
         fprintf(stderr, "Failed to load cube!\n");
