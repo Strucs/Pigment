@@ -1,5 +1,5 @@
-#include <pigment_std.h>
-#include <pigment_sdl.h>
+#include <pigment/pigment_std.h>
+#include <pigment/pigment_sdl.h>
 
 #include <stdalign.h>
 

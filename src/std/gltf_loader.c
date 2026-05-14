@@ -15,12 +15,12 @@
  */
 
 #include "gltf_loader.h"
-#include "internal.h"
 
-#include <string.h>
+#include "internal.h"
 
 #include <cgltf.h>
 #include <stb_image.h>
+#include <string.h>
 
 #define NO_MATERIAL UINT32_MAX
 #define MISSING_TEXTURE UINT32_MAX

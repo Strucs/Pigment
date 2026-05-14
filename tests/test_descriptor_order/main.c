@@ -1,4 +1,4 @@
-#include <pigment.h>
+#include <pigment/pigment.h>
 
 #include <SDL3/SDL.h>
 

@@ -15,9 +15,11 @@
  */
 
 #include "canvas.h"
+
+#include "pigment/pigment.h"
+#include "pigment/surface.h"
+
 #include "internal.h"
-#include "pigment.h"
-#include "surface.h"
 
 #include <stdalign.h>
 

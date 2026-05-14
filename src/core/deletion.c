@@ -15,8 +15,9 @@
  */
 
 #include "deletion.h"
-#include "structs.h"
+
 #include "internal.h"
+#include "structs.h"
 
 #define PIGMENT_DELETION_CHUNK_NODES 64
 

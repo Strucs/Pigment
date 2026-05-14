@@ -17,7 +17,8 @@
 #ifndef PIGMENT_VK_NATIVE_SURFACE_H
 #define PIGMENT_VK_NATIVE_SURFACE_H
 
-#include "defines.h"
+#include "pigment/defines.h"
+
 #include <volk.h>
 
 VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandles* handles);

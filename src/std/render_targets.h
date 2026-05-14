@@ -17,9 +17,9 @@
 #ifndef PIGMENT_STD_RENDER_TARGETS_H
 #define PIGMENT_STD_RENDER_TARGETS_H
 
-#include "defines.h"
-#include "frame.h"
-#include "image.h"
+#include "pigment/defines.h"
+#include "pigment/frame.h"
+#include "pigment/image.h"
 
 typedef struct PRenderTarget PRenderTarget;
 

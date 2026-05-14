@@ -15,13 +15,15 @@
  */
 
 #include "frame.h"
+
 #include "cmd_sync.h"
 #include "commands.h"
 #include "deletion.h"
 #include "image.h"
-#include "internal.h"
 #include "surface.h"
 #include "synchronization.h"
+
+#include "internal.h"
 
 void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
 {

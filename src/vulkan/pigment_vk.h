@@ -17,7 +17,8 @@
 #ifndef PIGMENT_VK_H
 #define PIGMENT_VK_H
 
-#include <pigment.h>
+#include "pigment.h"
+
 #include <volk.h>
 
 typedef struct PVkAllocation PVkAllocation;

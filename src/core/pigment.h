@@ -17,21 +17,21 @@
 #ifndef PIGMENT_H
 #define PIGMENT_H
 
-#include "defines.h"
-#include "log.h"
-#include "frame.h"
-#include "sampler.h"
-#include "pipeline.h"
-#include "compute.h"
-#include "surface.h"
 #include "buffers.h"
-#include "descriptor.h"
-#include "image.h"
-#include "swapchain_event.h"
-#include "commands.h"
 #include "cmd_sync.h"
+#include "commands.h"
+#include "compute.h"
+#include "defines.h"
 #include "deletion.h"
+#include "descriptor.h"
+#include "frame.h"
+#include "image.h"
+#include "log.h"
+#include "pipeline.h"
 #include "queue.h"
+#include "sampler.h"
+#include "surface.h"
+#include "swapchain_event.h"
 
 Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
 void destroy_pigment(Pigment* pigment);

@@ -15,6 +15,7 @@
  */
 
 #include "swapchain_event.h"
+
 #include "internal.h"
 
 #define PIGMENT_SWAPCHAIN_CALLBACK_INITIAL_CAPACITY 4

@@ -19,9 +19,9 @@
 #ifndef PIGMENT_INTERNAL_H
 #define PIGMENT_INTERNAL_H
 
-#include "structs.h"
 #include "internal_alloc.h"
 #include "log_internal.h"
+#include "structs.h"
 
 #include <string.h>
 

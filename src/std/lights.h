@@ -17,10 +17,12 @@
 #ifndef PIGMENT_STD_LIGHTS_H
 #define PIGMENT_STD_LIGHTS_H
 
-#include <cglm/types.h>
-#include "defines.h"
-#include "mesh.h"
 #include "camera.h"
+#include "mesh.h"
+
+#include "pigment/defines.h"
+
+#include <cglm/types.h>
 
 typedef struct PLights PLights;
 

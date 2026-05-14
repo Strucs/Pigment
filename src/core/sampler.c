@@ -15,10 +15,12 @@
  */
 
 #include "sampler.h"
-#include "structs.h"
+
 #include "commands.h"
 #include "deletion.h"
+
 #include "internal.h"
+#include "structs.h"
 
 static void destroy_sampler_immediate(Pigment* pigment, void* resource);
 

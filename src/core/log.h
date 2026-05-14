@@ -19,8 +19,8 @@
 
 #include "defines.h"
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct PigmentLogRecord {
     const char* message_id_name;

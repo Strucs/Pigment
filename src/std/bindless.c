@@ -15,9 +15,11 @@
  */
 
 #include "bindless.h"
-#include "commands.h"
+
+#include "pigment/commands.h"
+#include "pigment/pigment.h"
+
 #include "internal.h"
-#include "pigment.h"
 #include "std_internal.h"
 
 #include <math.h>

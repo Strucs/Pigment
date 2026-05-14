@@ -14,24 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_STD_MESH_H
-#define PIGMENT_STD_MESH_H
+#ifndef PIGMENT_SHADERC_H
+#define PIGMENT_SHADERC_H
 
-#include "pigment/buffers.h"
-#include "pigment/defines.h"
+#include <stdint.h>
 
-#include <stdlib.h>
+typedef enum PShaderType {
+    P_SHADER_TYPE_VERTEX   = 0,
+    P_SHADER_TYPE_FRAGMENT = 1,
+} PShaderType;
 
-typedef struct PMeshBuffers {
-    PBuffer* vertex_buffer;
-    PBuffer* index_buffer;
-    uint32_t index_count;
-    PIndexType index_type;
-} PMeshBuffers;
-
-PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count);
-void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
-
-uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
+uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size);
+void pigment_shaderc_free(uint32_t* spv);
 
 #endif

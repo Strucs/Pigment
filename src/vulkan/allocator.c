@@ -16,8 +16,8 @@
 
 #include "pigment_vk.h"
 
-#include "structs.h"
 #include "internal.h"
+#include "structs.h"
 
 #define DEFAULT_BLOCK_SIZE (4ULL * 1024 * 1024)    // 4 MiB
 #define DEDICATED_THRESHOLD_DIVISOR 4ULL

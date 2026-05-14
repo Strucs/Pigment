@@ -15,13 +15,14 @@
  */
 
 #include "pipeline_loader.h"
+
+#include "pigment/pigment.h"
+
 #include "internal.h"
-#include "pigment.h"
 #include "std_internal.h"
 
 #include <stdalign.h>
 #include <string.h>
-#include <shaderc/shaderc.h>
 
 alignas(uint32_t) static constexpr unsigned char default_vertex_spv[] = {
     #embed <default_vert.spv>
@@ -74,61 +75,6 @@ char* load_shader_code(Pigment* pigment, const IOCallbacks* io, const char* file
     io->free_file(io->user_data, data);
 
     return shader_code;
-}
-
-uint32_t* compile_glsl_to_spv(Pigment* pigment, const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size)
-{
-    shaderc_compiler_t compiler         = NULL;
-    shaderc_compile_options_t options   = NULL;
-    shaderc_compilation_result_t result = NULL;
-
-    compiler = shaderc_compiler_initialize();
-    if(compiler == NULL)
-    {
-        PLOG_ERROR(pigment, "Failed to initialize shader compiler.");
-        goto ERROR;
-    }
-
-    options = shaderc_compile_options_initialize();
-    if(options == NULL)
-    {
-        PLOG_ERROR(pigment, "Failed to initialize shader compile options.");
-        goto ERROR;
-    }
-
-    shaderc_shader_kind kind = (type == P_SHADER_TYPE_FRAGMENT) ? shaderc_glsl_fragment_shader : shaderc_glsl_vertex_shader;
-    const char* input_name   = file_name ? file_name : "default";
-    const char* entry_point  = "main";
-
-    result = shaderc_compile_into_spv(compiler, source_code, source_size, kind, input_name, entry_point, options);
-
-    if(shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success)
-    {
-        PLOG_ERROR(pigment, "GLSL compilation error: %s", shaderc_result_get_error_message(result));
-        goto ERROR;
-    }
-
-    *spv_size             = shaderc_result_get_length(result);
-    const uint32_t* bytes = (const uint32_t*) shaderc_result_get_bytes(result);
-
-    uint32_t* spv = P_ALLOC_OBJECT(pigment, *spv_size, _Alignof(uint32_t));
-    if(spv != NULL)
-    {
-        memcpy(spv, bytes, *spv_size);
-    }
-
-    shaderc_result_release(result);
-    shaderc_compile_options_release(options);
-    shaderc_compiler_release(compiler);
-
-    return spv;
-
-ERROR:
-    shaderc_result_release(result);
-    shaderc_compile_options_release(options);
-    shaderc_compiler_release(compiler);
-
-    return NULL;
 }
 
 static PStdPipelineLayouts* pipeline_layouts_get(Pigment* pigment, PStdBindless* bindless)

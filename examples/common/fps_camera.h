@@ -1,9 +1,9 @@
 #ifndef EXAMPLES_COMMON_FPS_CAMERA_H
 #define EXAMPLES_COMMON_FPS_CAMERA_H
 
-#include <pigment.h>
-#include <std/camera.h>
-#include <std/camera_math.h>
+#include <pigment/pigment.h>
+#include <pigment/std/camera.h>
+#include <pigment/std/camera_math.h>
 #include <SDL3/SDL.h>
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE

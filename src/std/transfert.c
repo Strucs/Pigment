@@ -15,7 +15,8 @@
  */
 
 #include "transfert.h"
-#include "pigment.h"
+
+#include "pigment/pigment.h"
 
 #include <string.h>
 

@@ -17,20 +17,15 @@
 #ifndef PIGMENT_STD_PIPELINE_LOADER_H
 #define PIGMENT_STD_PIPELINE_LOADER_H
 
-#include "defines.h"
-#include "descriptor.h"
 #include "bindless.h"
 #include "camera.h"
 #include "file_io.h"
-#include "pipeline.h"
 
-typedef enum PShaderType {
-    P_SHADER_TYPE_VERTEX   = 0,
-    P_SHADER_TYPE_FRAGMENT = 1,
-} PShaderType;
+#include "pigment/defines.h"
+#include "pigment/descriptor.h"
+#include "pigment/pipeline.h"
 
 char* load_shader_code(Pigment* pigment, const IOCallbacks* io, const char* file_path, uint32_t* shader_size);
-uint32_t* compile_glsl_to_spv(Pigment* pigment, const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size);
 
 PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
 PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless);

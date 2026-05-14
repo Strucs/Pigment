@@ -15,7 +15,9 @@
  */
 
 #include "cmd_sync.h"
+
 #include "commands.h"
+
 #include "internal.h"
 
 static VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);

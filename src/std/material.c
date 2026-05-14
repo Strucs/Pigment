@@ -15,8 +15,10 @@
  */
 
 #include "material.h"
+
+#include "pigment/pigment.h"
+
 #include "internal.h"
-#include "pigment.h"
 
 struct PMaterials {
     PBuffer* buffer;

@@ -16,8 +16,9 @@
 
 #include "primitives.h"
 
-#include "internal.h"
 #include "mesh.h"
+
+#include "internal.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>

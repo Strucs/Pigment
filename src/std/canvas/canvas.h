@@ -17,9 +17,9 @@
 #ifndef PIGMENT_STD_CANVAS_H
 #define PIGMENT_STD_CANVAS_H
 
-#include "defines.h"
-#include "frame.h"
-#include "pipeline.h"
+#include "pigment/defines.h"
+#include "pigment/frame.h"
+#include "pigment/pipeline.h"
 
 typedef struct PStdCanvas PStdCanvas;
 

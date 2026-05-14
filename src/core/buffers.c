@@ -15,8 +15,10 @@
  */
 
 #include "buffers.h"
+
 #include "commands.h"
 #include "deletion.h"
+
 #include "internal.h"
 
 static void destroy_buffer_immediate(Pigment* pigment, void* resource);

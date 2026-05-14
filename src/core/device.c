@@ -15,9 +15,11 @@
  */
 
 #include "device.h"
-#include "internal.h"
+
 #include "pigment_vk.h"
 #include "queue.h"
+
+#include "internal.h"
 
 static const VkQueueFlags QUEUE_USEFUL_FLAGS = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
 

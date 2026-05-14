@@ -15,8 +15,10 @@
  */
 
 #include "image.h"
+
 #include "commands.h"
 #include "deletion.h"
+
 #include "internal.h"
 
 #include <stdio.h>

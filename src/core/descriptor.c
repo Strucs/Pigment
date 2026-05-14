@@ -15,7 +15,9 @@
  */
 
 #include "descriptor.h"
+
 #include "deletion.h"
+
 #include "internal.h"
 
 #define PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY 4

@@ -17,9 +17,10 @@
 #ifndef PIGMENT_STD_PRIMITIVES_H
 #define PIGMENT_STD_PRIMITIVES_H
 
-#include "defines.h"
-#include "vertex.h"
 #include "mesh.h"
+#include "vertex.h"
+
+#include "pigment/defines.h"
 
 typedef struct PMeshData {
     PVertex* vertices;

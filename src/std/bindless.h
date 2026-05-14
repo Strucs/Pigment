@@ -17,10 +17,11 @@
 #ifndef PIGMENT_STD_BINDLESS_H
 #define PIGMENT_STD_BINDLESS_H
 
-#include "defines.h"
-#include "descriptor.h"
-#include "sampler.h"
 #include "render_targets.h"
+
+#include "pigment/defines.h"
+#include "pigment/descriptor.h"
+#include "pigment/sampler.h"
 
 #define PIGMENT_DEFAULT_MAX_IMAGES 128
 #define PIGMENT_DEFAULT_MAX_SAMPLERS 16

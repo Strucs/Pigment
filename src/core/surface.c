@@ -15,13 +15,15 @@
  */
 
 #include "surface.h"
+
 #include "commands.h"
 #include "deletion.h"
 #include "image.h"
-#include "internal.h"
 #include "native_surface.h"
 #include "swapchain_event.h"
 #include "synchronization.h"
+
+#include "internal.h"
 
 static void destroy_renderer_immediate(Pigment* pigment, void* resource);
 static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);

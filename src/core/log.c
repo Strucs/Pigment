@@ -15,6 +15,7 @@
  */
 
 #include "log.h"
+
 #include "internal.h"
 
 #include <stdarg.h>

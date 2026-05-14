@@ -17,11 +17,12 @@
 #ifndef PIGMENT_STD_GLTF_LOADER_H
 #define PIGMENT_STD_GLTF_LOADER_H
 
-#include "defines.h"
 #include "bindless.h"
+#include "file_io.h"
 #include "material.h"
 #include "vertex.h"
-#include "file_io.h"
+
+#include "pigment/defines.h"
 
 #include <cglm/types.h>
 

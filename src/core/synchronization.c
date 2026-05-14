@@ -15,6 +15,7 @@
  */
 
 #include "synchronization.h"
+
 #include "internal.h"
 #include "structs.h"
 

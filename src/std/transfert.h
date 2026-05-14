@@ -17,7 +17,7 @@
 #ifndef PIGMENT_STD_UPLOAD_H
 #define PIGMENT_STD_UPLOAD_H
 
-#include "defines.h"
+#include "pigment/defines.h"
 
 typedef struct PBufferUploadDesc {
     const void* data;

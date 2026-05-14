@@ -27,6 +27,7 @@
 #endif
 
 #include "native_surface.h"
+
 #include "internal.h"
 
 #define LOAD_SURFACE_FUNC(instance, name)                                                         \

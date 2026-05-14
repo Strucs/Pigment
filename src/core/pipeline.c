@@ -15,9 +15,11 @@
  */
 
 #include "pipeline.h"
-#include "structs.h"
+
 #include "deletion.h"
+
 #include "internal.h"
+#include "structs.h"
 
 static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc);
 static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);

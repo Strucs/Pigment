@@ -15,8 +15,10 @@
  */
 
 #include "instance.h"
-#include "internal.h"
+
 #include "pigment_vk.h"
+
+#include "internal.h"
 
 static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
 static PResult build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count);

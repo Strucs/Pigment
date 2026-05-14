@@ -15,8 +15,10 @@
  */
 
 #include "mesh.h"
-#include "internal.h"
+
 #include "transfert.h"
+
+#include "internal.h"
 
 PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
 {

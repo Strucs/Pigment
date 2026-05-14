@@ -17,7 +17,7 @@
 #ifndef PIGMENT_STD_INTERNAL_H
 #define PIGMENT_STD_INTERNAL_H
 
-#include "defines.h"
+#include "pigment/defines.h"
 
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>

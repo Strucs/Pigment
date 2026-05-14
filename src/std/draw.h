@@ -17,12 +17,14 @@
 #ifndef PIGMENT_STD_DRAW_H
 #define PIGMENT_STD_DRAW_H
 
-#include <cglm/types.h>
-#include "defines.h"
 #include "bindless.h"
-#include "pipeline.h"
-#include "mesh.h"
 #include "camera.h"
+#include "mesh.h"
+
+#include "pigment/defines.h"
+#include "pigment/pipeline.h"
+
+#include <cglm/types.h>
 
 typedef struct PInstanceRing PInstanceRing;
 typedef struct PMaterials PMaterials;

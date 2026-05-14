@@ -15,9 +15,12 @@
  */
 
 #include "lights.h"
-#include "internal.h"
-#include "pigment.h"
+
 #include "camera.h"
+
+#include "pigment/pigment.h"
+
+#include "internal.h"
 #include "std_internal.h"
 
 #include <stddef.h>

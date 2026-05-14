@@ -17,8 +17,8 @@
 #ifndef PIGMENT_DEFINES_H
 #define PIGMENT_DEFINES_H
 
-#include <stdint.h>
 #include <stdatomic.h>
+#include <stdint.h>
 
 typedef unsigned char PBool;
 #define P_TRUE 1

@@ -17,8 +17,9 @@
 #ifndef PIGMENT_STD_MATERIAL_H
 #define PIGMENT_STD_MATERIAL_H
 
+#include "pigment/defines.h"
+
 #include <cglm/types.h>
-#include "defines.h"
 
 typedef struct PMaterials PMaterials;
 

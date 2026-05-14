@@ -16,8 +16,9 @@
 
 #include "render_targets.h"
 
+#include "pigment/pigment.h"
+
 #include "internal.h"
-#include "pigment.h"
 
 struct PRenderTarget {
     PImage** colors;

@@ -15,6 +15,7 @@
  */
 
 #include "camera_math.h"
+
 #include "std_internal.h"
 
 void pigment_perspective(float fov_rad, float aspect, float near, mat4 out)

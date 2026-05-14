@@ -15,12 +15,15 @@
  */
 
 #include "draw.h"
-#include "internal.h"
-#include "pigment.h"
-#include "material.h"
-#include "lights.h"
+
 #include "bindless.h"
 #include "camera.h"
+#include "lights.h"
+#include "material.h"
+
+#include "pigment/pigment.h"
+
+#include "internal.h"
 #include "std_internal.h"
 
 #include <string.h>

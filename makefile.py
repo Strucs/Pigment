@@ -3,6 +3,35 @@ import os
 import shutil
 import subprocess
 
+INTERNAL_HEADERS = {"structs.h", "internal.h", "log_internal.h", "internal_alloc.h", "std_internal.h"}
+
+CONVENIENCE_HEADERS = {"pigment.h", "pigment_std.h", "pigment_sdl.h", "pigment_vk.h"}
+
+def public_path_for_header(file: str) -> str | None:
+    parts = os.path.normpath(file).split(os.sep)
+    if len(parts) < 3:
+        return None
+    module   = parts[1]
+    filename = parts[-1]
+    if filename in INTERNAL_HEADERS:
+        return None
+    if filename in CONVENIENCE_HEADERS:
+        return f"pigment/{filename}"
+    if module == "external":
+        return filename if filename == "volk.h" else None
+    if module == "core":
+        return f"pigment/{filename}"
+    if module == "std":
+        rest = parts[2:-1]
+        if rest:
+            return f"pigment/std/{'/'.join(rest)}/{filename}"
+        return f"pigment/std/{filename}"
+    if module == "vulkan":
+        return f"pigment/vulkan/{filename}"
+    if module == "integrations":
+        return f"pigment/{filename}"
+    return None
+
 def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
     if os.path.exists(dst):
         dst_mtime = os.path.getmtime(dst)
@@ -18,29 +47,13 @@ def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
     return True
 
 def copy_public_headers(include_dir: str):
-    headers = powermake.get_files("./src/**/*.h")
-    for file in headers:
-        parts = os.path.normpath(file).split(os.sep)
-        if len(parts) < 3:
+    for file in powermake.get_files("./src/**/*.h"):
+        target_path  = public_path_for_header(file)
+        if target_path is None:
             continue
-        module = parts[1]
-        if module == "external" and parts[-1] != "volk.h":
-            continue
-        if module == "core" and parts[-1] in ("structs.h", "internal.h", "log_internal.h"):
-            continue
-        if module == "std" and parts[-1] == "std_internal.h":
-            continue
-        rest_parts = parts[2:-1]
-        if module == "core" or module == "external":
-            new_dir = os.path.join(include_dir, *rest_parts)
-        elif module == "std" and parts[-1] == "pigment_std.h":
-            new_dir = include_dir
-        elif module == "integrations" and parts[-1] == "pigment_sdl.h":
-            new_dir = include_dir
-        else:
-            new_dir = os.path.join(include_dir, module, *rest_parts)
-        powermake.utils.makedirs(new_dir)
-        shutil.copy2(file, new_dir)
+        dst = os.path.join(include_dir, target_path )
+        powermake.utils.makedirs(os.path.dirname(dst))
+        shutil.copy2(file, dst)
 
 def build_shaders(src_pattern: str, shaders_dst_dir: str, touch_files: list[str]) -> bool:
     all_files = list(powermake.get_files(src_pattern))
@@ -70,16 +83,17 @@ def build_pigment(config: powermake.Config):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
 
-    config.add_includedirs("src/core", "src/std", "src/external", "src/vulkan")
+    copy_public_headers(include_dir)
+    build_shaders("./shaders/*", shaders_dir, ["src/std/pipeline_loader.c", "src/std/canvas/canvas.c"])
+
+    config.add_includedirs(include_dir, "src/core", "src/std", "src/external", "src/vulkan")
     config.add_flags(f"--embed-dir={shaders_dir}")
 
     all_files = powermake.get_files("./src/**/*.c")
     external_files = {f for f in all_files if os.sep + "external" + os.sep in os.path.normpath(f)}
     integration_files = {f for f in all_files if os.sep + "integrations" + os.sep in os.path.normpath(f)}
-    project_files = set(all_files) - external_files - integration_files
-
-    copy_public_headers(include_dir)
-    build_shaders("./shaders/*", shaders_dir, ["src/std/pipeline_loader.c", "src/std/canvas/canvas.c"])
+    tools_files = {f for f in all_files if os.sep + "tools" + os.sep in os.path.normpath(f)}
+    project_files = set(all_files) - external_files - integration_files - tools_files
 
     ext_config = config.copy()
     ext_config.add_flags("-Wno-misleading-indentation")
@@ -89,7 +103,7 @@ def build_pigment(config: powermake.Config):
     objects = powermake.compile_files(config, project_files)
     powermake.archive_files(config, list(objects) + list(ext_objects))
 
-    config.remove_includedirs("src/core", "src/std", "src/external", "src/vulkan")
+    config.remove_includedirs(include_dir, "src/core", "src/std", "src/external", "src/vulkan")
     config.remove_flags(f"--embed-dir={shaders_dir}")
 
 def build_sdl_integration(config: powermake.Config):
@@ -97,12 +111,27 @@ def build_sdl_integration(config: powermake.Config):
     if not sdl_files:
         return
 
+    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     sdl_config = config.copy()
     sdl_config.target_name = "pigment_sdl"
-    sdl_config.add_includedirs("src/core", "src/std", "src")
+    sdl_config.add_includedirs(include_dir, "src/core", "src/std", "src/integrations/sdl")
 
     objects = powermake.compile_files(sdl_config, sdl_files)
     powermake.archive_files(sdl_config, objects)
+
+def build_shaderc_tool(config: powermake.Config):
+    shaderc_files = list(powermake.get_files("./src/tools/shaderc/**/*.c"))
+    if not shaderc_files:
+        return
+
+    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
+    shaderc_config = config.copy()
+    shaderc_config.target_name = "pigment_shaderc"
+    shaderc_config.add_includedirs(include_dir, "src/tools/shaderc")
+    shaderc_config.add_shared_libs("shaderc_shared")
+
+    objects = powermake.compile_files(shaderc_config, shaderc_files)
+    powermake.archive_files(shaderc_config, objects)
 
 def build_example(config: powermake.Config, example_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
@@ -159,10 +188,10 @@ def on_build(config: powermake.Config):
         config.add_includedirs("/opt/homebrew/include")
         config.add_ld_flags("-L/opt/homebrew/lib")
         config.add_shared_libs("vulkan.1")
-    config.add_shared_libs("shaderc_shared")
 
     build_pigment(config)
     build_sdl_integration(config)
+    build_shaderc_tool(config)
 
     needs_sdl = any(getattr(args_parsed, example) for example in dir_list) or any(getattr(args_parsed, test) for test in test_list)
     if needs_sdl:

@@ -17,9 +17,9 @@
 #ifndef PIGMENT_FRAME_H
 #define PIGMENT_FRAME_H
 
+#include "buffers.h"
 #include "defines.h"
 #include "pipeline.h"
-#include "buffers.h"
 
 typedef struct PDrawIndirectCommand {
     uint32_t vertex_count;

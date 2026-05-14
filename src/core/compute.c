@@ -15,8 +15,9 @@
  */
 
 #include "compute.h"
-#include "structs.h"
+
 #include "internal.h"
+#include "structs.h"
 
 void pigment_cmd_dispatch(Pigment* pigment, PCommandBuffer* cmd, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z)
 {

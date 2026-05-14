@@ -16,9 +16,10 @@
 
 #include "pigment.h"
 
-#include "internal.h"
-#include "instance.h"
 #include "device.h"
+#include "instance.h"
+
+#include "internal.h"
 
 #include <string.h>
 

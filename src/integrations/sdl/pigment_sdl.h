@@ -19,7 +19,8 @@
 
 #include "defines.h"
 #include "log.h"
-#include "pigment_std.h"
+
+#include "pigment/std/file_io.h"
 
 #include <SDL3/SDL.h>
 
