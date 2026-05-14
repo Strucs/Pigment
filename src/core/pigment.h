@@ -22,6 +22,7 @@
 #include "frame.h"
 #include "sampler.h"
 #include "pipeline.h"
+#include "compute.h"
 #include "surface.h"
 #include "buffers.h"
 #include "descriptor.h"

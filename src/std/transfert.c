@@ -47,7 +47,7 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer*
     PBufferDesc staging_desc = {
         .size   = desc->size,
         .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
-        .memory = P_MEMORY_HOST_UPLOAD,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
     };
 
     PBuffer* staging = pigment_create_buffer(pigment, &staging_desc);
@@ -81,7 +81,7 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PBuffer*
 
     pigment_end_recording(pigment, cmd);
 
-    PSubmitHandle handle = {0};
+    PSubmitHandle handle  = {0};
     PResult submit_result = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, &handle);
 
     pigment_destroy_command_buffers(pigment, &cmd, 1);

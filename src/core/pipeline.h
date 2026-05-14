@@ -70,6 +70,19 @@ typedef enum PBlendMode {
     P_BLEND_MODE_ADDITIVE            = 3,
 } PBlendMode;
 
+typedef struct PSpecializationEntry {
+    uint32_t constant_id;
+    uint32_t offset;
+    uint64_t size;
+} PSpecializationEntry;
+
+typedef struct PSpecializationInfo {
+    const PSpecializationEntry* entries;
+    uint32_t entry_count;
+    const void* data;
+    uint64_t data_size;
+} PSpecializationInfo;
+
 typedef struct PPipelineDesc {
     PLayout* layout;
 
@@ -77,6 +90,12 @@ typedef struct PPipelineDesc {
     uint32_t vertex_spv_size;
     const uint32_t* fragment_spv;
     uint32_t fragment_spv_size;
+
+    /**
+     * Per-stage specialization constants. NULL = no specialization for that stage.
+     */
+    const PSpecializationInfo* vertex_specialization;
+    const PSpecializationInfo* fragment_specialization;
 
     const PFormat* color_formats;
     /**
@@ -112,6 +131,20 @@ typedef struct PPipelineDesc {
     const char* name;
 } PPipelineDesc;
 
+typedef struct PComputePipelineDesc {
+    PLayout* layout;
+
+    const uint32_t* compute_spv;
+    uint32_t compute_spv_size;
+
+    /**
+     * Specialization constants applied to the compute shader.
+     */
+    const PSpecializationInfo* specialization;
+
+    const char* name;
+} PComputePipelineDesc;
+
 typedef struct PLayoutDesc {
     PDescriptorSetLayout** set_layouts;
     uint32_t set_layout_count;
@@ -124,6 +157,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc);
 void pigment_destroy_layout(Pigment* pigment, PLayout* layout);
 
 PResult pigment_create_graphic_pipelines(Pigment* pigment, const PPipelineDesc* descs, uint32_t count, PPipeline** out);
+PResult pigment_create_compute_pipelines(Pigment* pigment, const PComputePipelineDesc* descs, uint32_t count, PPipeline** out);
 
 void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
 

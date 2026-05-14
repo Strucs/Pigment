@@ -1,0 +1,25 @@
+#version 450
+#extension GL_EXT_buffer_reference : require
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer HeightsBuffer {
+    float heights[];
+};
+
+layout(push_constant) uniform PushBlock {
+    HeightsBuffer heights_buffer;
+    float time;
+    uint count;
+} push;
+
+void main()
+{
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= push.count)
+    {
+        return;
+    }
+    float fi = float(idx % 10);
+    push.heights_buffer.heights[idx] = sin(push.time * 2.0 + fi * 0.3) * 0.8;
+}

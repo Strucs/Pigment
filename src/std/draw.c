@@ -50,7 +50,7 @@ PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_i
     PBufferDesc desc     = {
         .size   = (uint64_t) max_instances_per_frame * frame_count * sizeof(PInstanceData),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_UPLOAD,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
     };
     ring->buffer = pigment_create_buffer(pigment, &desc);
     if(ring->buffer == NULL)

@@ -22,7 +22,7 @@
 static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc);
 static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
-static VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point);
+static PResult configure_shader_stage_create_info(Pigment* pigment, VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point, const PSpecializationInfo* specialization, VkSpecializationMapEntry** out_vk_entries, VkSpecializationInfo* out_vk_spec_info, VkPipelineShaderStageCreateInfo* out_stage);
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void);
 static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology);
 static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void);
@@ -34,6 +34,7 @@ static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_in
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
 static void destroy_pipeline_immediate(Pigment* pigment, void* resource);
 static void destroy_layout_immediate(Pigment* pigment, void* resource);
+static PResult build_specialization(Pigment* pigment, const PSpecializationInfo* in, VkSpecializationMapEntry** out_entries, VkSpecializationInfo* out_info);
 
 static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc)
 {
@@ -53,7 +54,10 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
     {
         goto ERROR;
     }
-    build->shader_stages[build->shader_stage_count++] = configure_shader_stage_create_info(build->vertex_module, VK_SHADER_STAGE_VERTEX_BIT, "main");
+    if(configure_shader_stage_create_info(pigment, build->vertex_module, VK_SHADER_STAGE_VERTEX_BIT, "main", desc->vertex_specialization, &build->vertex_spec_entries, &build->vertex_spec_info, &build->shader_stages[build->shader_stage_count++]) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
 
     if(desc->fragment_spv != NULL)
     {
@@ -62,7 +66,10 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         {
             goto ERROR;
         }
-        build->shader_stages[build->shader_stage_count++] = configure_shader_stage_create_info(build->fragment_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+        if(configure_shader_stage_create_info(pigment, build->fragment_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", desc->fragment_specialization, &build->fragment_spec_entries, &build->fragment_spec_info, &build->shader_stages[build->shader_stage_count++]) != PIGMENT_SUCCESS)
+        {
+            goto ERROR;
+        }
     }
 
     if(desc->blend_modes != NULL && desc->blend_mode_count != desc->color_format_count)
@@ -186,7 +193,36 @@ static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
     P_FREE(pigment, build->color_formats);
     P_FREE(pigment, build->blend_attachments);
     P_FREE(pigment, build->dynamic_state_list);
+    P_FREE(pigment, build->vertex_spec_entries);
+    P_FREE(pigment, build->fragment_spec_entries);
     P_FREE(pigment, build);
+}
+
+static PResult build_specialization(Pigment* pigment, const PSpecializationInfo* in, VkSpecializationMapEntry** out_entries, VkSpecializationInfo* out_info)
+{
+    *out_entries = P_NEW_ARRAY_FOR_OBJECT(pigment, *out_entries, in->entry_count);
+    if(*out_entries == NULL)
+    {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+
+    for(uint32_t e = 0; e < in->entry_count; e++)
+    {
+        (*out_entries)[e] = (VkSpecializationMapEntry) {
+            .constantID = in->entries[e].constant_id,
+            .offset     = in->entries[e].offset,
+            .size       = (size_t) in->entries[e].size,
+        };
+    }
+
+    *out_info = (VkSpecializationInfo) {
+        .mapEntryCount = in->entry_count,
+        .pMapEntries   = *out_entries,
+        .dataSize      = (size_t) in->data_size,
+        .pData         = in->data,
+    };
+
+    return PIGMENT_SUCCESS;
 }
 
 PResult pigment_create_graphic_pipelines(Pigment* pigment, const PPipelineDesc* descs, uint32_t count, PPipeline** out)
@@ -303,6 +339,148 @@ FREE:
     return status;
 }
 
+PResult pigment_create_compute_pipelines(Pigment* pigment, const PComputePipelineDesc* descs, uint32_t count, PPipeline** out)
+{
+    if(pigment == NULL || descs == NULL || out == NULL || count == 0)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    PResult status               = PIGMENT_ERROR_OUT_OF_MEMORY;
+    uint32_t modules_done        = 0;
+    uint32_t temp_pipelines_done = 0;
+
+    P_STACK_OR_HEAP(VkShaderModule, modules, count);
+    P_STACK_OR_HEAP(VkSpecializationMapEntry*, spec_entry_arrays, count);
+    P_STACK_OR_HEAP(VkSpecializationInfo, spec_infos, count);
+    P_STACK_OR_HEAP(VkComputePipelineCreateInfo, pipeline_create_infos, count);
+    P_STACK_OR_HEAP(VkPipeline, vk_pipelines, count);
+    P_STACK_OR_HEAP(PPipeline*, temp_pipelines, count);
+    if(modules == NULL || spec_entry_arrays == NULL || spec_infos == NULL || pipeline_create_infos == NULL || vk_pipelines == NULL || temp_pipelines == NULL)
+    {
+        goto FREE;
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        modules[i]           = VK_NULL_HANDLE;
+        spec_entry_arrays[i] = NULL;
+        temp_pipelines[i]    = NULL;
+    }
+
+    VkDevice device = pigment->device->logical_device;
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        const PComputePipelineDesc* desc = &descs[i];
+        if(desc->layout == NULL || desc->compute_spv == NULL)
+        {
+            PLOG_ERROR(pigment, "pigment_create_compute_pipelines: desc[%u] missing layout or compute_spv", i);
+            status = PIGMENT_ERROR;
+            goto FREE;
+        }
+
+        modules[i] = create_shader_module(pigment, desc->compute_spv, desc->compute_spv_size);
+        if(modules[i] == VK_NULL_HANDLE)
+        {
+            status = PIGMENT_ERROR_VULKAN;
+            goto FREE;
+        }
+        modules_done++;
+
+        temp_pipelines[i] = P_NEW_FOR_OBJECT(pigment, temp_pipelines[i]);
+        if(temp_pipelines[i] == NULL)
+        {
+            goto FREE;
+        }
+
+        if(pigment_resource_tracker_init(pigment, &temp_pipelines[i]->tracker) != PIGMENT_SUCCESS)
+        {
+            P_FREE(pigment, temp_pipelines[i]);
+            temp_pipelines[i] = NULL;
+            goto FREE;
+        }
+        temp_pipelines_done++;
+
+        pipeline_create_infos[i] = (VkComputePipelineCreateInfo) {
+            .sType              = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .layout             = desc->layout->layout,
+            .basePipelineHandle = VK_NULL_HANDLE,
+        };
+
+        if(configure_shader_stage_create_info(pigment, modules[i], VK_SHADER_STAGE_COMPUTE_BIT, "main", desc->specialization, &spec_entry_arrays[i], &spec_infos[i], &pipeline_create_infos[i].stage) != PIGMENT_SUCCESS)
+        {
+            goto FREE;
+        }
+    }
+
+    status          = PIGMENT_ERROR_VULKAN;
+    VkResult result = vkCreateComputePipelines(device, VK_NULL_HANDLE, count, pipeline_create_infos, &pigment->vk_alloc, vk_pipelines);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to create compute pipelines! (result: %d)", result);
+        for(uint32_t i = 0; i < count; i++)
+        {
+            if(vk_pipelines[i] != VK_NULL_HANDLE)
+            {
+                vkDestroyPipeline(device, vk_pipelines[i], &pigment->vk_alloc);
+            }
+        }
+        goto FREE;
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        temp_pipelines[i]->pipeline   = vk_pipelines[i];
+        temp_pipelines[i]->layout     = descs[i].layout;
+        temp_pipelines[i]->bind_point = P_PIPELINE_BIND_POINT_COMPUTE;
+        out[i]                        = temp_pipelines[i];
+
+        set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], descs[i].name);
+    }
+
+    temp_pipelines_done = 0;
+    status              = PIGMENT_SUCCESS;
+
+FREE:
+    if(status != PIGMENT_SUCCESS)
+    {
+        for(uint32_t i = 0; i < temp_pipelines_done; i++)
+        {
+            if(temp_pipelines[i] != NULL)
+            {
+                pigment_resource_tracker_destroy(pigment, &temp_pipelines[i]->tracker);
+                P_FREE(pigment, temp_pipelines[i]);
+            }
+        }
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        if(spec_entry_arrays[i] != NULL)
+        {
+            P_FREE(pigment, spec_entry_arrays[i]);
+        }
+    }
+
+    for(uint32_t i = 0; i < modules_done; i++)
+    {
+        if(modules[i] != VK_NULL_HANDLE)
+        {
+            vkDestroyShaderModule(pigment->device->logical_device, modules[i], &pigment->vk_alloc);
+        }
+    }
+
+    P_STACK_OR_HEAP_FREE(pigment, temp_pipelines);
+    P_STACK_OR_HEAP_FREE(pigment, vk_pipelines);
+    P_STACK_OR_HEAP_FREE(pigment, pipeline_create_infos);
+    P_STACK_OR_HEAP_FREE(pigment, spec_infos);
+    P_STACK_OR_HEAP_FREE(pigment, spec_entry_arrays);
+    P_STACK_OR_HEAP_FREE(pigment, modules);
+
+    return status;
+}
+
 void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline)
 {
     if(pigment == NULL || pipeline == NULL)
@@ -375,16 +553,25 @@ static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* cod
     return shader_module;
 }
 
-static VkPipelineShaderStageCreateInfo configure_shader_stage_create_info(VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point)
+static PResult configure_shader_stage_create_info(Pigment* pigment, VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point, const PSpecializationInfo* specialization, VkSpecializationMapEntry** out_vk_entries, VkSpecializationInfo* out_vk_spec_info, VkPipelineShaderStageCreateInfo* out_stage)
 {
-    VkPipelineShaderStageCreateInfo shader_stage_info = {
+    *out_stage = (VkPipelineShaderStageCreateInfo) {
         .sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage  = stage,
         .module = shader_module,
-        .pName  = entry_point
+        .pName  = entry_point,
     };
 
-    return shader_stage_info;
+    if(specialization != NULL && specialization->entry_count > 0)
+    {
+        if(build_specialization(pigment, specialization, out_vk_entries, out_vk_spec_info) != PIGMENT_SUCCESS)
+        {
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
+        }
+        out_stage->pSpecializationInfo = out_vk_spec_info;
+    }
+
+    return PIGMENT_SUCCESS;
 }
 
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void)

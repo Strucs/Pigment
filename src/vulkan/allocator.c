@@ -52,6 +52,7 @@ typedef struct DefaultAllocator {
     VkDeviceSize dedicated_threshold;
     DefaultPool pools[VK_MAX_MEMORY_TYPES];
     pigment_rwlock_t lock;
+    uint32_t logged_failure_mask;
 } DefaultAllocator;
 
 struct PVkAllocation {
@@ -207,7 +208,12 @@ static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_
     VkResult result;
     if((result = vkAllocateMemory(alloc->device, &alloc_info, &alloc->pigment->vk_alloc, &block->memory)) != VK_SUCCESS)
     {
-        PLOG_DEBUG(alloc->pigment, "vkAllocateMemory failed for block (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type.", (unsigned long long) size, memory_type_index, result);
+        uint32_t type_bit = 1u << memory_type_index;
+        if((alloc->logged_failure_mask & type_bit) == 0)
+        {
+            alloc->logged_failure_mask |= type_bit;
+            PLOG_TRACE(alloc->pigment, "vkAllocateMemory failed for block (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type. Further failures on this memory type will be silenced.", (unsigned long long) size, memory_type_index, result);
+        }
         goto ERROR;
     }
 
@@ -401,7 +407,12 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
     VkResult result;
     if((result = vkAllocateMemory(alloc->device, &info, &alloc->pigment->vk_alloc, &memory)) != VK_SUCCESS)
     {
-        PLOG_DEBUG(alloc->pigment, "vkAllocateMemory failed for dedicated alloc (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type.", (unsigned long long) size, memory_type_index, result);
+        uint32_t type_bit = 1u << memory_type_index;
+        if((alloc->logged_failure_mask & type_bit) == 0)
+        {
+            alloc->logged_failure_mask |= type_bit;
+            PLOG_TRACE(alloc->pigment, "vkAllocateMemory failed for dedicated alloc (size=%llu, type=%u, result=%d). Caller may retry on a fallback memory type. Further failures on this memory type will be silenced.", (unsigned long long) size, memory_type_index, result);
+        }
         return NULL;
     }
 

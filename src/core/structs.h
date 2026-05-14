@@ -211,6 +211,10 @@ struct PPipelineBuild {
     VkShaderModule fragment_module;
     uint32_t shader_stage_count;
     VkPipelineShaderStageCreateInfo shader_stages[2];
+    VkSpecializationMapEntry* vertex_spec_entries;
+    VkSpecializationInfo vertex_spec_info;
+    VkSpecializationMapEntry* fragment_spec_entries;
+    VkSpecializationInfo fragment_spec_info;
     VkPipelineVertexInputStateCreateInfo vertex_input;
     VkPipelineInputAssemblyStateCreateInfo input_assembly;
     VkPipelineViewportStateCreateInfo viewport;

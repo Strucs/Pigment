@@ -50,26 +50,22 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         .sharingMode = (VkSharingMode) desc->sharing_mode,
     };
 
-    PVkAllocationCreateInfo alloc_info = {
-        .debug_name = desc->name,
-    };
-
-    switch(desc->memory)
+    PVkAllocationFlags vk_alloc_flags = 0;
+    if(desc->memory.required & P_MEMORY_HOST_VISIBLE_BIT)
     {
-        case P_MEMORY_GPU_ONLY:
-            alloc_info.required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            break;
-        case P_MEMORY_HOST_UPLOAD:
-            alloc_info.required_flags  = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            alloc_info.preferred_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-            alloc_info.flags           = P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
-            break;
-        case P_MEMORY_HOST_READBACK:
-            alloc_info.required_flags  = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-            alloc_info.preferred_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-            alloc_info.flags           = P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
-            break;
+        vk_alloc_flags |= P_VK_ALLOCATION_PERSISTENT_MAP_BIT;
     }
+    if(desc->flags & P_BUFFER_DEDICATED_BIT)
+    {
+        vk_alloc_flags |= P_VK_ALLOCATION_DEDICATED_BIT;
+    }
+
+    PVkAllocationCreateInfo alloc_info = {
+        .debug_name      = desc->name,
+        .required_flags  = (VkMemoryPropertyFlags) desc->memory.required,
+        .preferred_flags = (VkMemoryPropertyFlags) desc->memory.preferred,
+        .flags           = vk_alloc_flags,
+    };
 
     PVkAllocator* alloc = pigment->gpu_allocator;
     VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, &alloc_info, &buffer->buffer, &buffer->allocation);

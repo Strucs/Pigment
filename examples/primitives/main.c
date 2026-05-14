@@ -1,7 +1,21 @@
 #include <pigment_std.h>
 #include <pigment_sdl.h>
 
+#include <stdalign.h>
+
 #include "../common/fps_camera.h"
+
+alignas(uint32_t) static const unsigned char wave_compute_spv[] = {
+    #embed <wave_comp.spv>
+};
+
+#define SPHERE_INSTANCE_COUNT 100
+
+typedef struct WavePushConstants {
+    uint64_t heights_address;
+    float time;
+    uint32_t count;
+} WavePushConstants;
 
 int main(void)
 {
@@ -10,30 +24,34 @@ int main(void)
         .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)
     };
 
-    SDL_Window* window                  = NULL;
-    Pigment* pigment                    = NULL;
-    PCommandPool* pool                  = NULL;
-    PWindowRenderer* renderer           = NULL;
-    PStdBindless* bindless              = NULL;
-    PCamera* camera                     = NULL;
-    PInstanceRing* ring                 = NULL;
-    PMaterials* materials               = NULL;
-    PLights* lights                     = NULL;
-    PPipeline* pipeline                 = NULL;
-    PPipeline* skybox_pipeline          = NULL;
-    PPipeline* crt_pipeline             = NULL;
-    PStdCanvas* canvas                  = NULL;
-    PRenderTarget* rt                   = NULL;
-    uint32_t cubemap_slot               = 0;
-    uint32_t rt_slot                    = 0;
-    PMeshBuffers* gpu_cube              = NULL;
-    PMeshBuffers* gpu_sphere            = NULL;
-    PMeshBuffers* gpu_plane             = NULL;
-    PMeshBuffers* gpu_quad              = NULL;
-    PDrawCall draw_calls[5]             = {0};
-    PInstanceData instances[4]          = {0};
-    PInstanceData sphere_instances[100] = {0};
-    int error_code                      = 1;
+    SDL_Window* window                                    = NULL;
+    Pigment* pigment                                      = NULL;
+    PCommandPool* pool                                    = NULL;
+    PWindowRenderer* renderer                             = NULL;
+    PStdBindless* bindless                                = NULL;
+    PCamera* camera                                       = NULL;
+    PInstanceRing* ring                                   = NULL;
+    PMaterials* materials                                 = NULL;
+    PLights* lights                                       = NULL;
+    PPipeline* pipeline                                   = NULL;
+    PPipeline* skybox_pipeline                            = NULL;
+    PPipeline* crt_pipeline                               = NULL;
+    PStdCanvas* canvas                                    = NULL;
+    PRenderTarget* rt                                     = NULL;
+    uint32_t cubemap_slot                                 = 0;
+    uint32_t rt_slot                                      = 0;
+    PMeshBuffers* gpu_cube                                = NULL;
+    PMeshBuffers* gpu_sphere                              = NULL;
+    PMeshBuffers* gpu_plane                               = NULL;
+    PMeshBuffers* gpu_quad                                = NULL;
+    PDrawCall draw_calls[5]                               = {0};
+    PInstanceData instances[4]                            = {0};
+    PInstanceData sphere_instances[SPHERE_INSTANCE_COUNT] = {0};
+    PLayout* wave_layout                                  = NULL;
+    PPipeline* wave_pipeline                              = NULL;
+    PBuffer* heights_buffer                               = NULL;
+    PCommandBuffer* compute_cmd                           = NULL;
+    int error_code                                        = 1;
 
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -239,6 +257,49 @@ int main(void)
         goto FREE;
     }
 
+    PLayoutDesc wave_layout_desc = {
+        .push_size   = sizeof(WavePushConstants),
+        .push_stages = P_SHADER_STAGE_COMPUTE_BIT,
+        .name        = "wave_layout",
+    };
+    wave_layout = pigment_create_layout(pigment, &wave_layout_desc);
+    if(wave_layout == NULL)
+    {
+        fprintf(stderr, "Failed to create wave layout!\n");
+        goto FREE;
+    }
+
+    PComputePipelineDesc wave_desc = {
+        .layout           = wave_layout,
+        .compute_spv      = (const uint32_t*) wave_compute_spv,
+        .compute_spv_size = (uint32_t) sizeof(wave_compute_spv),
+        .name             = "wave_compute",
+    };
+    if(pigment_create_compute_pipelines(pigment, &wave_desc, 1, &wave_pipeline) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create wave compute pipeline!\n");
+        goto FREE;
+    }
+
+    PBufferDesc heights_desc = {
+        .size   = sizeof(float) * SPHERE_INSTANCE_COUNT,
+        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
+        .name   = "heights_buffer",
+    };
+    heights_buffer = pigment_create_buffer(pigment, &heights_desc);
+    if(heights_buffer == NULL)
+    {
+        fprintf(stderr, "Failed to create heights buffer!\n");
+        goto FREE;
+    }
+
+    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &compute_cmd) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create compute command buffer!\n");
+        goto FREE;
+    }
+
     canvas = pigment_std_create_canvas(pigment, color_format, rt_samples);
     if(canvas == NULL)
     {
@@ -343,14 +404,38 @@ int main(void)
         fps_camera_update(camera, &fps_state);
 
         float t = (float) ((double) (SDL_GetPerformanceCounter() - start_ticks) / ticks_freq);
+
+        pigment_begin_recording(pigment, compute_cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
+        pigment_bind_pipeline(pigment, compute_cmd, wave_pipeline);
+        WavePushConstants push = {
+            .heights_address = pigment_buffer_address(heights_buffer),
+            .time            = t,
+            .count           = SPHERE_INSTANCE_COUNT,
+        };
+        pigment_cmd_push_constants(pigment, compute_cmd, wave_pipeline, 0, sizeof(push), &push);
+        pigment_cmd_dispatch(pigment, compute_cmd, (SPHERE_INSTANCE_COUNT + 63) / 64, 1, 1);
+
+        PMemoryBarrier compute_to_host = {
+            .src = {P_PIPELINE_STAGE_COMPUTE_SHADER_BIT, P_MEMORY_ACCESS_SHADER_STORAGE_WRITE_BIT},
+            .dst = {          P_PIPELINE_STAGE_HOST_BIT,            P_MEMORY_ACCESS_HOST_READ_BIT},
+        };
+        pigment_cmd_memory_barriers(pigment, compute_cmd, &compute_to_host, 1);
+        pigment_end_recording(pigment, compute_cmd);
+
+        PSubmitHandle compute_handle = {0};
+        if(pigment_queue_submit(pigment, &(PSubmit) {.cmds = &compute_cmd, .cmd_count = 1}, 1, &compute_handle) == PIGMENT_SUCCESS)
+        {
+            pigment_submit_wait(pigment, compute_handle);
+        }
+
+        const float* heights = (const float*) pigment_buffer_mapped(heights_buffer);
         for(uint32_t i = 0; i < 10; i++)
         {
             for(uint32_t j = 0; j < 10; j++)
             {
                 uint32_t idx = i + 10 * j;
-                float bob    = sinf(t * 2.0f + (float) i * 0.3f) * 0.8f;
                 glm_mat4_identity(sphere_instances[idx].transform);
-                glm_translate(sphere_instances[idx].transform, (vec3) {((float) i - 4.5f) * 2.0f, bob, ((float) j - 4.5f) * 2.0f - 12.0f});
+                glm_translate(sphere_instances[idx].transform, (vec3) {((float) i - 4.5f) * 2.0f, heights[idx], ((float) j - 4.5f) * 2.0f - 12.0f});
             }
         }
 
@@ -395,8 +480,8 @@ int main(void)
 
         pigment_std_canvas_begin(pigment, canvas, cmd);
         float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2,  crosshair_color);
-        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2,  24, crosshair_color);
+        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
+        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
 
         pigment_end_render_pass(pigment, cmd, &hud_pass);
 
@@ -438,6 +523,13 @@ FREE:
     pigment_destroy_pipeline(pigment, pipeline);
     pigment_destroy_pipeline(pigment, skybox_pipeline);
     pigment_destroy_pipeline(pigment, crt_pipeline);
+    if(compute_cmd != NULL)
+    {
+        pigment_destroy_command_buffers(pigment, &compute_cmd, 1);
+    }
+    pigment_destroy_pipeline(pigment, wave_pipeline);
+    pigment_destroy_layout(pigment, wave_layout);
+    pigment_destroy_buffer(pigment, heights_buffer);
     pigment_std_destroy_canvas(pigment, canvas);
     pigment_renderer_destroy(pigment, renderer);
     pigment_destroy_command_pool(pigment, pool);

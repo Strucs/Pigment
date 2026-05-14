@@ -723,7 +723,7 @@ static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image
     PBufferDesc staging_desc = {
         .size   = total_size,
         .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
-        .memory = P_MEMORY_HOST_UPLOAD,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
     };
 
     *out_staging = pigment_create_buffer(pigment, &staging_desc);

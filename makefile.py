@@ -42,25 +42,29 @@ def copy_public_headers(include_dir: str):
         powermake.utils.makedirs(new_dir)
         shutil.copy2(file, new_dir)
 
-def build_shaders(shaders_dir: str):
-    shaders = powermake.get_files("./shaders/*")
-    powermake.utils.makedirs(shaders_dir)
+def build_shaders(src_pattern: str, shaders_dst_dir: str, touch_files: list[str]) -> bool:
+    all_files = list(powermake.get_files(src_pattern))
+    shader_files = [f for f in all_files if os.path.splitext(f)[1] in (".vert", ".frag", ".comp", ".geom", ".tesc", ".tese")]
+    if not shader_files:
+        return False
 
-    shader_includes = [f for f in shaders if os.path.splitext(f)[1] in (".glsl", ".h")]
+    powermake.utils.makedirs(shaders_dst_dir)
+    shader_includes = [f for f in all_files if os.path.splitext(f)[1] in (".glsl", ".h")]
+
     any_shader_rebuilt = False
-    for file in shaders:
+    for file in shader_files:
         base = os.path.basename(file)
         name, ext = os.path.splitext(base)
-        if ext not in (".vert", ".frag", ".comp", ".geom", ".tesc", ".tese"):
-            continue
-        dst = os.path.join(shaders_dir, f"{name}_{ext[1:]}.spv")
+        dst = os.path.join(shaders_dst_dir, f"{name}_{ext[1:]}.spv")
         if compile_shader_to_spv(file, dst, shader_includes):
             any_shader_rebuilt = True
 
     if any_shader_rebuilt:
-        for c_file in ["src/std/pipeline_loader.c", "src/std/canvas/canvas.c"]:
+        for c_file in touch_files:
             if os.path.exists(c_file):
                 os.utime(c_file, None)
+
+    return True
 
 def build_pigment(config: powermake.Config):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
@@ -75,7 +79,7 @@ def build_pigment(config: powermake.Config):
     project_files = set(all_files) - external_files - integration_files
 
     copy_public_headers(include_dir)
-    build_shaders(shaders_dir)
+    build_shaders("./shaders/*", shaders_dir, ["src/std/pipeline_loader.c", "src/std/canvas/canvas.c"])
 
     ext_config = config.copy()
     ext_config.add_flags("-Wno-misleading-indentation")
@@ -103,7 +107,13 @@ def build_sdl_integration(config: powermake.Config):
 def build_example(config: powermake.Config, example_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     lib_dir     = os.path.join(os.path.dirname(config.lib_build_directory), "lib")
+    example_shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "example_shaders", example_name)
     config.add_includedirs(include_dir)
+
+    example_c_files = list(powermake.get_files(f"./examples/{example_name}/**/*.c"))
+    has_shaders     = build_shaders(f"./examples/{example_name}/**/*", example_shaders_dir, example_c_files)
+    if has_shaders:
+        config.add_flags(f"--embed-dir={example_shaders_dir}")
 
     example_files = powermake.get_files(f"./examples/{example_name}/**/*.c")
 
@@ -115,6 +125,9 @@ def build_example(config: powermake.Config, example_name: str):
     ]
 
     print(f"{example_name} :", powermake.link_files(config, objects, archives, executable_name=example_name))
+
+    if has_shaders:
+        config.remove_flags(f"--embed-dir={example_shaders_dir}")
 
 def build_test(config: powermake.Config, test_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")

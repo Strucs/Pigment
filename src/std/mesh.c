@@ -34,7 +34,7 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, cons
     PBufferDesc vertex_buffer_desc = {
         .size   = (uint64_t) vertices_size,
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS | P_BUFFER_USAGE_TRANSFER_DST,
-        .memory = P_MEMORY_GPU_ONLY,
+        .memory = {.required = P_MEMORY_DEVICE_LOCAL_BIT},
     };
     mesh->vertex_buffer = pigment_create_buffer(pigment, &vertex_buffer_desc);
     if(mesh->vertex_buffer == NULL)
@@ -47,7 +47,7 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, cons
     PBufferDesc index_buffer_desc = {
         .size   = (uint64_t) index_count * sizeof(uint32_t),
         .usage  = P_BUFFER_USAGE_INDEX | P_BUFFER_USAGE_TRANSFER_DST,
-        .memory = P_MEMORY_GPU_ONLY,
+        .memory = {.required = P_MEMORY_DEVICE_LOCAL_BIT},
     };
     mesh->index_buffer = pigment_create_buffer(pigment, &index_buffer_desc);
     if(mesh->index_buffer == NULL)

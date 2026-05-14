@@ -30,11 +30,21 @@ typedef enum PBufferUsage {
     P_BUFFER_USAGE_INDIRECT       = 1 << 7,
 } PBufferUsage;
 
-typedef enum PMemoryType {
-    P_MEMORY_GPU_ONLY      = 0,
-    P_MEMORY_HOST_UPLOAD   = 1,    // CPU->GPU (HOST_VISIBLE, prefer HOST_COHERENT + DEVICE_LOCAL via ReBAR)
-    P_MEMORY_HOST_READBACK = 2,    // GPU->CPU (HOST_VISIBLE + HOST_CACHED, prefer HOST_COHERENT)
-} PMemoryType;
+typedef enum PMemoryFlags {
+    P_MEMORY_DEVICE_LOCAL_BIT  = 1 << 0,
+    P_MEMORY_HOST_VISIBLE_BIT  = 1 << 1,
+    P_MEMORY_HOST_COHERENT_BIT = 1 << 2,
+    P_MEMORY_HOST_CACHED_BIT   = 1 << 3,
+} PMemoryFlags;
+
+typedef struct PMemoryRequest {
+    PMemoryFlags required;
+    PMemoryFlags preferred;
+} PMemoryRequest;
+
+typedef enum PBufferFlags {
+    P_BUFFER_DEDICATED_BIT = 1 << 0,
+} PBufferFlags;
 
 typedef enum PIndexType {
     P_INDEX_TYPE_UINT16 = 0,
@@ -44,7 +54,8 @@ typedef enum PIndexType {
 typedef struct PBufferDesc {
     uint64_t size;
     PBufferUsage usage;
-    PMemoryType memory;
+    PMemoryRequest memory;
+    PBufferFlags flags;
     PSharingMode sharing_mode;    // 0 = EXCLUSIVE (default)
     const char* name;
 } PBufferDesc;

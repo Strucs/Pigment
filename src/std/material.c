@@ -50,7 +50,7 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t max_material
     PBufferDesc desc = {
         .size   = (uint64_t) max_materials * sizeof(PMaterialDesc),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_UPLOAD,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
     };
     materials->buffer = pigment_create_buffer(pigment, &desc);
     if(materials->buffer == NULL)

@@ -55,7 +55,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
     PBufferDesc desc = {
         .size   = (uint64_t) camera->frame_count * sizeof(PCameraData),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = P_MEMORY_HOST_UPLOAD,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
     };
     camera->buffer = pigment_create_buffer(pigment, &desc);
     if(camera->buffer == NULL)
