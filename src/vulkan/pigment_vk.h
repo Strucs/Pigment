@@ -24,17 +24,18 @@ typedef struct PVkAllocation PVkAllocation;
 typedef struct PVkAllocator PVkAllocator;
 
 typedef enum PVkAllocationFlagBits {
-    P_VK_ALLOCATION_HOST_RANDOM_BIT     = 1 << 0,
-    P_VK_ALLOCATION_DEDICATED_BIT       = 1 << 1,
-    P_VK_ALLOCATION_PERSISTENT_MAP_BIT  = 1 << 2,
+    P_VK_ALLOCATION_HOST_RANDOM_BIT    = 1 << 0,
+    P_VK_ALLOCATION_DEDICATED_BIT      = 1 << 1,
+    P_VK_ALLOCATION_PERSISTENT_MAP_BIT = 1 << 2,
 } PVkAllocationFlagBits;
+
 typedef VkFlags PVkAllocationFlags;
 
 typedef struct PVkAllocationCreateInfo {
-    PVkAllocationFlags    flags;
+    PVkAllocationFlags flags;
     VkMemoryPropertyFlags required_flags;
     VkMemoryPropertyFlags preferred_flags;
-    const char*           debug_name;
+    const char* debug_name;
 } PVkAllocationCreateInfo;
 
 /**
@@ -125,7 +126,32 @@ void pigment_vk_destroy_allocator(PVkAllocator* allocator);
  */
 void pigment_vk_build_allocation_callbacks(const PAllocator* allocator, VkAllocationCallbacks* out);
 
+VkInstance pigment_vk_instance(Pigment* pigment);
+VkDevice pigment_vk_device(Pigment* pigment);
+VkPhysicalDevice pigment_vk_physical_device(Pigment* pigment);
+VkQueue pigment_vk_queue(PDeviceQueue* queue);
+
 VkBuffer pigment_vk_buffer(PBuffer* buffer);
+VkDeviceAddress pigment_vk_buffer_address(PBuffer* buffer);
+
+VkImage pigment_vk_image(PImage* image);
+VkImageView pigment_vk_image_view(PImageView* view);
+VkSampler pigment_vk_sampler(PSampler* sampler);
+
+VkPipeline pigment_vk_pipeline(PPipeline* pipeline);
+VkPipelineLayout pigment_vk_pipeline_layout(PLayout* layout);
+VkPipelineCache pigment_vk_pipeline_cache(PPipelineCache* cache);
+
+VkSurfaceKHR pigment_vk_surface(PWindowRenderer* renderer);
+VkSwapchainKHR pigment_vk_swapchain(PWindowRenderer* renderer);
+VkQueue pigment_vk_present_queue(PWindowRenderer* renderer);
+
+VkDescriptorSet pigment_vk_descriptor_set(PDescriptorSet* set);
+VkDescriptorSetLayout pigment_vk_descriptor_set_layout(PDescriptorSetLayout* layout);
+VkDescriptorPool pigment_vk_descriptor_pool(PDescriptorPool* pool);
+
+VkCommandBuffer pigment_vk_command_buffer(PCommandBuffer* cmd);
+VkCommandPool pigment_vk_command_pool(PCommandPool* pool);
 
 /**
  * @brief Same as pigment_defer_destroy, but gated on a custom VkFence.

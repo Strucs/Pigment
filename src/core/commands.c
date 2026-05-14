@@ -20,7 +20,6 @@
 
 static void destroy_command_pool_immediate(Pigment* pigment, void* resource);
 static void destroy_command_buffers_immediate(Pigment* pigment, void* resource);
-static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc);
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
@@ -45,7 +44,44 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
         return NULL;
     }
 
-    return create_command_pool_internal(pigment, desc);
+    PDevice* device             = pigment->device;
+    PCommandPool* command_pool  = NULL;
+    VkCommandPool pool          = NULL;
+    uint32_t queue_family_index = UINT32_MAX;
+
+    queue_family_index = resolve_queue_family_index(pigment, desc->queue_flags);
+    if(queue_family_index == UINT32_MAX)
+    {
+        goto ERROR;
+    }
+
+    pool = create_vk_command_pool(pigment, queue_family_index, pigment_flags_to_vk(desc->flags));
+    if(pool == NULL)
+    {
+        goto ERROR;
+    }
+
+    command_pool = P_NEW_FOR_OBJECT(pigment, command_pool);
+    if(command_pool == NULL)
+    {
+        goto ERROR;
+    }
+
+    command_pool->pool               = pool;
+    command_pool->queue_flags        = desc->queue_flags;
+    command_pool->queue_family_index = queue_family_index;
+    command_pool->flags              = desc->flags;
+
+    set_object_name(device->logical_device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) pool, desc->name);
+
+    return command_pool;
+
+ERROR:
+    if(pool != NULL)
+    {
+        vkDestroyCommandPool(device->logical_device, pool, &pigment->vk_alloc);
+    }
+    return NULL;
 }
 
 void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
@@ -370,6 +406,21 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] target queue unavailable.", i);
             return PIGMENT_ERROR;
         }
+
+        for(uint32_t j = 0; j < submits[i].cmd_count; j++)
+        {
+            PCommandBuffer* cmd = submits[i].cmds[j];
+            if(cmd == NULL || cmd->source_pool == NULL)
+            {
+                continue;
+            }
+            if(cmd->source_pool->queue_family_index != queue->family_index)
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] was allocated from a pool tied to queue family %u but is being submitted to a queue of family %u. Submit aborted.", i, j, cmd->source_pool->queue_family_index, queue->family_index);
+                return PIGMENT_ERROR;
+            }
+        }
+
         total_cmd_count += submits[i].cmd_count;
         total_wait_count += submits[i].wait_count;
     }
@@ -619,48 +670,6 @@ void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char*
     vkCmdInsertDebugUtilsLabelEXT(cmd->buffer, &label);
 }
 
-static PCommandPool* create_command_pool_internal(Pigment* pigment, const PCommandPoolDesc* desc)
-{
-    PDevice* device             = pigment->device;
-    PCommandPool* command_pool  = NULL;
-    VkCommandPool pool          = NULL;
-    uint32_t queue_family_index = UINT32_MAX;
-
-    queue_family_index = resolve_queue_family_index(pigment, desc->queue_flags);
-    if(queue_family_index == UINT32_MAX)
-    {
-        goto ERROR;
-    }
-
-    pool = create_vk_command_pool(pigment, queue_family_index, pigment_flags_to_vk(desc->flags));
-    if(pool == NULL)
-    {
-        goto ERROR;
-    }
-
-    command_pool = P_NEW_FOR_OBJECT(pigment, command_pool);
-    if(command_pool == NULL)
-    {
-        goto ERROR;
-    }
-
-    command_pool->pool               = pool;
-    command_pool->queue_flags        = desc->queue_flags;
-    command_pool->queue_family_index = queue_family_index;
-    command_pool->flags              = desc->flags;
-
-    set_object_name(device->logical_device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) pool, desc->name);
-
-    return command_pool;
-
-ERROR:
-    if(pool != NULL)
-    {
-        vkDestroyCommandPool(device->logical_device, pool, &pigment->vk_alloc);
-    }
-    return NULL;
-}
-
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags)
 {
     VkCommandPool command_pool = NULL;
@@ -832,4 +841,14 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
 
     P_FREE(pigment, tracker->last_used);
     tracker->last_used = NULL;
+}
+
+VkCommandBuffer pigment_vk_command_buffer(PCommandBuffer* cmd)
+{
+    return (cmd != NULL) ? cmd->buffer : VK_NULL_HANDLE;
+}
+
+VkCommandPool pigment_vk_command_pool(PCommandPool* pool)
+{
+    return (pool != NULL) ? pool->pool : VK_NULL_HANDLE;
 }

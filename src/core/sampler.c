@@ -101,3 +101,8 @@ static void destroy_sampler_immediate(Pigment* pigment, void* resource)
     pigment_resource_tracker_destroy(pigment, &sampler->tracker);
     P_FREE(pigment, sampler);
 }
+
+VkSampler pigment_vk_sampler(PSampler* sampler)
+{
+    return (sampler != NULL) ? sampler->sampler : VK_NULL_HANDLE;
+}

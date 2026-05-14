@@ -695,3 +695,18 @@ static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptor
                                                              : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 }
+
+VkDescriptorSet pigment_vk_descriptor_set(PDescriptorSet* set)
+{
+    return (set != NULL) ? set->set : VK_NULL_HANDLE;
+}
+
+VkDescriptorSetLayout pigment_vk_descriptor_set_layout(PDescriptorSetLayout* layout)
+{
+    return (layout != NULL) ? layout->layout : VK_NULL_HANDLE;
+}
+
+VkDescriptorPool pigment_vk_descriptor_pool(PDescriptorPool* pool)
+{
+    return (pool != NULL) ? pool->pool : VK_NULL_HANDLE;
+}

@@ -952,3 +952,18 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     pigment_resource_tracker_destroy(pigment, &renderer->tracker);
     P_FREE(pigment, renderer);
 }
+
+VkSurfaceKHR pigment_vk_surface(PWindowRenderer* renderer)
+{
+    return (renderer != NULL && renderer->surface != NULL) ? renderer->surface->surface : VK_NULL_HANDLE;
+}
+
+VkSwapchainKHR pigment_vk_swapchain(PWindowRenderer* renderer)
+{
+    return (renderer != NULL && renderer->swapchain != NULL) ? renderer->swapchain->swapchain : VK_NULL_HANDLE;
+}
+
+VkQueue pigment_vk_present_queue(PWindowRenderer* renderer)
+{
+    return (renderer != NULL && renderer->swapchain != NULL) ? renderer->swapchain->present_queue : VK_NULL_HANDLE;
+}

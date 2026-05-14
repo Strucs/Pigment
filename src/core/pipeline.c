@@ -887,6 +887,21 @@ void pigment_destroy_layout(Pigment* pigment, PLayout* layout)
     pigment_defer_destroy(pigment, destroy_layout_immediate, layout);
 }
 
+VkPipeline pigment_vk_pipeline(PPipeline* pipeline)
+{
+    return (pipeline != NULL) ? pipeline->pipeline : VK_NULL_HANDLE;
+}
+
+VkPipelineLayout pigment_vk_pipeline_layout(PLayout* layout)
+{
+    return (layout != NULL) ? layout->layout : VK_NULL_HANDLE;
+}
+
+VkPipelineCache pigment_vk_pipeline_cache(PPipelineCache* cache)
+{
+    return (cache != NULL) ? cache->cache : VK_NULL_HANDLE;
+}
+
 static void destroy_layout_immediate(Pigment* pigment, void* resource)
 {
     PLayout* layout = (PLayout*) resource;

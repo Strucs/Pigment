@@ -179,6 +179,11 @@ VkBuffer pigment_vk_buffer(PBuffer* buffer)
     return (buffer != NULL) ? buffer->buffer : VK_NULL_HANDLE;
 }
 
+VkDeviceAddress pigment_vk_buffer_address(PBuffer* buffer)
+{
+    return (buffer != NULL) ? buffer->address : 0;
+}
+
 void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count)
 {
     if(pigment == NULL || cmd == NULL || src == NULL || dst == NULL || regions == NULL || region_count == 0)

@@ -60,4 +60,13 @@ uint32_t pigment_get_queue_count(Pigment* pigment);
  */
 PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index);
 
+/**
+ * @brief Index of the Vulkan queue family this queue belongs to.
+ *
+ * @param queue Queue to query.
+ *
+ * @return The queue family index, or UINT32_MAX if queue is NULL.
+ */
+uint32_t pigment_queue_family(PDeviceQueue* queue);
+
 #endif

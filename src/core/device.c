@@ -926,3 +926,28 @@ void device_wait_idle(Pigment* pigment)
     vkDeviceWaitIdle(pigment->device->logical_device);
     drain_deletion_queue(pigment);
 }
+
+VkInstance pigment_vk_instance(Pigment* pigment)
+{
+    return (pigment != NULL && pigment->instance != NULL) ? pigment->instance->vulkan_instance : VK_NULL_HANDLE;
+}
+
+VkDevice pigment_vk_device(Pigment* pigment)
+{
+    return (pigment != NULL && pigment->device != NULL) ? pigment->device->logical_device : VK_NULL_HANDLE;
+}
+
+VkPhysicalDevice pigment_vk_physical_device(Pigment* pigment)
+{
+    return (pigment != NULL && pigment->device != NULL) ? pigment->device->physical_device : VK_NULL_HANDLE;
+}
+
+VkQueue pigment_vk_queue(PDeviceQueue* queue)
+{
+    return (queue != NULL) ? queue->queue : VK_NULL_HANDLE;
+}
+
+uint32_t pigment_queue_family(PDeviceQueue* queue)
+{
+    return (queue != NULL) ? queue->family_index : UINT32_MAX;
+}

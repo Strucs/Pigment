@@ -35,6 +35,16 @@ static VkImageAspectFlags aspect_to_vk(PImageAspect aspect, PImage* image);
 static VkImageViewType view_type_to_vk(PImageViewType type);
 static const char* resolve_view_name(const PImageViewDesc* view_desc, const PImage* image, char* buffer, size_t buffer_size);
 
+VkImage pigment_vk_image(PImage* image)
+{
+    return (image != NULL) ? image->image : VK_NULL_HANDLE;
+}
+
+VkImageView pigment_vk_image_view(PImageView* view)
+{
+    return (view != NULL) ? view->view : VK_NULL_HANDLE;
+}
+
 uint32_t pigment_format_pixel_size(PFormat format)
 {
     switch(format)
