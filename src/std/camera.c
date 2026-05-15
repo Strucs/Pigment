@@ -24,8 +24,8 @@
 #include <string.h>
 
 typedef struct PCameraData {
-    mat4 view;
-    mat4 projection;
+    PMat4 view;
+    PMat4 projection;
 } PCameraData;
 
 struct PCamera {
@@ -49,7 +49,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
         return NULL;
     }
 
-    camera->data                = (PCameraData) {.view = GLM_MAT4_IDENTITY_INIT, .projection = GLM_MAT4_IDENTITY_INIT};
+    camera->data                = (PCameraData) {.view = P_MAT4_IDENTITY, .projection = P_MAT4_IDENTITY};
     camera->frame_count         = pigment->config.max_frames_in_flight;
     camera->last_uploaded_frame = UINT32_MAX;
     camera->dirty               = P_TRUE;
@@ -81,23 +81,23 @@ void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera)
     P_FREE(pigment, camera);
 }
 
-void pigment_std_camera_set_view(PCamera* camera, mat4 view)
+void pigment_std_camera_set_view(PCamera* camera, PMat4 view)
 {
     if(camera == NULL)
     {
         return;
     }
-    memcpy(camera->data.view, view, sizeof(mat4));
+    memcpy(camera->data.view, view, sizeof(PMat4));
     camera->dirty = P_TRUE;
 }
 
-void pigment_std_camera_set_projection(PCamera* camera, mat4 projection)
+void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection)
 {
     if(camera == NULL)
     {
         return;
     }
-    memcpy(camera->data.projection, projection, sizeof(mat4));
+    memcpy(camera->data.projection, projection, sizeof(PMat4));
     camera->dirty = P_TRUE;
 }
 

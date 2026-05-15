@@ -14,25 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_STD_H
-#define PIGMENT_STD_H
+#ifndef PIGMENT_STD_TYPES_H
+#define PIGMENT_STD_TYPES_H
 
-#include "pigment.h"
+typedef float PVec2[2];
+typedef float PVec3[3];
+typedef float PVec4[4];
+typedef float PMat3[3][3];
+typedef float PMat4[4][4];
 
-#include "std/bindless.h"
-#include "std/camera.h"
-#include "std/camera_math.h"
-#include "std/canvas/canvas.h"
-#include "std/draw.h"
-#include "std/file_io.h"
-#include "std/gltf_loader.h"
-#include "std/lights.h"
-#include "std/material.h"
-#include "std/mesh.h"
-#include "std/pipeline_loader.h"
-#include "std/primitives.h"
-#include "std/render_targets.h"
-#include "std/transfert.h"
-#include "std/vertex.h"
+#define P_MAT4_IDENTITY           \
+    {                             \
+        {1.0f, 0.0f, 0.0f, 0.0f}, \
+        {0.0f, 1.0f, 0.0f, 0.0f}, \
+        {0.0f, 0.0f, 1.0f, 0.0f}, \
+        {0.0f, 0.0f, 0.0f, 1.0f}  \
+    }
 
 #endif

@@ -20,18 +20,17 @@
 #include "bindless.h"
 #include "camera.h"
 #include "mesh.h"
+#include "types.h"
 
 #include "pigment/defines.h"
 #include "pigment/pipeline.h"
-
-#include <cglm/types.h>
 
 typedef struct PInstanceRing PInstanceRing;
 typedef struct PMaterials PMaterials;
 typedef struct PLights PLights;
 
 typedef struct PInstanceData {
-    mat4 transform;
+    PMat4 transform;
     uint32_t material_id;
 } __attribute__((aligned(16))) PInstanceData;
 

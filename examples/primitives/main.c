@@ -2,6 +2,9 @@
 #include <pigment/pigment_sdl.h>
 
 #include <stdalign.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "../common/fps_camera.h"
 
@@ -171,7 +174,7 @@ int main(void)
         goto FREE;
     }
 
-    vec3 camera_position = {0.0f, 1.5f, 6.0f};
+    PVec3 camera_position = {0.0f, 1.5f, 6.0f};
     camera               = pigment_std_create_camera(pigment);
     if(camera == NULL)
     {
@@ -333,33 +336,33 @@ int main(void)
         goto FREE;
     }
 
-    glm_mat4_identity(instances[0].transform);
-    glm_translate(instances[0].transform, (vec3) {-3.0f, 0.0f, 0.0f});
+    mat4_identity(instances[0].transform);
+    mat4_translate(instances[0].transform, (PVec3) {-3.0f, 0.0f, 0.0f});
     instances[0].material_id     = mat_default;
     draw_calls[0].mesh           = gpu_cube;
     draw_calls[0].instances      = &instances[0];
     draw_calls[0].instance_count = 1;
     draw_calls[0].index_count    = cube_idx;
 
-    glm_mat4_identity(instances[1].transform);
-    glm_translate(instances[1].transform, (vec3) {-1.0f, 0.0f, 0.0f});
+    mat4_identity(instances[1].transform);
+    mat4_translate(instances[1].transform, (PVec3) {-1.0f, 0.0f, 0.0f});
     instances[1].material_id     = mat_default;
     draw_calls[1].mesh           = gpu_sphere;
     draw_calls[1].instances      = &instances[1];
     draw_calls[1].instance_count = 1;
     draw_calls[1].index_count    = sphere_idx;
 
-    glm_mat4_identity(instances[2].transform);
-    glm_translate(instances[2].transform, (vec3) {0.0f, -2.0f, 0.0f});
-    glm_scale(instances[2].transform, (vec3) {10.0f, 1.0f, 10.0f});
+    mat4_identity(instances[2].transform);
+    mat4_translate(instances[2].transform, (PVec3) {0.0f, -2.0f, 0.0f});
+    mat4_scale(instances[2].transform, (PVec3) {10.0f, 1.0f, 10.0f});
     instances[2].material_id     = mat_default;
     draw_calls[2].mesh           = gpu_plane;
     draw_calls[2].instances      = &instances[2];
     draw_calls[2].instance_count = 1;
     draw_calls[2].index_count    = plane_idx;
 
-    glm_mat4_identity(instances[3].transform);
-    glm_translate(instances[3].transform, (vec3) {2.0f, 0.0f, 0.0f});
+    mat4_identity(instances[3].transform);
+    mat4_translate(instances[3].transform, (PVec3) {2.0f, 0.0f, 0.0f});
     instances[3].material_id     = mat_default;
     draw_calls[3].mesh           = gpu_quad;
     draw_calls[3].instances      = &instances[3];
@@ -434,8 +437,8 @@ int main(void)
             for(uint32_t j = 0; j < 10; j++)
             {
                 uint32_t idx = i + 10 * j;
-                glm_mat4_identity(sphere_instances[idx].transform);
-                glm_translate(sphere_instances[idx].transform, (vec3) {((float) i - 4.5f) * 2.0f, heights[idx], ((float) j - 4.5f) * 2.0f - 12.0f});
+                mat4_identity(sphere_instances[idx].transform);
+                mat4_translate(sphere_instances[idx].transform, (PVec3) {((float) i - 4.5f) * 2.0f, heights[idx], ((float) j - 4.5f) * 2.0f - 12.0f});
             }
         }
 

@@ -17,17 +17,17 @@
 #ifndef PIGMENT_STD_CAMERA_H
 #define PIGMENT_STD_CAMERA_H
 
-#include "pigment/defines.h"
+#include "types.h"
 
-#include <cglm/types.h>
+#include "pigment/defines.h"
 
 typedef struct PCamera PCamera;
 
 PCamera* pigment_std_create_camera(Pigment* pigment);
 void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
 
-void pigment_std_camera_set_view(PCamera* camera, mat4 view);
-void pigment_std_camera_set_projection(PCamera* camera, mat4 projection);
+void pigment_std_camera_set_view(PCamera* camera, PMat4 view);
+void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection);
 
 uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
 void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);

@@ -19,10 +19,9 @@
 
 #include "camera.h"
 #include "mesh.h"
+#include "types.h"
 
 #include "pigment/defines.h"
-
-#include <cglm/types.h>
 
 typedef struct PLights PLights;
 
@@ -34,13 +33,13 @@ typedef enum PLightType {
 } PLightType;
 
 typedef struct PLightDesc {
-    vec3 position;
+    PVec3 position;
     uint32_t type;
 
-    vec3 direction;
+    PVec3 direction;
     float range;
 
-    vec3 color;
+    PVec3 color;
     float intensity;
 
     float inner_cone_cos;
@@ -50,7 +49,7 @@ typedef struct PLightDesc {
 PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights);
 void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);
 
-void pigment_std_set_ambient(Pigment* pigment, PLights* lights, vec3 color);
+void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color);
 
 uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc);
 void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc);

@@ -167,7 +167,7 @@ static PResult append_primitive_vertices(Pigment* pigment, MeshAsset* asset, con
         }
         if(attrs->uv)
         {
-            float uv[2];
+            float uv[2] = {0};
             cgltf_accessor_read_float(attrs->uv, i, uv, 2);
             v.uv_x = uv[0];
             v.uv_y = uv[1];
@@ -380,7 +380,7 @@ static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data
         }
 
         this_node_idx = asset->node_count;
-        memcpy(asset->node_transforms[asset->node_count], world, sizeof(mat4));
+        memcpy(asset->node_transforms[asset->node_count], world, sizeof(PMat4));
         asset->node_count++;
 
         gltf_mesh = node->mesh;

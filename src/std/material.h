@@ -17,15 +17,15 @@
 #ifndef PIGMENT_STD_MATERIAL_H
 #define PIGMENT_STD_MATERIAL_H
 
-#include "pigment/defines.h"
+#include "types.h"
 
-#include <cglm/types.h>
+#include "pigment/defines.h"
 
 typedef struct PMaterials PMaterials;
 
 typedef struct PMaterialDesc {
-    vec4 base_color_factor;
-    vec4 emissive_factor;
+    PVec4 base_color_factor;
+    PVec4 emissive_factor;
 
     float metallic_factor;
     float roughness_factor;

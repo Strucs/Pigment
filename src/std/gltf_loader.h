@@ -20,11 +20,10 @@
 #include "bindless.h"
 #include "file_io.h"
 #include "material.h"
+#include "types.h"
 #include "vertex.h"
 
 #include "pigment/defines.h"
-
-#include <cglm/types.h>
 
 typedef struct PRawSurface {
     uint32_t start_index;
@@ -54,7 +53,7 @@ typedef struct MeshAsset {
 
     PMaterialDesc* surface_descs;
 
-    mat4* node_transforms;
+    PMat4* node_transforms;
     uint32_t node_count;
     uint32_t node_capacity;
 

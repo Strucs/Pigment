@@ -17,12 +17,12 @@
 #ifndef PIGMENT_STD_CAMERA_MATH_H
 #define PIGMENT_STD_CAMERA_MATH_H
 
+#include "types.h"
+
 #include "pigment/defines.h"
 
-#include <cglm/types.h>
-
-void pigment_perspective(float fov_rad, float aspect, float near, mat4 out);
-void pigment_perspective_finite(float fov_rad, float aspect, float near, float far, mat4 out);
-void pigment_ortho(float left, float right, float bottom, float top, float near, float far, mat4 out);
+void pigment_perspective(float fov_rad, float aspect, float near, PMat4 out);
+void pigment_perspective_finite(float fov_rad, float aspect, float near, float far, PMat4 out);
+void pigment_ortho(float left, float right, float bottom, float top, float near, float far, PMat4 out);
 
 #endif

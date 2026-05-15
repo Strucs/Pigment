@@ -496,7 +496,6 @@ static PResult resolve_queue_requests(Pigment* pigment, const VkQueueFamilyPrope
 static PResult create_logical_device(Pigment* pigment, PDevice* device)
 {
     PResult result                          = PIGMENT_ERROR_OUT_OF_MEMORY;
-    PInstance* instance                     = pigment->instance;
     const PVkInitInfo* vk_init              = (const PVkInitInfo*) pigment->config.extra;
     VkDeviceQueueCreateInfo* queue_infos    = NULL;
     uint32_t* requested_per_family          = NULL;
@@ -651,16 +650,6 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     if(vk_init != NULL && vk_init->device_pnext_chain != NULL)
     {
         pigment_vk_append_pnext(&create_info, vk_init->device_pnext_chain);
-    }
-
-    if(pigment->config.validation_enabled)
-    {
-        create_info.enabledLayerCount   = instance->layers->size;
-        create_info.ppEnabledLayerNames = instance->layers->names;
-    }
-    else
-    {
-        create_info.enabledLayerCount = 0;
     }
 
     result = PIGMENT_ERROR_VULKAN;

@@ -19,9 +19,6 @@
 
 #include "pigment/defines.h"
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
-
 typedef struct PStdPushConstants {
     uint64_t vertex_buffer;
     uint64_t instance_buffer;

@@ -1,20 +1,19 @@
 #ifndef EXAMPLES_COMMON_FPS_CAMERA_H
 #define EXAMPLES_COMMON_FPS_CAMERA_H
 
+#include "example_math.h"
+
 #include <pigment/pigment.h>
 #include <pigment/std/camera.h>
 #include <pigment/std/camera_math.h>
 #include <SDL3/SDL.h>
 
-#define CGLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <cglm/cglm.h>
-
 #include <math.h>
 
 typedef struct FPSCameraState {
-    vec3 position;
-    vec3 front;
-    vec3 up;
+    PVec3 position;
+    PVec3 front;
+    PVec3 up;
     float speed;
     float yaw;
     float pitch;
@@ -30,18 +29,18 @@ typedef struct FPSCameraState {
 
 void fps_camera_apply_size(PCamera* camera, FPSCameraState* state, int w, int h)
 {
-    mat4 projection;
+    PMat4 projection;
     pigment_perspective(state->fov_rad, (float) w / (float) h, state->near, projection);
     pigment_std_camera_set_projection(camera, projection);
 }
 
-FPSCameraState fps_camera_state_init(PCamera* camera, SDL_Window* window, vec3 position)
+FPSCameraState fps_camera_state_init(PCamera* camera, SDL_Window* window, PVec3 position)
 {
     FPSCameraState state = {
         .speed             = 5.0f,
         .yaw               = -90.0f,
         .pitch             = 0.0f,
-        .fov_rad           = glm_rad(45.0f),
+        .fov_rad           = deg_to_rad(45.0f),
         .near              = 0.1f,
         .last_frame_time   = 0.0f,
         .mouse_offset_x    = 0.0f,
@@ -49,12 +48,12 @@ FPSCameraState fps_camera_state_init(PCamera* camera, SDL_Window* window, vec3 p
         .mouse_sensitivity = 0.05f,
     };
 
-    glm_vec3_copy(position, state.position);
+    vec3_copy(position, state.position);
 
-    vec3 default_front = {0.0f, 0.0f, -1.0f};
-    vec3 default_up    = {0.0f, 1.0f, 0.0f};
-    glm_vec3_copy(default_front, state.front);
-    glm_vec3_copy(default_up, state.up);
+    PVec3 default_front = {0.0f, 0.0f, -1.0f};
+    PVec3 default_up    = {0.0f, 1.0f, 0.0f};
+    vec3_copy(default_front, state.front);
+    vec3_copy(default_up, state.up);
 
     int w = 0;
     int h = 0;
@@ -92,33 +91,33 @@ void fps_camera_update(PCamera* camera, FPSCameraState* state)
 
     if(keys[SDL_SCANCODE_W])
     {
-        glm_vec3_muladds(state->front, speed, state->position);
+        vec3_muladds(state->front, speed, state->position);
     }
     if(keys[SDL_SCANCODE_S])
     {
-        glm_vec3_muladds(state->front, -speed, state->position);
+        vec3_muladds(state->front, -speed, state->position);
     }
     if(keys[SDL_SCANCODE_A])
     {
-        vec3 right;
-        glm_vec3_cross(state->front, state->up, right);
-        glm_vec3_normalize(right);
-        glm_vec3_muladds(right, -speed, state->position);
+        PVec3 right;
+        vec3_cross(state->front, state->up, right);
+        vec3_normalize(right);
+        vec3_muladds(right, -speed, state->position);
     }
     if(keys[SDL_SCANCODE_D])
     {
-        vec3 right;
-        glm_vec3_cross(state->front, state->up, right);
-        glm_vec3_normalize(right);
-        glm_vec3_muladds(right, speed, state->position);
+        PVec3 right;
+        vec3_cross(state->front, state->up, right);
+        vec3_normalize(right);
+        vec3_muladds(right, speed, state->position);
     }
     if(keys[SDL_SCANCODE_SPACE])
     {
-        glm_vec3_muladds(state->up, speed, state->position);
+        vec3_muladds(state->up, speed, state->position);
     }
     if(keys[SDL_SCANCODE_LSHIFT])
     {
-        glm_vec3_muladds(state->up, -speed, state->position);
+        vec3_muladds(state->up, -speed, state->position);
     }
 
     float xoffset         = state->mouse_offset_x * state->mouse_sensitivity;
@@ -140,20 +139,20 @@ void fps_camera_update(PCamera* camera, FPSCameraState* state)
             state->pitch = -89.0f;
         }
 
-        vec3 front = {
-            (float) (cos(glm_rad(state->yaw)) * cos(glm_rad(state->pitch))),
-            (float) (sin(glm_rad(state->pitch))),
-            (float) (sin(glm_rad(state->yaw)) * cos(glm_rad(state->pitch))),
+        PVec3 front = {
+            cosf(deg_to_rad(state->yaw)) * cosf(deg_to_rad(state->pitch)),
+            sinf(deg_to_rad(state->pitch)),
+            sinf(deg_to_rad(state->yaw)) * cosf(deg_to_rad(state->pitch)),
         };
-        glm_vec3_normalize(front);
-        memcpy(state->front, front, sizeof(front));
+        vec3_normalize(front);
+        vec3_copy(front, state->front);
     }
 
-    vec3 target;
-    glm_vec3_add(state->position, state->front, target);
+    PVec3 target;
+    vec3_add(state->position, state->front, target);
 
-    mat4 view;
-    glm_lookat(state->position, target, state->up, view);
+    PMat4 view;
+    mat4_look_at(state->position, target, state->up, view);
 
     pigment_std_camera_set_view(camera, view);
 }

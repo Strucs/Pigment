@@ -26,7 +26,7 @@
 #include <stddef.h>
 
 typedef struct PLightsHeader {
-    vec3 ambient_color;
+    PVec3 ambient_color;
     uint32_t count;
 } __attribute__((aligned(16))) PLightsHeader;
 
@@ -101,7 +101,7 @@ ERROR:
     return NULL;
 }
 
-void pigment_std_set_ambient(Pigment* pigment, PLights* lights, vec3 color)
+void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color)
 {
     if(pigment == NULL || lights == NULL)
     {

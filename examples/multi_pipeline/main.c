@@ -1,6 +1,9 @@
 #include <pigment/pigment_std.h>
 #include <pigment/pigment_sdl.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "../common/fps_camera.h"
 
 #define MODELS_DIR "examples/suzanne_and_cube/models"
@@ -130,7 +133,7 @@ int main(void)
     };
     pigment_std_light_create(pigment, lights, &sun);
 
-    vec3 camera_position = {1.5f, 0.0f, 5.0f};
+    PVec3 camera_position = {1.5f, 0.0f, 5.0f};
     camera               = pigment_std_create_camera(pigment);
     if(camera == NULL)
     {
@@ -195,7 +198,7 @@ int main(void)
     for(uint32_t i = 0; i < draw_count; i++)
     {
         PRawSurface* s = &asset->surfaces[i];
-        glm_mat4_copy(asset->node_transforms[s->node_index], instance_storage[i].transform);
+        mat4_copy(asset->node_transforms[s->node_index], instance_storage[i].transform);
         instance_storage[i].material_id = s->material_id;
         draw_calls[i].mesh              = gpu_mesh;
         draw_calls[i].instances         = &instance_storage[i];
@@ -242,9 +245,9 @@ int main(void)
     for(uint32_t i = 0; i < draw_count2; i++)
     {
         PRawSurface* s = &asset2->surfaces[i];
-        glm_mat4_copy(asset2->node_transforms[s->node_index], instance_storage2[i].transform);
-        vec3 translation = {2.f, 0.0f, 0.0f};
-        glm_translate(instance_storage2[i].transform, translation);
+        mat4_copy(asset2->node_transforms[s->node_index], instance_storage2[i].transform);
+        PVec3 translation = {2.f, 0.0f, 0.0f};
+        mat4_translate(instance_storage2[i].transform, translation);
         instance_storage2[i].material_id = s->material_id;
         draw_calls2[i].mesh              = gpu_mesh2;
         draw_calls2[i].instances         = &instance_storage2[i];

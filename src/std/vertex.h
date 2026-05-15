@@ -17,16 +17,16 @@
 #ifndef PIGMENT_STD_VERTEX_H
 #define PIGMENT_STD_VERTEX_H
 
+#include "types.h"
+
 #include "pigment/defines.h"
 
-#include <cglm/types.h>
-
 typedef struct PVertex {
-    vec3 pos;
+    PVec3 pos;
     float uv_x;
-    vec3 normal;
+    PVec3 normal;
     float uv_y;
-    vec4 color;
+    PVec4 color;
 } __attribute__((aligned(16))) PVertex;
 
 #endif

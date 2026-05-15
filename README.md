@@ -6,7 +6,6 @@ Pigment is a graphic library written in C using Vulkan API.
 - C compiler
 - [Vulkan SDK](https://vulkan.lunarg.com/)
 - [SDL3](https://www.libsdl.org/)
-- [CGLM](https://github.com/recp/cglm)
 - [Shaderc](https://github.com/google/shaderc)
 - [Powermake](https://github.com/mactul/powermake) for compilation
 
