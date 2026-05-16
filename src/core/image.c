@@ -30,6 +30,7 @@ static void destroy_image_resources(Pigment* pigment, void* resource);
 static void translate_image_type(PImageType type, VkImageType* out_image_type, VkImageCreateFlags* out_flags);
 static VkImageUsageFlags translate_usage(PImageUsage usage);
 static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage);
+static PResult validate_host_mapped(Pigment* pigment, PImage* image, PImageType type);
 static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
 static void free_resources(Pigment* pigment, PImage* image);
 static PImageViewType derive_view_type(PImage* image, uint32_t layer_count);
@@ -106,6 +107,8 @@ VkImageLayout image_layout_to_vk(PImageLayout layout)
             return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         case P_IMAGE_LAYOUT_PRESENT:
             return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        case P_IMAGE_LAYOUT_PREINITIALIZED:
+            return VK_IMAGE_LAYOUT_PREINITIALIZED;
     }
     return VK_IMAGE_LAYOUT_UNDEFINED;
 }
@@ -352,12 +355,20 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
     image->depth           = (desc->depth == 0) ? 1 : desc->depth;
     image->array_layers    = (desc->array_layers == 0) ? 1 : desc->array_layers;
     image->name            = desc->name;
+    image->host_mapped     = (desc->flags & P_IMAGE_FLAG_HOST_MAPPED) != 0;
     translate_image_type(desc->type, &image->vk_image_type, &image->vk_create_flags);
 
     if(image->vk_samples != VK_SAMPLE_COUNT_1_BIT && image->mip_levels > 1)
     {
         PLOG_WARN(pigment, "MSAA image cannot have mipmaps (samples=%u, mip_levels=%u). Clamping mip_levels to 1.", (unsigned) image->vk_samples, image->mip_levels);
         image->mip_levels = 1;
+    }
+
+    if(image->host_mapped && validate_host_mapped(pigment, image, desc->type) != PIGMENT_SUCCESS)
+    {
+        pigment_resource_tracker_destroy(pigment, &image->tracker);
+        P_FREE(pigment, image);
+        return NULL;
     }
 
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
@@ -463,6 +474,189 @@ uint32_t pigment_image_height(PImage* image)
     return (image != NULL) ? image->height : 0;
 }
 
+void* pigment_image_mapped(PImage* image)
+{
+    return (image != NULL) ? image->mapped : NULL;
+}
+
+uint64_t pigment_image_row_pitch(PImage* image)
+{
+    return (image != NULL) ? image->row_pitch : 0;
+}
+
+void pigment_image_flush(Pigment* pigment, PImage* image)
+{
+    if(pigment == NULL || image == NULL || image->mapped == NULL)
+    {
+        return;
+    }
+
+    if(image->memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    {
+        return;
+    }
+
+    PVkAllocator* alloc = pigment->gpu_allocator;
+    alloc->flush(alloc->user_data, image->image_allocation, 0, VK_WHOLE_SIZE);
+}
+
+void pigment_image_invalidate(Pigment* pigment, PImage* image)
+{
+    if(pigment == NULL || image == NULL || image->mapped == NULL)
+    {
+        return;
+    }
+
+    if(image->memory_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+    {
+        return;
+    }
+
+    PVkAllocator* alloc = pigment->gpu_allocator;
+    alloc->invalidate(alloc->user_data, image->image_allocation, 0, VK_WHOLE_SIZE);
+}
+
+void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count)
+{
+    if(pigment == NULL || image == NULL || regions == NULL || region_count == 0)
+    {
+        return;
+    }
+
+    P_STACK_OR_HEAP(VkMemoryToImageCopy, vk_regions, region_count);
+    if(vk_regions == NULL)
+    {
+        return;
+    }
+
+    for(uint32_t i = 0; i < region_count; i++)
+    {
+        const PHostImageCopy* r = &regions[i];
+        vk_regions[i]           = (VkMemoryToImageCopy) {
+            .sType                           = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY,
+            .pHostPointer                    = r->host_pointer,
+            .memoryRowLength                 = r->memory_row_length,
+            .memoryImageHeight               = r->memory_image_height,
+            .imageSubresource.aspectMask     = image->aspect,
+            .imageSubresource.mipLevel       = r->mip_level,
+            .imageSubresource.baseArrayLayer = r->base_array_layer,
+            .imageSubresource.layerCount     = r->layer_count,
+            .imageOffset                     = {r->offset_x, r->offset_y, r->offset_z},
+            .imageExtent                     = {r->extent_w, r->extent_h, r->extent_d},
+        };
+    }
+
+    VkCopyMemoryToImageInfo info = {
+        .sType          = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO,
+        .dstImage       = image->image,
+        .dstImageLayout = image_layout_to_vk(layout),
+        .regionCount    = region_count,
+        .pRegions       = vk_regions,
+    };
+
+    VkResult result = vkCopyMemoryToImageEXT(pigment->device->logical_device, &info);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "vkCopyMemoryToImage failed (result: %d)", result);
+    }
+
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
+}
+
+void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count)
+{
+    if(pigment == NULL || image == NULL || regions == NULL || region_count == 0)
+    {
+        return;
+    }
+
+    P_STACK_OR_HEAP(VkImageToMemoryCopy, vk_regions, region_count);
+    if(vk_regions == NULL)
+    {
+        return;
+    }
+
+    for(uint32_t i = 0; i < region_count; i++)
+    {
+        const PHostImageCopy* r = &regions[i];
+        vk_regions[i]           = (VkImageToMemoryCopy) {
+            .sType                           = VK_STRUCTURE_TYPE_IMAGE_TO_MEMORY_COPY,
+            .pHostPointer                    = r->host_pointer,
+            .memoryRowLength                 = r->memory_row_length,
+            .memoryImageHeight               = r->memory_image_height,
+            .imageSubresource.aspectMask     = image->aspect,
+            .imageSubresource.mipLevel       = r->mip_level,
+            .imageSubresource.baseArrayLayer = r->base_array_layer,
+            .imageSubresource.layerCount     = r->layer_count,
+            .imageOffset                     = {r->offset_x, r->offset_y, r->offset_z},
+            .imageExtent                     = {r->extent_w, r->extent_h, r->extent_d},
+        };
+    }
+
+    VkCopyImageToMemoryInfo info = {
+        .sType          = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO,
+        .srcImage       = image->image,
+        .srcImageLayout = image_layout_to_vk(layout),
+        .regionCount    = region_count,
+        .pRegions       = vk_regions,
+    };
+
+    VkResult result = vkCopyImageToMemoryEXT(pigment->device->logical_device, &info);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "vkCopyImageToMemory failed (result: %d)", result);
+    }
+
+    P_STACK_OR_HEAP_FREE(pigment, vk_regions);
+}
+
+void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition* transitions, uint32_t count)
+{
+    if(pigment == NULL || transitions == NULL || count == 0)
+    {
+        return;
+    }
+
+    P_STACK_OR_HEAP(VkHostImageLayoutTransitionInfo, vk_transitions, count);
+    if(vk_transitions == NULL)
+    {
+        return;
+    }
+
+    uint32_t valid = 0;
+    for(uint32_t i = 0; i < count; i++)
+    {
+        const PHostImageTransition* transition = &transitions[i];
+        if(transition->image == NULL)
+        {
+            continue;
+        }
+
+        vk_transitions[valid++] = (VkHostImageLayoutTransitionInfo) {
+            .sType                           = VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO,
+            .image                           = transition->image->image,
+            .oldLayout                       = image_layout_to_vk(transition->old_layout),
+            .newLayout                       = image_layout_to_vk(transition->new_layout),
+            .subresourceRange.aspectMask     = transition->image->aspect,
+            .subresourceRange.baseMipLevel   = transition->base_mip,
+            .subresourceRange.levelCount     = (transition->mip_count == 0) ? (transition->image->mip_levels - transition->base_mip) : transition->mip_count,
+            .subresourceRange.baseArrayLayer = transition->base_layer,
+            .subresourceRange.layerCount     = (transition->layer_count == 0) ? (transition->image->array_layers - transition->base_layer) : transition->layer_count,
+        };
+    }
+
+    if(valid > 0)
+    {
+        VkResult result = vkTransitionImageLayoutEXT(pigment->device->logical_device, valid, vk_transitions);
+        if(result != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "vkTransitionImageLayout failed (result: %d)", result);
+        }
+    }
+
+    P_STACK_OR_HEAP_FREE(pigment, vk_transitions);
+}
+
 PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, const PVkAllocationCreateInfo* alloc_info)
 {
     VkImageCreateInfo image_create_info = {
@@ -475,7 +669,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
         .arrayLayers   = image->array_layers,
         .format        = image->vk_format,
         .tiling        = tiling,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .initialLayout = image->host_mapped ? VK_IMAGE_LAYOUT_PREINITIALIZED : VK_IMAGE_LAYOUT_UNDEFINED,
         .usage         = image->vk_usage,
         .samples       = image->vk_samples ? image->vk_samples : VK_SAMPLE_COUNT_1_BIT,
         .sharingMode   = image->vk_sharing_mode,
@@ -664,6 +858,10 @@ static VkImageUsageFlags translate_usage(PImageUsage usage)
     {
         out |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
+    if(usage & P_IMAGE_USAGE_HOST_TRANSFER)
+    {
+        out |= VK_IMAGE_USAGE_HOST_TRANSFER_BIT;
+    }
 
     return out;
 }
@@ -691,20 +889,70 @@ static VkImageAspectFlags compute_aspect(VkFormat format, PImageUsage usage)
     return VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
+static PResult validate_host_mapped(Pigment* pigment, PImage* image, PImageType type)
+{
+    if(type != P_IMAGE_TYPE_2D)
+    {
+        PLOG_ERROR(pigment, "Host-mapped images must be P_IMAGE_TYPE_2D.");
+        return PIGMENT_ERROR;
+    }
+
+    if(image->mip_levels > 1 || image->array_layers > 1 || image->depth > 1 || image->vk_samples != VK_SAMPLE_COUNT_1_BIT)
+    {
+        PLOG_ERROR(pigment, "Host-mapped images must have mip_levels=1, array_layers=1, depth=1, samples=1.");
+        return PIGMENT_ERROR;
+    }
+
+    VkImageFormatProperties fmt_props;
+    VkResult fr = vkGetPhysicalDeviceImageFormatProperties(pigment->device->physical_device, image->vk_format, image->vk_image_type, VK_IMAGE_TILING_LINEAR, image->vk_usage, image->vk_create_flags, &fmt_props);
+    if(fr != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Format/usage combination not supported for host-mapped images.");
+        return PIGMENT_ERROR;
+    }
+
+    return PIGMENT_SUCCESS;
+}
+
 static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t width, uint32_t height)
 {
-    PVkAllocationCreateInfo alloc_info = {
-        .required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        .debug_name     = image->name,
-    };
+    VkImageTiling tiling = image->host_mapped ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
 
-    if(create_vk_image(pigment, image, width, height, VK_IMAGE_TILING_OPTIMAL, &alloc_info) != PIGMENT_SUCCESS)
+    PVkAllocationCreateInfo alloc_info = {
+        .debug_name = image->name,
+    };
+    if(image->host_mapped)
+    {
+        alloc_info.required_flags  = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        alloc_info.preferred_flags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    }
+    else
+    {
+        alloc_info.required_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    }
+
+    if(create_vk_image(pigment, image, width, height, tiling, &alloc_info) != PIGMENT_SUCCESS)
     {
         return PIGMENT_ERROR_VULKAN;
     }
 
-    image->width  = width;
-    image->height = height;
+    image->width        = width;
+    image->height       = height;
+    image->memory_flags = pigment->gpu_allocator->get_memory_flags(pigment->gpu_allocator->user_data, image->image_allocation);
+
+    if(image->host_mapped)
+    {
+        VkImageSubresource subresource = {.aspectMask = image->aspect};
+        VkSubresourceLayout layout;
+        vkGetImageSubresourceLayout(pigment->device->logical_device, image->image, &subresource, &layout);
+        image->row_pitch = (uint64_t) layout.rowPitch;
+
+        void* base = NULL;
+        if(pigment->gpu_allocator->map(pigment->gpu_allocator->user_data, image->image_allocation, &base) == VK_SUCCESS && base != NULL)
+        {
+            image->mapped = (char*) base + layout.offset;
+        }
+    }
 
     // INHERIT format/aspect from image, AUTO view_type, 0 layers/mips -> all
     PImageViewDesc full_view_desc = {0};

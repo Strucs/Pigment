@@ -20,12 +20,13 @@
 #include "defines.h"
 
 typedef enum PImageUsage {
-    P_IMAGE_USAGE_SAMPLED      = 1 << 0,
-    P_IMAGE_USAGE_RENDER_COLOR = 1 << 1,
-    P_IMAGE_USAGE_RENDER_DEPTH = 1 << 2,
-    P_IMAGE_USAGE_STORAGE      = 1 << 3,
-    P_IMAGE_USAGE_TRANSFER_SRC = 1 << 4,
-    P_IMAGE_USAGE_TRANSFER_DST = 1 << 5,
+    P_IMAGE_USAGE_SAMPLED       = 1 << 0,
+    P_IMAGE_USAGE_RENDER_COLOR  = 1 << 1,
+    P_IMAGE_USAGE_RENDER_DEPTH  = 1 << 2,
+    P_IMAGE_USAGE_STORAGE       = 1 << 3,
+    P_IMAGE_USAGE_TRANSFER_SRC  = 1 << 4,
+    P_IMAGE_USAGE_TRANSFER_DST  = 1 << 5,
+    P_IMAGE_USAGE_HOST_TRANSFER = 1 << 6,    // pigment_image_write / _read, needs P_FEATURE_HOST_IMAGE_COPY
 } PImageUsage;
 
 typedef enum PImageType {
@@ -35,6 +36,10 @@ typedef enum PImageType {
     P_IMAGE_TYPE_CUBE_ARRAY = 3,    // array_layers must be 6 * N
     P_IMAGE_TYPE_3D         = 4,    // depth = D
 } PImageType;
+
+typedef enum PImageFlags {
+    P_IMAGE_FLAG_HOST_MAPPED = 1 << 0
+} PImageFlags;
 
 typedef struct PImageDesc {
     uint32_t width;
@@ -47,6 +52,7 @@ typedef struct PImageDesc {
     uint32_t mip_levels;          // 0 = single mip, otherwise full chain
     PImageType type;              // 0 = 2D
     PSharingMode sharing_mode;    // 0 = EXCLUSIVE (default)
+    PImageFlags flags;            // 0 = none. P_IMAGE_FLAG_HOST_MAPPED requires 2D, 1 mip, 1 layer, 1 sample
     const char* name;
 } PImageDesc;
 
@@ -82,6 +88,31 @@ typedef struct PImageCopy {
     uint32_t extent_h;
     uint32_t extent_d;
 } PImageCopy;
+
+typedef struct PHostImageCopy {
+    void* host_pointer;              // source pixels for _write, destination for _read
+    uint32_t memory_row_length;
+    uint32_t memory_image_height;
+    uint32_t mip_level;
+    uint32_t base_array_layer;
+    uint32_t layer_count;
+    int32_t offset_x;
+    int32_t offset_y;
+    int32_t offset_z;
+    uint32_t extent_w;
+    uint32_t extent_h;
+    uint32_t extent_d;
+} PHostImageCopy;
+
+typedef struct PHostImageTransition {
+    PImage* image;
+    PImageLayout old_layout;
+    PImageLayout new_layout;
+    uint32_t base_mip;
+    uint32_t mip_count;    // 0 = remaining
+    uint32_t base_layer;
+    uint32_t layer_count;    // 0 = remaining
+} PHostImageTransition;
 
 typedef struct PImageBlit {
     uint32_t src_mip_level;
@@ -120,5 +151,18 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
 
 uint32_t pigment_image_width(PImage* image);
 uint32_t pigment_image_height(PImage* image);
+
+void* pigment_image_mapped(PImage* image);
+uint64_t pigment_image_row_pitch(PImage* image);
+void pigment_image_flush(Pigment* pigment, PImage* image);
+void pigment_image_invalidate(Pigment* pigment, PImage* image);
+
+/**
+ * Require P_FEATURE_HOST_IMAGE_COPY, on an image created with P_IMAGE_USAGE_HOST_TRANSFER.
+ */
+
+void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
+void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
+void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition* transitions, uint32_t count);
 
 #endif

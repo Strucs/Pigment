@@ -108,7 +108,6 @@ struct Pigment {
     PVkAllocator* gpu_allocator;
     PBool owns_gpu_allocator;
 
-
     PSwapchainCallbackList* swapchain_callbacks;
 
     PDeletionQueue* deletions;
@@ -321,6 +320,11 @@ struct PImage {
     VkImageAspectFlags aspect;
 
     const char* name;
+
+    PBool host_mapped;
+    void* mapped;
+    uint64_t row_pitch;
+    VkMemoryPropertyFlags memory_flags;
 
     PImageViewCache view_cache;
     PResourceTracker tracker;

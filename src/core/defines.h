@@ -72,6 +72,7 @@ typedef enum PFeature {
     P_FEATURE_MULTI_DRAW_INDIRECT          = 2,
     P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE = 3,
     P_FEATURE_DRAW_INDIRECT_COUNT          = 4,
+    P_FEATURE_HOST_IMAGE_COPY              = 5,
     P_FEATURE_COUNT    // size of the device feature array
 } PFeature;
 
@@ -382,6 +383,7 @@ typedef enum PImageLayout {
     P_IMAGE_LAYOUT_TRANSFER_SRC             = 6,
     P_IMAGE_LAYOUT_TRANSFER_DST             = 7,
     P_IMAGE_LAYOUT_PRESENT                  = 8,
+    P_IMAGE_LAYOUT_PREINITIALIZED           = 9,
 } PImageLayout;
 
 typedef enum PImageAspect {

@@ -595,13 +595,26 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         .pNext = &vk12_features,
     };
 
+    void* features_head = &vk13_features;
+
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchain_maint1_features = {0};
     PBool enable_swapchain_maint1                                              = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
     if(enable_swapchain_maint1)
     {
         swapchain_maint1_features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
         swapchain_maint1_features.swapchainMaintenance1 = VK_TRUE;
-        swapchain_maint1_features.pNext                 = &vk13_features;
+        swapchain_maint1_features.pNext                 = features_head;
+        features_head                                   = &swapchain_maint1_features;
+    }
+
+    VkPhysicalDeviceHostImageCopyFeatures host_image_copy_features = {0};
+    device->features[P_FEATURE_HOST_IMAGE_COPY]                    = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME);
+    if(device->features[P_FEATURE_HOST_IMAGE_COPY])
+    {
+        host_image_copy_features.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES;
+        host_image_copy_features.hostImageCopy = VK_TRUE;
+        host_image_copy_features.pNext         = features_head;
+        features_head                          = &host_image_copy_features;
     }
 
     VkPhysicalDeviceFeatures2 features = {
@@ -612,7 +625,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
                      .multiDrawIndirect         = device->features[P_FEATURE_MULTI_DRAW_INDIRECT] ? VK_TRUE : VK_FALSE,
                      .drawIndirectFirstInstance = device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] ? VK_TRUE : VK_FALSE,
                      },
-        .pNext = enable_swapchain_maint1 ? (void*) &swapchain_maint1_features : (void*) &vk13_features,
+        .pNext = features_head,
     };
 
     const VkPhysicalDeviceFeatures req         = pigment_req_features();
@@ -757,12 +770,13 @@ PDevice* create_device(Pigment* pigment)
     PBool instance_has_surface_maint1 = name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME)
                                         && name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
-    const char* default_opt_extensions[1] = {0};
+    const char* default_opt_extensions[2] = {0};
     uint32_t default_opt_count            = 0;
     if(instance_has_surface_maint1)
     {
         default_opt_extensions[default_opt_count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
     }
+    default_opt_extensions[default_opt_count++] = VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME;
 
     device = P_NEW_FOR_OBJECT(pigment, device);
     if(device == NULL)
