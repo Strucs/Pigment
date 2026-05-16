@@ -53,8 +53,10 @@ uint32_t pigment_format_pixel_size(PFormat format)
     switch(format)
     {
         case P_FORMAT_R8_UNORM:
+        case P_FORMAT_R8_UINT:
             return 1;
         case P_FORMAT_R8G8_UNORM:
+        case P_FORMAT_R16_UINT:
             return 2;
         case P_FORMAT_R8G8B8A8_UNORM:
         case P_FORMAT_R8G8B8A8_SRGB:
@@ -258,6 +260,7 @@ void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage*
 
     int32_t mip_width  = (int32_t) image->width;
     int32_t mip_height = (int32_t) image->height;
+    int32_t mip_depth  = (int32_t) image->depth;
 
     for(uint32_t i = 1; i < image->mip_levels; i++)
     {
@@ -280,13 +283,13 @@ void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage*
             .src_layer_count      = layer_count,
             .src_max_x            = mip_width,
             .src_max_y            = mip_height,
-            .src_max_z            = 1,
+            .src_max_z            = mip_depth,
             .dst_mip_level        = i,
             .dst_base_array_layer = base_layer,
             .dst_layer_count      = layer_count,
             .dst_max_x            = mip_width > 1 ? mip_width / 2 : 1,
             .dst_max_y            = mip_height > 1 ? mip_height / 2 : 1,
-            .dst_max_z            = 1,
+            .dst_max_z            = mip_depth > 1 ? mip_depth / 2 : 1,
         };
         pigment_cmd_blit_image(pigment, cmd, image, P_IMAGE_LAYOUT_TRANSFER_SRC, image, P_IMAGE_LAYOUT_TRANSFER_DST, &blit, 1, P_FILTERING_MODE_LINEAR);
 
@@ -310,6 +313,10 @@ void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage*
         if(mip_height > 1)
         {
             mip_height /= 2;
+        }
+        if(mip_depth > 1)
+        {
+            mip_depth /= 2;
         }
     }
 

@@ -653,7 +653,7 @@ PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset
 
         if(valid > 0)
         {
-            uint32_t start_slot = pigment_std_upload_image_batch(pigment, bindless, pixels, widths, heights, formats, valid);
+            uint32_t start_slot = pigment_std_add_image_batch(pigment, bindless, pixels, widths, heights, formats, valid);
             for(uint32_t i = 0; i < valid; i++)
             {
                 tex_map[src_indices[i]] = start_slot + i;

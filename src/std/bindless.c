@@ -16,13 +16,14 @@
 
 #include "bindless.h"
 
+#include "transfert.h"
+
 #include "pigment/commands.h"
 #include "pigment/pigment.h"
 
 #include "internal.h"
 #include "std_internal.h"
 
-#include <math.h>
 #include <string.h>
 
 typedef struct PImageList {
@@ -73,9 +74,6 @@ struct PStdBindless {
 #define PIGMENT_BINDLESS_BINDING_IMAGES 3
 
 static PResult image_list_append(Pigment* pigment, PImageList* image_list, PImage* image);
-static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type);
-static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, uint32_t width, uint32_t height, uint32_t layer_count, uint64_t layer_size_bytes);
-static PResult batch_record_uploads(Pigment* pigment, PCommandBuffer* cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage** images, uint32_t count);
 static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
 static PResult add_default_image(Pigment* pigment, PStdBindless* bindless);
@@ -89,11 +87,6 @@ static void write_render_target_descriptor(Pigment* pigment, PStdBindless* bindl
 static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, uint32_t start_slot, uint32_t count);
 static PResult tracked_rt_list_append(Pigment* pigment, PTrackedRTList* list, PTrackedRT entry);
 static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless);
-
-static inline int imax(int a, int b)
-{
-    return a > b ? a : b;
-}
 
 PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
 {
@@ -299,7 +292,7 @@ PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* b
     return (bindless != NULL) ? &bindless->pipeline_layouts : NULL;
 }
 
-uint32_t pigment_std_upload_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
+uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
     if(pigment == NULL || bindless == NULL || pixels == NULL || width == 0 || height == 0)
     {
@@ -318,52 +311,35 @@ uint32_t pigment_std_upload_image(Pigment* pigment, PStdBindless* bindless, cons
     return slot;
 }
 
-uint32_t pigment_std_upload_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
+uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
 {
     if(pigment == NULL || bindless == NULL || pixels == NULL || count == 0)
     {
         return UINT32_MAX;
     }
 
-    PBuffer** stagings  = P_NEW_ARRAY_FOR_OBJECT(pigment, stagings, count);
-    PImage** new_images = P_NEW_ARRAY_FOR_OBJECT(pigment, new_images, count);
-    uint32_t start_slot = UINT32_MAX;
+    PImageUploadDesc* descs = P_NEW_ARRAY_FOR_OBJECT(pigment, descs, count);
+    PImage** new_images     = P_NEW_ARRAY_FOR_OBJECT(pigment, new_images, count);
+    uint32_t start_slot     = UINT32_MAX;
 
-    if(stagings == NULL || new_images == NULL)
+    if(descs == NULL || new_images == NULL)
     {
         goto FREE;
     }
 
-    PCommandBuffer* cmd = NULL;
-    pigment_create_command_buffers(pigment, bindless->upload_pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd);
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
-    PResult result = batch_record_uploads(pigment, cmd, new_images, stagings, pixels, widths, heights, formats, count);
-    pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, NULL);
-    pigment_destroy_command_buffers(pigment, &cmd, 1);
+    for(uint32_t i = 0; i < count; i++)
+    {
+        descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = P_IMAGE_UPLOAD_MIPMAPS};
+    }
 
-    if(result == PIGMENT_SUCCESS)
+    if(pigment_std_image_upload(pigment, bindless->upload_pool, descs, count, new_images, NULL) == PIGMENT_SUCCESS)
     {
         start_slot = batch_append_images(pigment, &bindless->images, new_images, count);
         batch_write_descriptors(pigment, bindless, start_slot, count);
     }
-    else
-    {
-        for(uint32_t i = 0; i < count; i++)
-        {
-            pigment_destroy_image(pigment, new_images[i]);
-        }
-    }
 
 FREE:
-    if(stagings != NULL)
-    {
-        for(uint32_t i = 0; i < count; i++)
-        {
-            pigment_destroy_buffer(pigment, stagings[i]);
-        }
-    }
-    P_FREE(pigment, stagings);
+    P_FREE(pigment, descs);
     P_FREE(pigment, new_images);
     return start_slot;
 }
@@ -405,44 +381,37 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
     return slot;
 }
 
-uint32_t pigment_std_upload_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format)
+uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format)
 {
     if(pigment == NULL || bindless == NULL || faces == NULL || face_width == 0 || face_height == 0)
     {
         return UINT32_MAX;
     }
 
-    PBuffer* staging = NULL;
-    PImage* image    = NULL;
-    if(prepare_layered_image_upload(pigment, &image, &staging, faces, face_width, face_height, 6, format, P_IMAGE_TYPE_CUBE) != PIGMENT_SUCCESS)
+    PImageUploadDesc desc = {
+        .layers      = faces,
+        .layer_count = 6,
+        .width       = face_width,
+        .height      = face_height,
+        .format      = format,
+        .type        = P_IMAGE_TYPE_CUBE,
+        .flags       = P_IMAGE_UPLOAD_MIPMAPS,
+    };
+    PImage* image = NULL;
+    if(pigment_std_image_upload(pigment, bindless->upload_pool, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {
-        goto ERROR;
+        return UINT32_MAX;
     }
-
-    uint64_t face_size = (uint64_t) face_width * face_height * pigment_format_pixel_size(format);
-
-    PCommandBuffer* cmd = NULL;
-    pigment_create_command_buffers(pigment, bindless->upload_pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd);
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
-    record_image_upload(pigment, cmd, image, staging, face_width, face_height, 6, face_size);
-    pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, NULL);
-    pigment_destroy_command_buffers(pigment, &cmd, 1);
-    pigment_destroy_buffer(pigment, staging);
 
     uint32_t slot = bindless->cubemaps.count;
     if(image_list_append(pigment, &bindless->cubemaps, image) != PIGMENT_SUCCESS)
     {
-        goto ERROR;
+        pigment_destroy_image(pigment, image);
+        return UINT32_MAX;
     }
 
     write_cubemap_descriptor(pigment, bindless, slot, image);
     return slot;
-
-ERROR:
-    pigment_destroy_buffer(pigment, staging);
-    pigment_destroy_image(pigment, image);
-    return UINT32_MAX;
 }
 
 uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt)
@@ -631,147 +600,28 @@ static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list)
 
 static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
-    PBuffer* staging = NULL;
-    PImage* image    = NULL;
+    PImageUploadDesc desc = {.layers = &pixels, .width = width, .height = height, .format = format, .flags = P_IMAGE_UPLOAD_MIPMAPS};
+    PImage* image         = NULL;
 
-    if(prepare_layered_image_upload(pigment, &image, &staging, &pixels, width, height, 1, format, P_IMAGE_TYPE_2D) != PIGMENT_SUCCESS)
+    if(pigment_std_image_upload(pigment, bindless->upload_pool, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {
-        goto ERROR;
+        PLOG_ERROR(pigment, "Failed to add image from pixels.");
+        return PIGMENT_ERROR;
     }
-
-    PCommandBuffer* cmd = NULL;
-    pigment_create_command_buffers(pigment, bindless->upload_pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd);
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
-    record_image_upload(pigment, cmd, image, staging, width, height, 1, 0);
-    pigment_end_recording(pigment, cmd);
-    pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, NULL);
-    pigment_destroy_command_buffers(pigment, &cmd, 1);
-
-    pigment_destroy_buffer(pigment, staging);
 
     if(image_list_append(pigment, &bindless->images, image) != PIGMENT_SUCCESS)
     {
-        goto ERROR;
+        pigment_destroy_image(pigment, image);
+        return PIGMENT_ERROR;
     }
 
     return PIGMENT_SUCCESS;
-
-ERROR:
-    pigment_destroy_buffer(pigment, staging);
-    pigment_destroy_image(pigment, image);
-    PLOG_ERROR(pigment, "Failed to add image from pixels.");
-    return PIGMENT_ERROR;
 }
 
 static PResult add_default_image(Pigment* pigment, PStdBindless* bindless)
 {
     unsigned char white[] = {255, 255, 255, 255};
     return add_image_from_pixels(pigment, bindless, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM);
-}
-
-static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, uint32_t width, uint32_t height, uint32_t layer_count, uint64_t layer_size_bytes)
-{
-    PImageBarrier to_dst = {
-        .image       = image,
-        .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
-        .new_layout  = P_IMAGE_LAYOUT_TRANSFER_DST,
-        .src         = {        P_PIPELINE_STAGE_NONE,               P_MEMORY_ACCESS_NONE},
-        .dst         = {P_PIPELINE_STAGE_TRANSFER_BIT, P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
-        .layer_count = layer_count,
-    };
-    pigment_cmd_image_barriers(pigment, cmd, &to_dst, 1);
-
-    PBufferImageCopy* regions = P_NEW_ARRAY_FOR_OBJECT(pigment, regions, layer_count);
-    if(regions == NULL)
-    {
-        return;
-    }
-    for(uint32_t i = 0; i < layer_count; i++)
-    {
-        regions[i] = (PBufferImageCopy) {
-            .buffer_offset    = (uint64_t) i * layer_size_bytes,
-            .base_array_layer = i,
-            .layer_count      = 1,
-            .extent_w         = width,
-            .extent_h         = height,
-            .extent_d         = 1,
-        };
-    }
-    pigment_cmd_copy_buffer_to_image(pigment, cmd, staging, image, P_IMAGE_LAYOUT_TRANSFER_DST, regions, layer_count);
-    P_FREE(pigment, regions);
-
-    pigment_cmd_generate_mipmaps(pigment, cmd, image, 0, layer_count, P_IMAGE_LAYOUT_SHADER_READ_ONLY);
-}
-
-static PResult prepare_layered_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const unsigned char* const* layer_data, uint32_t width, uint32_t height, uint32_t layer_count, PFormat format, PImageType type)
-{
-    uint32_t pixel_size = pigment_format_pixel_size(format);
-    if(pixel_size == 0)
-    {
-        PLOG_ERROR(pigment, "Unsupported PFormat (%d)!", format);
-        return PIGMENT_ERROR;
-    }
-
-    if(!pigment_format_supports_linear_blit(pigment, format))
-    {
-        PLOG_ERROR(pigment, "Image format does not support linear blitting!");
-        return PIGMENT_ERROR;
-    }
-
-    uint64_t layer_size = (uint64_t) width * height * pixel_size;
-    uint64_t total_size = layer_size * layer_count;
-    uint32_t mip_levels = (uint32_t) (floor(log2(imax(width, height)))) + 1;
-
-    PBufferDesc staging_desc = {
-        .size   = total_size,
-        .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
-        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-    };
-
-    *out_staging = pigment_create_buffer(pigment, &staging_desc);
-    if(*out_staging == NULL)
-    {
-        return PIGMENT_ERROR_VULKAN;
-    }
-
-    unsigned char* mapped = (unsigned char*) pigment_buffer_mapped(*out_staging);
-    for(uint32_t i = 0; i < layer_count; i++)
-    {
-        memcpy(mapped + i * layer_size, layer_data[i], (size_t) layer_size);
-    }
-    pigment_buffer_flush(pigment, *out_staging, 0, total_size);
-
-    PImageDesc image_desc = {
-        .width        = width,
-        .height       = height,
-        .array_layers = layer_count,
-        .format       = format,
-        .usage        = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
-        .mip_levels   = mip_levels,
-        .type         = type,
-    };
-
-    *out_image = pigment_create_image(pigment, &image_desc);
-    if(*out_image == NULL)
-    {
-        return PIGMENT_ERROR_VULKAN;
-    }
-
-    return PIGMENT_SUCCESS;
-}
-
-static PResult batch_record_uploads(Pigment* pigment, PCommandBuffer* cmd, PImage** out_images, PBuffer** stagings, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
-{
-    for(uint32_t i = 0; i < count; i++)
-    {
-        PResult r = prepare_layered_image_upload(pigment, &out_images[i], &stagings[i], &pixels[i], widths[i], heights[i], 1, formats[i], P_IMAGE_TYPE_2D);
-        if(r != PIGMENT_SUCCESS)
-        {
-            return r;
-        }
-        record_image_upload(pigment, cmd, out_images[i], stagings[i], widths[i], heights[i], 1, 0);
-    }
-    return PIGMENT_SUCCESS;
 }
 
 static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage** images, uint32_t count)

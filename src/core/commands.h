@@ -97,7 +97,7 @@ void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool);
  * @param count Number of command buffers to allocate.
  * @param out_cmds Array to store the allocated command buffers.
  *
- * @return PIGMENT_SUCCESS on success, or an error code on failure.
+ * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
 PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds);
 
@@ -189,7 +189,7 @@ void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char*
  * @param pigment Pigment instance.
  * @param tracker Tracker to initialize. Safe to call on a zero-initialized struct.
  *
- * @return PIGMENT_SUCCESS on success.
+ * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
 PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracker);
 

@@ -285,11 +285,13 @@ typedef enum PStoreOp {
 typedef enum PFormat {
     P_FORMAT_UNDEFINED           = 0,
     P_FORMAT_R8_UNORM            = 9,
+    P_FORMAT_R8_UINT             = 13,
     P_FORMAT_R8G8_UNORM          = 16,
     P_FORMAT_R8G8B8A8_UNORM      = 37,
     P_FORMAT_R8G8B8A8_SRGB       = 43,
     P_FORMAT_B8G8R8A8_UNORM      = 44,
     P_FORMAT_B8G8R8A8_SRGB       = 50,
+    P_FORMAT_R16_UINT            = 74,
     P_FORMAT_R16G16B16A16_SFLOAT = 97,
     P_FORMAT_D16_UNORM           = 124,
     P_FORMAT_D32_SFLOAT          = 126,

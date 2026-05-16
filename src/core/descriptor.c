@@ -475,6 +475,7 @@ void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes
         {
             case P_DESCRIPTOR_TYPE_SAMPLER:
             case P_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case P_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
             case P_DESCRIPTOR_TYPE_STORAGE_IMAGE:
                 {
                     image_infos[i] = P_NEW_ARRAY_FOR_COMMAND(pigment, image_infos[i], write->count);
@@ -609,6 +610,8 @@ static VkDescriptorType to_vk_descriptor_type(PDescriptorType type)
             return VK_DESCRIPTOR_TYPE_SAMPLER;
         case P_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
             return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        case P_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         case P_DESCRIPTOR_TYPE_STORAGE_IMAGE:
             return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         case P_DESCRIPTOR_TYPE_UNIFORM_BUFFER:

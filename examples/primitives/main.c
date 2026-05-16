@@ -217,7 +217,7 @@ int main(void)
         }
         if(ok)
         {
-            cubemap_slot = pigment_std_upload_cubemap(pigment, bindless, (const unsigned char**) face_data, face_size, face_size, P_FORMAT_R8G8B8A8_UNORM);
+            cubemap_slot = pigment_std_add_cubemap(pigment, bindless, (const unsigned char**) face_data, face_size, face_size, P_FORMAT_R8G8B8A8_UNORM);
         }
         for(uint32_t f = 0; f < 6; f++)
         {

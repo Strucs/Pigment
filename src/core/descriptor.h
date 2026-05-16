@@ -21,11 +21,12 @@
 #include "pipeline.h"
 
 typedef enum PDescriptorType {
-    P_DESCRIPTOR_TYPE_SAMPLER        = 0,
-    P_DESCRIPTOR_TYPE_SAMPLED_IMAGE  = 1,
-    P_DESCRIPTOR_TYPE_STORAGE_IMAGE  = 2,
-    P_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 3,
-    P_DESCRIPTOR_TYPE_STORAGE_BUFFER = 4,
+    P_DESCRIPTOR_TYPE_SAMPLER                = 0,
+    P_DESCRIPTOR_TYPE_SAMPLED_IMAGE          = 1,
+    P_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER = 2,
+    P_DESCRIPTOR_TYPE_STORAGE_IMAGE          = 3,
+    P_DESCRIPTOR_TYPE_UNIFORM_BUFFER         = 4,
+    P_DESCRIPTOR_TYPE_STORAGE_BUFFER         = 5,
 } PDescriptorType;
 
 typedef enum PDescriptorBindingFlags {
