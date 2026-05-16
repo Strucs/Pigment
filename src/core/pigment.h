@@ -17,6 +17,7 @@
 #ifndef PIGMENT_H
 #define PIGMENT_H
 
+#include "device.h"
 #include "buffers.h"
 #include "cmd_sync.h"
 #include "commands.h"

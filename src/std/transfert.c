@@ -25,6 +25,7 @@
 
 static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const PImageUploadDesc* upload);
 static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, const PImageUploadDesc* upload);
+static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImageUploadDesc* upload);
 
 static inline int imax(int a, int b)
 {
@@ -273,6 +274,60 @@ static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* i
     pigment_cmd_generate_mipmaps(pigment, cmd, image, 0, layer_count, P_IMAGE_LAYOUT_SHADER_READ_ONLY);
 }
 
+static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImageUploadDesc* upload)
+{
+    *out_image = NULL;
+
+    uint32_t layer_count = desc_layer_count(upload);
+    uint32_t depth       = desc_depth(upload);
+
+    PImageDesc image_desc = {
+        .width        = upload->width,
+        .height       = upload->height,
+        .depth        = depth,
+        .array_layers = layer_count,
+        .format       = upload->format,
+        .usage        = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER,
+        .mip_levels   = 1,
+        .type         = upload->type,
+    };
+
+    PImage* image = pigment_create_image(pigment, &image_desc);
+    if(image == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    pigment_image_host_transition(pigment, &(PHostImageTransition) {.image = image, .old_layout = P_IMAGE_LAYOUT_UNDEFINED, .new_layout = P_IMAGE_LAYOUT_GENERAL}, 1);
+
+    P_STACK_OR_HEAP(PHostImageCopy, regions, layer_count);
+    if(regions == NULL)
+    {
+        pigment_destroy_image(pigment, image);
+        return PIGMENT_ERROR;
+    }
+
+    for(uint32_t i = 0; i < layer_count; i++)
+    {
+        regions[i] = (PHostImageCopy) {
+            .host_pointer     = (void*) upload->layers[i],
+            .base_array_layer = i,
+            .layer_count      = 1,
+            .extent_w         = upload->width,
+            .extent_h         = upload->height,
+            .extent_d         = depth,
+        };
+    }
+
+    pigment_image_write(pigment, image, P_IMAGE_LAYOUT_GENERAL, regions, layer_count);
+    P_STACK_OR_HEAP_FREE(pigment, regions);
+
+    pigment_image_host_transition(pigment, &(PHostImageTransition) {.image = image, .old_layout = P_IMAGE_LAYOUT_GENERAL, .new_layout = P_IMAGE_LAYOUT_SHADER_READ_ONLY}, 1);
+
+    *out_image = image;
+    return PIGMENT_SUCCESS;
+}
+
 PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, const PImageUploadDesc* uploads, uint32_t count, PImage** out_images, PSubmitHandle* out_handle)
 {
     if(pigment == NULL || pool == NULL || uploads == NULL || out_images == NULL || count == 0)
@@ -295,33 +350,54 @@ PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, const PIm
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
+    PBool host_copy     = pigment_supports(pigment, P_FEATURE_HOST_IMAGE_COPY) && pigment_memory_budget(pigment, P_MEMORY_DEVICE_LOCAL_BIT | P_MEMORY_HOST_VISIBLE_BIT) > 0;
     PCommandBuffer* cmd = NULL;
-    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd) != PIGMENT_SUCCESS)
-    {
-        P_FREE(pigment, stagings);
-        return PIGMENT_ERROR;
-    }
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
+    PResult result      = PIGMENT_SUCCESS;
 
-    PResult result = PIGMENT_SUCCESS;
     for(uint32_t i = 0; i < count; i++)
     {
-        result = prepare_image_upload(pigment, &out_images[i], &stagings[i], &uploads[i]);
+        const PImageUploadDesc* upload = &uploads[i];
+
+        if(host_copy && !(upload->flags & P_IMAGE_UPLOAD_MIPMAPS))
+        {
+            if(host_copy_image(pigment, &out_images[i], upload) == PIGMENT_SUCCESS)
+            {
+                continue;
+            }
+            host_copy = P_FALSE;
+            PLOG_TRACE(pigment, "Host image copy failed for image %u, using staging for the rest of the batch.", i);
+        }
+
+        result = prepare_image_upload(pigment, &out_images[i], &stagings[i], upload);
         if(result != PIGMENT_SUCCESS)
         {
             break;
         }
-        record_image_upload(pigment, cmd, out_images[i], stagings[i], &uploads[i]);
+
+        if(cmd == NULL)
+        {
+            if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd) != PIGMENT_SUCCESS)
+            {
+                result = PIGMENT_ERROR;
+                break;
+            }
+            pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
+        }
+
+        record_image_upload(pigment, cmd, out_images[i], stagings[i], upload);
     }
-    pigment_end_recording(pigment, cmd);
 
     PSubmitHandle handle = {0};
-    if(result == PIGMENT_SUCCESS)
+    if(cmd != NULL)
     {
-        result = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, &handle);
+        pigment_end_recording(pigment, cmd);
+        if(result == PIGMENT_SUCCESS)
+        {
+            result = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, &handle);
+        }
+        pigment_destroy_command_buffers(pigment, &cmd, 1);
     }
 
-    pigment_destroy_command_buffers(pigment, &cmd, 1);
     for(uint32_t i = 0; i < count; i++)
     {
         pigment_destroy_buffer(pigment, stagings[i]);

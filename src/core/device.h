@@ -19,7 +19,14 @@
 
 #include "defines.h"
 
-PDevice* create_device(Pigment* pigment);
-void destroy_device(Pigment* pigment);
+/**
+ * @brief Bytes the device can still allocate for memory matching the given flags.
+ *
+ * @param pigment Pigment instance.
+ * @param flags Memory property flags the memory must satisfy to be counted.
+ *
+ * @return Allocatable bytes, or UINT64_MAX when the budget cannot be measured.
+ */
+uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags);
 
 #endif

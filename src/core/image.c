@@ -688,7 +688,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
     VkResult result = alloc->create_image(alloc->user_data, &image_create_info, alloc_info, &image->image, &image->image_allocation);
     if(result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create image (result: %d)", result);
+        PLOG_TRACE(pigment, "Failed to create image (result: %d)", result);
         return PIGMENT_ERROR_VULKAN;
     }
 

@@ -73,6 +73,7 @@ typedef enum PFeature {
     P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE = 3,
     P_FEATURE_DRAW_INDIRECT_COUNT          = 4,
     P_FEATURE_HOST_IMAGE_COPY              = 5,
+    P_FEATURE_MEMORY_BUDGET                = 6,
     P_FEATURE_COUNT    // size of the device feature array
 } PFeature;
 
@@ -353,6 +354,13 @@ typedef enum PSharingMode {
     P_SHARING_MODE_EXCLUSIVE  = 0,
     P_SHARING_MODE_CONCURRENT = 1,
 } PSharingMode;
+
+typedef enum PMemoryFlags {
+    P_MEMORY_DEVICE_LOCAL_BIT  = 1 << 0,
+    P_MEMORY_HOST_VISIBLE_BIT  = 1 << 1,
+    P_MEMORY_HOST_COHERENT_BIT = 1 << 2,
+    P_MEMORY_HOST_CACHED_BIT   = 1 << 3,
+} PMemoryFlags;
 
 typedef enum PMemoryAccess {
     P_MEMORY_ACCESS_NONE                               = 0,

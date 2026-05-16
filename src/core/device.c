@@ -439,6 +439,37 @@ PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index)
     return &pigment->device->queues[index];
 }
 
+uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags)
+{
+    if(pigment == NULL || pigment->device == NULL)
+    {
+        return 0;
+    }
+
+    if(!pigment->device->features[P_FEATURE_MEMORY_BUDGET])
+    {
+        return UINT64_MAX;
+    }
+
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT budget = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
+    VkPhysicalDeviceMemoryProperties2 props          = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2, .pNext = &budget};
+    vkGetPhysicalDeviceMemoryProperties2(pigment->device->physical_device, &props);
+
+    VkMemoryPropertyFlags required = (VkMemoryPropertyFlags) flags;
+    uint64_t total                 = 0;
+    uint32_t counted_heaps         = 0;
+    for(uint32_t i = 0; i < props.memoryProperties.memoryTypeCount; i++)
+    {
+        uint32_t heap = props.memoryProperties.memoryTypes[i].heapIndex;
+        if((props.memoryProperties.memoryTypes[i].propertyFlags & required) == required && !(counted_heaps & (1U << heap)))
+        {
+            counted_heaps |= (1U << heap);
+            total += budget.heapBudget[heap];
+        }
+    }
+    return total;
+}
+
 static PResult resolve_queue_requests(Pigment* pigment, const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PBool optional)
 {
     for(uint32_t req_idx = 0; req_idx < request_count; req_idx++)
@@ -617,6 +648,8 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         features_head                          = &host_image_copy_features;
     }
 
+    device->features[P_FEATURE_MEMORY_BUDGET] = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
@@ -770,13 +803,14 @@ PDevice* create_device(Pigment* pigment)
     PBool instance_has_surface_maint1 = name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME)
                                         && name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
-    const char* default_opt_extensions[2] = {0};
+    const char* default_opt_extensions[3] = {0};
     uint32_t default_opt_count            = 0;
     if(instance_has_surface_maint1)
     {
         default_opt_extensions[default_opt_count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
     }
     default_opt_extensions[default_opt_count++] = VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME;
+    default_opt_extensions[default_opt_count++] = VK_EXT_MEMORY_BUDGET_EXTENSION_NAME;
 
     device = P_NEW_FOR_OBJECT(pigment, device);
     if(device == NULL)

@@ -329,7 +329,7 @@ uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, c
 
     for(uint32_t i = 0; i < count; i++)
     {
-        descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = P_IMAGE_UPLOAD_MIPMAPS};
+        descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = 0};
     }
 
     if(pigment_std_image_upload(pigment, bindless->upload_pool, descs, count, new_images, NULL) == PIGMENT_SUCCESS)

@@ -30,13 +30,6 @@ typedef enum PBufferUsage {
     P_BUFFER_USAGE_INDIRECT       = 1 << 7,
 } PBufferUsage;
 
-typedef enum PMemoryFlags {
-    P_MEMORY_DEVICE_LOCAL_BIT  = 1 << 0,
-    P_MEMORY_HOST_VISIBLE_BIT  = 1 << 1,
-    P_MEMORY_HOST_COHERENT_BIT = 1 << 2,
-    P_MEMORY_HOST_CACHED_BIT   = 1 << 3,
-} PMemoryFlags;
-
 typedef struct PMemoryRequest {
     PMemoryFlags required;
     PMemoryFlags preferred;

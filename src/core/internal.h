@@ -180,6 +180,8 @@ static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t 
 }
 
 // device.c
+PDevice* create_device(Pigment* pigment);
+void destroy_device(Pigment* pigment);
 PBool find_graphics_family(Pigment* pigment, VkPhysicalDevice device, uint32_t* out_family);
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
 PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden);
