@@ -49,7 +49,8 @@ typedef struct PBufferDesc {
     PBufferUsage usage;
     PMemoryRequest memory;
     PBufferFlags flags;
-    PSharingMode sharing_mode;    // 0 = EXCLUSIVE (default)
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. List the queues that access it (2+ families -> CONCURRENT).
+    uint32_t shared_queue_count;
     const char* name;
 } PBufferDesc;
 

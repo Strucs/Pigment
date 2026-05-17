@@ -51,8 +51,9 @@ typedef struct PImageDesc {
     PSampleCount samples;         // 0 or P_SAMPLE_COUNT_1 for no MSAA
     uint32_t mip_levels;          // 0 = single mip, otherwise full chain
     PImageType type;              // 0 = 2D
-    PSharingMode sharing_mode;    // 0 = EXCLUSIVE (default)
     PImageFlags flags;            // 0 = none. P_IMAGE_FLAG_HOST_MAPPED requires 2D, 1 mip, 1 layer, 1 sample
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE (one queue family at a time, any family). List 2+ queues to share across their families.
+    uint32_t shared_queue_count;
     const char* name;
 } PImageDesc;
 

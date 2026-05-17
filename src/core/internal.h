@@ -179,6 +179,35 @@ static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t 
     vkSetDebugUtilsObjectNameEXT(device, &info);
 }
 
+static inline uint32_t unique_queue_families(PDeviceQueue* const* queues, uint32_t count, uint32_t* out_families)
+{
+    uint32_t family_count = 0;
+    for(uint32_t i = 0; i < count; i++)
+    {
+        if(queues[i] == NULL)
+        {
+            continue;
+        }
+
+        uint32_t family = queues[i]->family_index;
+        PBool found     = P_FALSE;
+        for(uint32_t j = 0; j < family_count; j++)
+        {
+            if(out_families[j] == family)
+            {
+                found = P_TRUE;
+                break;
+            }
+        }
+
+        if(!found)
+        {
+            out_families[family_count++] = family;
+        }
+    }
+    return family_count;
+}
+
 // device.c
 PDevice* create_device(Pigment* pigment);
 void destroy_device(Pigment* pigment);

@@ -350,11 +350,6 @@ typedef enum PCommandBufferLevel {
     P_COMMAND_BUFFER_LEVEL_SECONDARY = 1,
 } PCommandBufferLevel;
 
-typedef enum PSharingMode {
-    P_SHARING_MODE_EXCLUSIVE  = 0,
-    P_SHARING_MODE_CONCURRENT = 1,
-} PSharingMode;
-
 typedef enum PMemoryFlags {
     P_MEMORY_DEVICE_LOCAL_BIT  = 1 << 0,
     P_MEMORY_HOST_VISIBLE_BIT  = 1 << 1,

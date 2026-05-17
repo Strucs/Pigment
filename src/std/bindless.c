@@ -332,11 +332,22 @@ uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, c
         descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = 0};
     }
 
-    if(pigment_std_image_upload(pigment, bindless->upload_pool, descs, count, new_images, NULL) == PIGMENT_SUCCESS)
+    if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, descs, count, new_images, NULL) != PIGMENT_SUCCESS)
     {
-        start_slot = batch_append_images(pigment, &bindless->images, new_images, count);
-        batch_write_descriptors(pigment, bindless, start_slot, count);
+        goto FREE;
     }
+
+    if(pigment_std_image_finalize(pigment, bindless->upload_pool, NULL, new_images, descs, count, NULL) != PIGMENT_SUCCESS)
+    {
+        for(uint32_t i = 0; i < count; i++)
+        {
+            pigment_destroy_image(pigment, new_images[i]);
+        }
+        goto FREE;
+    }
+
+    start_slot = batch_append_images(pigment, &bindless->images, new_images, count);
+    batch_write_descriptors(pigment, bindless, start_slot, count);
 
 FREE:
     P_FREE(pigment, descs);
@@ -398,8 +409,14 @@ uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const
         .flags       = P_IMAGE_UPLOAD_MIPMAPS,
     };
     PImage* image = NULL;
-    if(pigment_std_image_upload(pigment, bindless->upload_pool, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
+    if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {
+        return UINT32_MAX;
+    }
+
+    if(pigment_std_image_finalize(pigment, bindless->upload_pool, NULL, &image, &desc, 1, NULL) != PIGMENT_SUCCESS)
+    {
+        pigment_destroy_image(pigment, image);
         return UINT32_MAX;
     }
 
@@ -603,9 +620,15 @@ static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, c
     PImageUploadDesc desc = {.layers = &pixels, .width = width, .height = height, .format = format, .flags = P_IMAGE_UPLOAD_MIPMAPS};
     PImage* image         = NULL;
 
-    if(pigment_std_image_upload(pigment, bindless->upload_pool, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
+    if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to add image from pixels.");
+        return PIGMENT_ERROR;
+    }
+
+    if(pigment_std_image_finalize(pigment, bindless->upload_pool, NULL, &image, &desc, 1, NULL) != PIGMENT_SUCCESS)
+    {
+        pigment_destroy_image(pigment, image);
         return PIGMENT_ERROR;
     }
 

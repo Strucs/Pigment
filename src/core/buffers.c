@@ -45,11 +45,17 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
 
     VkBufferUsageFlags vk_usage = translate_usage(desc->usage);
 
+    P_STACK_OR_HEAP(uint32_t, families, desc->shared_queue_count);
+    uint32_t family_count = unique_queue_families(desc->shared_queues, desc->shared_queue_count, families);
+    PBool concurrent      = family_count > 1;
+
     VkBufferCreateInfo buffer_create_info = {
-        .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size        = (VkDeviceSize) desc->size,
-        .usage       = vk_usage,
-        .sharingMode = (VkSharingMode) desc->sharing_mode,
+        .sType                 = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size                  = (VkDeviceSize) desc->size,
+        .usage                 = vk_usage,
+        .sharingMode           = concurrent ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = concurrent ? family_count : 0,
+        .pQueueFamilyIndices   = concurrent ? families : NULL,
     };
 
     PVkAllocationFlags vk_alloc_flags = 0;
@@ -71,6 +77,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
 
     PVkAllocator* alloc = pigment->gpu_allocator;
     VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, &alloc_info, &buffer->buffer, &buffer->allocation);
+    P_STACK_OR_HEAP_FREE(pigment, families);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);

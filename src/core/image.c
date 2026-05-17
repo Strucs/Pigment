@@ -353,16 +353,15 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
-    image->vk_format       = (VkFormat) desc->format;
-    image->vk_usage        = translate_usage(desc->usage);
-    image->vk_samples      = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
-    image->vk_sharing_mode = (VkSharingMode) desc->sharing_mode;
-    image->mip_levels      = (desc->mip_levels == 0) ? 1 : desc->mip_levels;
-    image->aspect          = compute_aspect(image->vk_format, desc->usage);
-    image->depth           = (desc->depth == 0) ? 1 : desc->depth;
-    image->array_layers    = (desc->array_layers == 0) ? 1 : desc->array_layers;
-    image->name            = desc->name;
-    image->host_mapped     = (desc->flags & P_IMAGE_FLAG_HOST_MAPPED) != 0;
+    image->vk_format    = (VkFormat) desc->format;
+    image->vk_usage     = translate_usage(desc->usage);
+    image->vk_samples   = (desc->samples == 0) ? VK_SAMPLE_COUNT_1_BIT : (VkSampleCountFlagBits) desc->samples;
+    image->mip_levels   = (desc->mip_levels == 0) ? 1 : desc->mip_levels;
+    image->aspect       = compute_aspect(image->vk_format, desc->usage);
+    image->depth        = (desc->depth == 0) ? 1 : desc->depth;
+    image->array_layers = (desc->array_layers == 0) ? 1 : desc->array_layers;
+    image->name         = desc->name;
+    image->host_mapped  = (desc->flags & P_IMAGE_FLAG_HOST_MAPPED) != 0;
     translate_image_type(desc->type, &image->vk_image_type, &image->vk_create_flags);
 
     if(image->vk_samples != VK_SAMPLE_COUNT_1_BIT && image->mip_levels > 1)
@@ -378,9 +377,22 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
+    if(desc->shared_queue_count > 0)
+    {
+        image->shared_families = P_NEW_ARRAY_FOR_OBJECT(pigment, image->shared_families, desc->shared_queue_count);
+        if(image->shared_families == NULL)
+        {
+            pigment_resource_tracker_destroy(pigment, &image->tracker);
+            P_FREE(pigment, image);
+            return NULL;
+        }
+        image->shared_family_count = unique_queue_families(desc->shared_queues, desc->shared_queue_count, image->shared_families);
+    }
+
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d)", desc->width, desc->height, desc->format);
+        P_FREE(pigment, image->shared_families);
         pigment_resource_tracker_destroy(pigment, &image->tracker);
         P_FREE(pigment, image);
         return NULL;
@@ -403,6 +415,7 @@ static void destroy_image_immediate(Pigment* pigment, void* resource)
 {
     PImage* image = (PImage*) resource;
     free_resources(pigment, image);
+    P_FREE(pigment, image->shared_families);
     pigment_resource_tracker_destroy(pigment, &image->tracker);
     P_FREE(pigment, image);
 }
@@ -666,21 +679,25 @@ void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition*
 
 PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, const PVkAllocationCreateInfo* alloc_info)
 {
+    PBool concurrent = image->shared_family_count > 1;
+
     VkImageCreateInfo image_create_info = {
-        .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType     = image->vk_image_type,
-        .extent.width  = width,
-        .extent.height = height,
-        .extent.depth  = image->depth,
-        .mipLevels     = image->mip_levels,
-        .arrayLayers   = image->array_layers,
-        .format        = image->vk_format,
-        .tiling        = tiling,
-        .initialLayout = image->host_mapped ? VK_IMAGE_LAYOUT_PREINITIALIZED : VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage         = image->vk_usage,
-        .samples       = image->vk_samples ? image->vk_samples : VK_SAMPLE_COUNT_1_BIT,
-        .sharingMode   = image->vk_sharing_mode,
-        .flags         = image->vk_create_flags,
+        .sType                 = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType             = image->vk_image_type,
+        .extent.width          = width,
+        .extent.height         = height,
+        .extent.depth          = image->depth,
+        .mipLevels             = image->mip_levels,
+        .arrayLayers           = image->array_layers,
+        .format                = image->vk_format,
+        .tiling                = tiling,
+        .initialLayout         = image->host_mapped ? VK_IMAGE_LAYOUT_PREINITIALIZED : VK_IMAGE_LAYOUT_UNDEFINED,
+        .usage                 = image->vk_usage,
+        .samples               = image->vk_samples ? image->vk_samples : VK_SAMPLE_COUNT_1_BIT,
+        .sharingMode           = concurrent ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = concurrent ? image->shared_family_count : 0,
+        .pQueueFamilyIndices   = concurrent ? image->shared_families : NULL,
+        .flags                 = image->vk_create_flags,
     };
 
     PVkAllocator* alloc = pigment->gpu_allocator;

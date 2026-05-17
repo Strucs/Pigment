@@ -20,17 +20,11 @@
 
 #include "internal.h"
 
-#include <math.h>
 #include <string.h>
 
 static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const PImageUploadDesc* upload);
 static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, const PImageUploadDesc* upload);
 static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImageUploadDesc* upload);
-
-static inline int imax(int a, int b)
-{
-    return a > b ? a : b;
-}
 
 static inline uint32_t desc_layer_count(const PImageUploadDesc* upload)
 {
@@ -42,7 +36,7 @@ static inline uint32_t desc_depth(const PImageUploadDesc* upload)
     return upload->depth ? upload->depth : 1;
 }
 
-PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, const PBufferUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle)
+PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PBufferUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle)
 {
     if(pigment == NULL || pool == NULL || uploads == NULL || count == 0)
     {
@@ -147,7 +141,7 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, const PB
         pigment_end_recording(pigment, cmd);
         if(result == PIGMENT_SUCCESS)
         {
-            result = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, &handle);
+            result = pigment_queue_submit(pigment, &(PSubmit) {.queue = queue, .cmds = &cmd, .cmd_count = 1}, 1, &handle);
         }
         pigment_destroy_command_buffers(pigment, &cmd, 1);
     }
@@ -185,7 +179,20 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
     uint32_t mip_levels  = 1;
     if(upload->flags & P_IMAGE_UPLOAD_MIPMAPS)
     {
-        mip_levels = (uint32_t) (floor(log2(imax(imax(upload->width, upload->height), depth)))) + 1;
+        uint32_t max_dim = upload->width;
+        if(upload->height > max_dim)
+        {
+            max_dim = upload->height;
+        }
+        if(depth > max_dim)
+        {
+            max_dim = depth;
+        }
+        while(max_dim > 1)
+        {
+            max_dim >>= 1;
+            mip_levels++;
+        }
     }
 
     if(mip_levels > 1 && !pigment_format_supports_linear_blit(pigment, upload->format))
@@ -217,14 +224,16 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
     pigment_buffer_flush(pigment, *out_staging, 0, total_size);
 
     PImageDesc image_desc = {
-        .width        = upload->width,
-        .height       = upload->height,
-        .depth        = depth,
-        .array_layers = layer_count,
-        .format       = upload->format,
-        .usage        = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
-        .mip_levels   = mip_levels,
-        .type         = upload->type,
+        .width              = upload->width,
+        .height             = upload->height,
+        .depth              = depth,
+        .array_layers       = layer_count,
+        .format             = upload->format,
+        .usage              = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
+        .mip_levels         = mip_levels,
+        .type               = upload->type,
+        .shared_queues      = upload->shared_queues,
+        .shared_queue_count = upload->shared_queue_count,
     };
 
     *out_image = pigment_create_image(pigment, &image_desc);
@@ -270,8 +279,6 @@ static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* i
     }
     pigment_cmd_copy_buffer_to_image(pigment, cmd, staging, image, P_IMAGE_LAYOUT_TRANSFER_DST, regions, layer_count);
     P_STACK_OR_HEAP_FREE(pigment, regions);
-
-    pigment_cmd_generate_mipmaps(pigment, cmd, image, 0, layer_count, P_IMAGE_LAYOUT_SHADER_READ_ONLY);
 }
 
 static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImageUploadDesc* upload)
@@ -282,14 +289,16 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
     uint32_t depth       = desc_depth(upload);
 
     PImageDesc image_desc = {
-        .width        = upload->width,
-        .height       = upload->height,
-        .depth        = depth,
-        .array_layers = layer_count,
-        .format       = upload->format,
-        .usage        = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER,
-        .mip_levels   = 1,
-        .type         = upload->type,
+        .width              = upload->width,
+        .height             = upload->height,
+        .depth              = depth,
+        .array_layers       = layer_count,
+        .format             = upload->format,
+        .usage              = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER,
+        .mip_levels         = 1,
+        .type               = upload->type,
+        .shared_queues      = upload->shared_queues,
+        .shared_queue_count = upload->shared_queue_count,
     };
 
     PImage* image = pigment_create_image(pigment, &image_desc);
@@ -322,13 +331,13 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
     pigment_image_write(pigment, image, P_IMAGE_LAYOUT_GENERAL, regions, layer_count);
     P_STACK_OR_HEAP_FREE(pigment, regions);
 
-    pigment_image_host_transition(pigment, &(PHostImageTransition) {.image = image, .old_layout = P_IMAGE_LAYOUT_GENERAL, .new_layout = P_IMAGE_LAYOUT_SHADER_READ_ONLY}, 1);
+    pigment_image_host_transition(pigment, &(PHostImageTransition) {.image = image, .old_layout = P_IMAGE_LAYOUT_GENERAL, .new_layout = P_IMAGE_LAYOUT_TRANSFER_DST}, 1);
 
     *out_image = image;
     return PIGMENT_SUCCESS;
 }
 
-PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, const PImageUploadDesc* uploads, uint32_t count, PImage** out_images, PSubmitHandle* out_handle)
+PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PImageUploadDesc* uploads, uint32_t count, PImage** out_images, PSubmitHandle* out_handle)
 {
     if(pigment == NULL || pool == NULL || uploads == NULL || out_images == NULL || count == 0)
     {
@@ -393,7 +402,7 @@ PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, const PIm
         pigment_end_recording(pigment, cmd);
         if(result == PIGMENT_SUCCESS)
         {
-            result = pigment_queue_submit(pigment, &(PSubmit) {.cmds = &cmd, .cmd_count = 1}, 1, &handle);
+            result = pigment_queue_submit(pigment, &(PSubmit) {.queue = queue, .cmds = &cmd, .cmd_count = 1}, 1, &handle);
         }
         pigment_destroy_command_buffers(pigment, &cmd, 1);
     }
@@ -419,4 +428,40 @@ PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, const PIm
         *out_handle = handle;
     }
     return PIGMENT_SUCCESS;
+}
+
+PResult pigment_std_image_finalize(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, PImage* const* images, const PImageUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle)
+{
+    if(pigment == NULL || pool == NULL || images == NULL || uploads == NULL || count == 0)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    if(out_handle != NULL)
+    {
+        *out_handle = (PSubmitHandle) {0};
+    }
+
+    PCommandBuffer* cmd = NULL;
+    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, 1, &cmd) != PIGMENT_SUCCESS)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
+    for(uint32_t i = 0; i < count; i++)
+    {
+        pigment_cmd_generate_mipmaps(pigment, cmd, images[i], 0, desc_layer_count(&uploads[i]), P_IMAGE_LAYOUT_SHADER_READ_ONLY);
+    }
+    pigment_end_recording(pigment, cmd);
+
+    PSubmitHandle handle = {0};
+    PResult result       = pigment_queue_submit(pigment, &(PSubmit) {.queue = queue, .cmds = &cmd, .cmd_count = 1}, 1, &handle);
+    pigment_destroy_command_buffers(pigment, &cmd, 1);
+
+    if(result == PIGMENT_SUCCESS && out_handle != NULL)
+    {
+        *out_handle = handle;
+    }
+    return result;
 }

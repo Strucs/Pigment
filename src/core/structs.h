@@ -316,8 +316,10 @@ struct PImage {
     VkImageType vk_image_type;
     VkImageCreateFlags vk_create_flags;
     VkSampleCountFlagBits vk_samples;
-    VkSharingMode vk_sharing_mode;
     VkImageAspectFlags aspect;
+
+    uint32_t* shared_families;
+    uint32_t shared_family_count;
 
     const char* name;
 
