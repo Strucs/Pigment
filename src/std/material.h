@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_MATERIAL_H
 #define PIGMENT_STD_MATERIAL_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "types.h"
 
 #include "pigment/defines.h"
@@ -52,5 +56,9 @@ void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32
 void pigment_std_material_destroy(PMaterials* materials, uint32_t id);
 
 uint64_t pigment_std_material_address(PMaterials* materials);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

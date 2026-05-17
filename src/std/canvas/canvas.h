@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_CANVAS_H
 #define PIGMENT_STD_CANVAS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "pigment/defines.h"
 #include "pigment/frame.h"
 #include "pigment/pipeline.h"
@@ -122,5 +126,9 @@ void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PComman
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
 void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

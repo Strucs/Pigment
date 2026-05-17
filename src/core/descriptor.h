@@ -17,6 +17,10 @@
 #ifndef PIGMENT_DESCRIPTOR_H
 #define PIGMENT_DESCRIPTOR_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 #include "pipeline.h"
 
@@ -123,5 +127,9 @@ void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, ui
 void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
 
 void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t first_set, PDescriptorSet* const* sets, uint32_t set_count, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_PRIMITIVES_H
 #define PIGMENT_STD_PRIMITIVES_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "mesh.h"
 #include "vertex.h"
 
@@ -37,5 +41,9 @@ PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segments, uint32_t 
 void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh);
 
 PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

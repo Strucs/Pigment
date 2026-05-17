@@ -17,6 +17,10 @@
 #ifndef PIGMENT_DEVICE_H
 #define PIGMENT_DEVICE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 /**
@@ -28,5 +32,9 @@
  * @return Allocatable bytes, or UINT64_MAX when the budget cannot be measured.
  */
 uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

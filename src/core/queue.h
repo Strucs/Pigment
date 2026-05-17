@@ -17,6 +17,10 @@
 #ifndef PIGMENT_QUEUE_H
 #define PIGMENT_QUEUE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 /**
@@ -98,5 +102,9 @@ uint32_t pigment_queue_family(PDeviceQueue* queue);
  * @return The queue flags, or 0 if queue is NULL.
  */
 PQueueFlags pigment_queue_flags(PDeviceQueue* queue);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

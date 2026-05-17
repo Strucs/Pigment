@@ -17,11 +17,19 @@
 #ifndef PIGMENT_INSTANCE_H
 #define PIGMENT_INSTANCE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 PInstance* create_instance(Pigment* pigment, PAppInfo* info);
 void destroy_instance(Pigment* pigment);
 
 void setup_debug_messenger(Pigment* pigment);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -17,6 +17,10 @@
 #ifndef PIGMENT_SDL_H
 #define PIGMENT_SDL_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 #include "log.h"
 
@@ -35,4 +39,8 @@ void pigment_sdl_log_callback(
 
 IOCallbacks pigment_sdl_default_file_io(void);
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

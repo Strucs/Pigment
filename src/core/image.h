@@ -17,6 +17,10 @@
 #ifndef PIGMENT_IMAGE_H
 #define PIGMENT_IMAGE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 typedef enum PImageUsage {
@@ -222,5 +226,9 @@ void pigment_image_invalidate(Pigment* pigment, PImage* image);
 void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
 void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
 void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition* transitions, uint32_t count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

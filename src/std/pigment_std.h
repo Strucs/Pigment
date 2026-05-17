@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_H
 #define PIGMENT_STD_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "pigment.h"
 
 #include "std/bindless.h"
@@ -34,5 +38,9 @@
 #include "std/render_targets.h"
 #include "std/transfert.h"
 #include "std/vertex.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

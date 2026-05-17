@@ -17,6 +17,10 @@
 #ifndef PIGMENT_BUFFERS_H
 #define PIGMENT_BUFFERS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 typedef enum PBufferUsage {
@@ -71,5 +75,9 @@ void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, ui
 void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
 
 void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

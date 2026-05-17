@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_MESH_H
 #define PIGMENT_STD_MESH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "pigment/buffers.h"
 #include "pigment/defines.h"
 
@@ -33,5 +37,9 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, cons
 void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
 
 uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

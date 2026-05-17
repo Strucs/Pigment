@@ -17,7 +17,10 @@
 #ifndef PIGMENT_DEFINES_H
 #define PIGMENT_DEFINES_H
 
-#include <stdatomic.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 typedef unsigned char PBool;
@@ -47,10 +50,6 @@ typedef struct PSubmitHandle {
     PDeviceQueue* queue;
     uint64_t value;
 } PSubmitHandle;
-
-typedef struct PResourceTracker {
-    _Atomic uint64_t* last_used;
-} PResourceTracker;
 
 typedef enum PigmentLogSeverity {
     PIGMENT_LOG_TRACE_BIT = 1 << 0,
@@ -109,7 +108,7 @@ typedef enum PQueueFlags {
  */
 typedef struct PQueueRequest {
     PQueueFlags required;
-    uint32_t count;       // 0 = 1. Distinct queues wanted, clamped to what the hardware exposes.
+    uint32_t count;    // 0 = 1. Distinct queues wanted, clamped to what the hardware exposes.
     float priority;
 } PQueueRequest;
 
@@ -233,6 +232,8 @@ typedef struct PigmentLoggerCreateInfo PigmentLoggerCreateInfo;
 
 typedef struct PigmentLogger PigmentLogger;
 
+typedef struct PResourceTracker PResourceTracker;
+
 typedef struct PSwapchainRecreateEvent {
     PWindowRenderer* renderer;
     uint32_t width;
@@ -302,22 +303,22 @@ typedef enum PFormat {
     P_FORMAT_D24_UNORM_S8_UINT   = 129,
     P_FORMAT_D32_SFLOAT_S8_UINT  = 130,
 
-    P_FORMAT_BC1_RGB_UNORM   = 131,
-    P_FORMAT_BC1_RGB_SRGB    = 132,
-    P_FORMAT_BC1_RGBA_UNORM  = 133,
-    P_FORMAT_BC1_RGBA_SRGB   = 134,
-    P_FORMAT_BC2_UNORM       = 135,
-    P_FORMAT_BC2_SRGB        = 136,
-    P_FORMAT_BC3_UNORM       = 137,
-    P_FORMAT_BC3_SRGB        = 138,
-    P_FORMAT_BC4_UNORM       = 139,
-    P_FORMAT_BC4_SNORM       = 140,
-    P_FORMAT_BC5_UNORM       = 141,
-    P_FORMAT_BC5_SNORM       = 142,
-    P_FORMAT_BC6H_UFLOAT     = 143,
-    P_FORMAT_BC6H_SFLOAT     = 144,
-    P_FORMAT_BC7_UNORM       = 145,
-    P_FORMAT_BC7_SRGB        = 146,
+    P_FORMAT_BC1_RGB_UNORM  = 131,
+    P_FORMAT_BC1_RGB_SRGB   = 132,
+    P_FORMAT_BC1_RGBA_UNORM = 133,
+    P_FORMAT_BC1_RGBA_SRGB  = 134,
+    P_FORMAT_BC2_UNORM      = 135,
+    P_FORMAT_BC2_SRGB       = 136,
+    P_FORMAT_BC3_UNORM      = 137,
+    P_FORMAT_BC3_SRGB       = 138,
+    P_FORMAT_BC4_UNORM      = 139,
+    P_FORMAT_BC4_SNORM      = 140,
+    P_FORMAT_BC5_UNORM      = 141,
+    P_FORMAT_BC5_SNORM      = 142,
+    P_FORMAT_BC6H_UFLOAT    = 143,
+    P_FORMAT_BC6H_SFLOAT    = 144,
+    P_FORMAT_BC7_UNORM      = 145,
+    P_FORMAT_BC7_SRGB       = 146,
 
     P_FORMAT_ETC2_R8G8B8_UNORM   = 147,
     P_FORMAT_ETC2_R8G8B8_SRGB    = 148,
@@ -505,5 +506,9 @@ typedef struct PigmentConfig {
     uint32_t queue_request_count;
     const void* extra;
 } PigmentConfig;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

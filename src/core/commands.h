@@ -17,13 +17,16 @@
 #ifndef PIGMENT_COMMANDS_H
 #define PIGMENT_COMMANDS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 /**
  * @brief One batch of command buffers to submit on a queue.
  */
 typedef struct PSubmit {
-
     /**
      * @brief The target queue, NULL to default to graphics.
      */
@@ -178,42 +181,40 @@ void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
 void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
 
 /**
- * @brief Initialize a custom PResourceTracker so it can be stamped via pigment_cmd_use.
+ * @brief Create a resource tracker for a user-defined resource type.
  *
- * Allocatate an array of timeline values per device queue.
- *
+ * A tracker lets a custom resource be stamped at submit time via pigment_cmd_use, so its
+ * deferred destroy can wait on the exact GPU completion value of the last submit that used it.
  * Pigment's built-in resource types (PBuffer, PImage, PSampler, PPipeline, PDescriptorSet,
- * PWindowRenderer) initialize their tracker internally, so this is only needed for user types
- * that embed a PResourceTracker.
+ * PWindowRenderer) own a tracker internally, so this is only needed for user types.
  *
  * @param pigment Pigment instance.
- * @param tracker Tracker to initialize. Safe to call on a zero-initialized struct.
  *
- * @return PIGMENT_SUCCESS on success, error code otherwise.
+ * @return A new tracker, or NULL on failure. Release it with pigment_destroy_resource_tracker.
  */
-PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracker);
+PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
 
 /**
- * @brief Release the per-queue array allocated by pigment_resource_tracker_init.
+ * @brief Destroy a tracker created by pigment_create_resource_tracker.
  *
  * @param pigment Pigment instance.
- * @param tracker Tracker to release.
+ * @param tracker Tracker to destroy.
  */
-void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracker);
+void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracker);
 
 /**
  * @brief Stamp a custom resource tracker at submit time.
  *
  * The destroy of the resource will be able to wait on the precise GPU completion value of the
- * last submit that stamped this tracker. Use this for user types embedding a zero-initialized
- * PResourceTracker, for example an aggregate resource wrapping several built-in objects, or a
- * wrapper around raw Vulkan handles you allocated yourself. For Pigment's built-in resource
- * types use the dedicated pigment_cmd_use_buffer, pigment_cmd_use_image and
+ * last submit that stamped this tracker. Use this for user types holding a tracker from
+ * pigment_create_resource_tracker, for example an aggregate resource wrapping several built-in
+ * objects, or a wrapper around raw Vulkan handles you allocated yourself. For Pigment's built-in
+ * resource types use the dedicated pigment_cmd_use_buffer, pigment_cmd_use_image and
  * pigment_cmd_use_sampler.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer being recorded.
- * @param tracker Pointer to the embedded tracker (e.g. &my_custom_resource->tracker).
+ * @param tracker Tracker from pigment_create_resource_tracker.
  */
 void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
 
@@ -259,5 +260,9 @@ void pigment_cmd_use_image(Pigment* pigment, PCommandBuffer* cmd, PImage* image)
  * @param sampler Sampler used by the command buffer.
  */
 void pigment_cmd_use_sampler(Pigment* pigment, PCommandBuffer* cmd, PSampler* sampler);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

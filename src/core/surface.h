@@ -17,6 +17,10 @@
 #ifndef PIGMENT_SURFACE_H
 #define PIGMENT_SURFACE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc);
@@ -45,5 +49,9 @@ PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 PColorSpace pigment_get_color_space(PWindowRenderer* renderer);
 PSampleCount pigment_get_sample_count(PWindowRenderer* renderer);
 void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

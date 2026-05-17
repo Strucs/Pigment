@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_RENDER_TARGETS_H
 #define PIGMENT_STD_RENDER_TARGETS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "pigment/defines.h"
 #include "pigment/frame.h"
 #include "pigment/image.h"
@@ -72,5 +76,9 @@ PAttachmentRef pigment_std_render_target_color_ref(PRenderTarget* target, uint32
 PAttachmentRef pigment_std_render_target_depth_ref(PRenderTarget* target);
 PAttachmentRef pigment_std_render_target_color_layer_ref(PRenderTarget* target, uint32_t index, uint32_t base_layer, uint32_t layer_count);
 PAttachmentRef pigment_std_render_target_depth_layer_ref(PRenderTarget* target, uint32_t base_layer, uint32_t layer_count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

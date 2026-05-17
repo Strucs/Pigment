@@ -17,6 +17,10 @@
 #ifndef PIGMENT_SAMPLER_H
 #define PIGMENT_SAMPLER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 typedef enum PAddressMode {
@@ -42,4 +46,7 @@ struct PSamplerDesc {
 PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc);
 void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler);
 
+#ifdef __cplusplus
+}
+#endif
 #endif

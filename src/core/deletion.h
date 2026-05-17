@@ -17,6 +17,10 @@
 #ifndef PIGMENT_DELETION_H
 #define PIGMENT_DELETION_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 typedef void (*PDestroyFn)(Pigment*, void*);
@@ -60,5 +64,9 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
  * @param pigment Pigment instance.
  */
 void pigment_drain_pending(Pigment* pigment);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

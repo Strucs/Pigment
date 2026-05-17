@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_LIGHTS_H
 #define PIGMENT_STD_LIGHTS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "camera.h"
 #include "mesh.h"
 #include "types.h"
@@ -58,5 +62,9 @@ void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id);
 uint64_t pigment_std_light_address(PLights* lights);
 
 void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

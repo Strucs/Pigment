@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_UPLOAD_H
 #define PIGMENT_STD_UPLOAD_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "pigment/defines.h"
 #include "pigment/image.h"
 
@@ -108,5 +112,9 @@ PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, PDeviceQu
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
 PResult pigment_std_image_finalize(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, PImage* const* images, const PImageUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

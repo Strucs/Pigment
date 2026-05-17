@@ -42,7 +42,7 @@ BraceWrapping:
   AfterNamespace: false
   AfterStruct: false
   AfterUnion: false
-  AfterExternBlock: true
+  AfterExternBlock: false
   BeforeElse: true
   BeforeWhile: true
   IndentBraces: false
@@ -69,7 +69,7 @@ IncludeBlocks: Regroup
 IndentAccessModifiers: false
 IndentCaseBlocks: true
 IndentCaseLabels: true
-IndentExternBlock: AfterExternBlock
+IndentExternBlock: NoIndent
 IndentGotoLabels: false
 IndentPPDirectives: BeforeHash
 IndentRequiresClause: false

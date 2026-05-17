@@ -17,6 +17,10 @@
 #ifndef PIGMENT_VK_H
 #define PIGMENT_VK_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "pigment.h"
 
 #include <volk.h>
@@ -177,5 +181,9 @@ static inline void pigment_vk_append_pnext(void* head, void* tail)
     }
     current->pNext = (VkBaseOutStructure*) tail;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

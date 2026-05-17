@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_IO_H
 #define PIGMENT_STD_IO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 typedef struct Pigment Pigment;
@@ -30,5 +34,9 @@ typedef struct IOCallbacks {
 } IOCallbacks;
 
 IOCallbacks pigment_std_default_file_io(Pigment* pigment);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

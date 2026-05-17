@@ -99,6 +99,10 @@ typedef struct PRuntimeConfig {
     const void* extra;
 } PRuntimeConfig;
 
+struct PResourceTracker {
+    _Atomic uint64_t* last_used;
+};
+
 struct Pigment {
     PAllocator cpu_allocator;          // CPU allocator (user-provided or default malloc/free)
     VkAllocationCallbacks vk_alloc;    // built from cpu_allocator, passed to all vkCreate*/vkDestroy*

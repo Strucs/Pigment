@@ -17,6 +17,10 @@
 #ifndef PIGMENT_COMPUTE_H
 #define PIGMENT_COMPUTE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 typedef struct PDispatchIndirectCommand {
@@ -27,5 +31,9 @@ typedef struct PDispatchIndirectCommand {
 
 void pigment_cmd_dispatch(Pigment* pigment, PCommandBuffer* cmd, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
 void pigment_cmd_dispatch_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

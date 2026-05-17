@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_BINDLESS_H
 #define PIGMENT_STD_BINDLESS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "render_targets.h"
 
 #include "pigment/defines.h"
@@ -69,4 +73,7 @@ PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
  */
 PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame);
 
+#ifdef __cplusplus
+}
+#endif
 #endif

@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_PIPELINE_LOADER_H
 #define PIGMENT_STD_PIPELINE_LOADER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "bindless.h"
 #include "camera.h"
 #include "file_io.h"
@@ -35,5 +39,9 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
 PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
 PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
 PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

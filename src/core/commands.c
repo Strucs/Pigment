@@ -845,6 +845,40 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
     tracker->last_used = NULL;
 }
 
+PResourceTracker* pigment_create_resource_tracker(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return NULL;
+    }
+
+    PResourceTracker* tracker = P_NEW_FOR_OBJECT(pigment, tracker);
+    if(tracker == NULL)
+    {
+        return NULL;
+    }
+    tracker->last_used = NULL;
+
+    if(pigment_resource_tracker_init(pigment, tracker) != PIGMENT_SUCCESS)
+    {
+        P_FREE(pigment, tracker);
+        return NULL;
+    }
+
+    return tracker;
+}
+
+void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracker)
+{
+    if(tracker == NULL)
+    {
+        return;
+    }
+
+    pigment_resource_tracker_destroy(pigment, tracker);
+    P_FREE(pigment, tracker);
+}
+
 VkCommandBuffer pigment_vk_command_buffer(PCommandBuffer* cmd)
 {
     return (cmd != NULL) ? cmd->buffer : VK_NULL_HANDLE;

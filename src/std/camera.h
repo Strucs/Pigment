@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_CAMERA_H
 #define PIGMENT_STD_CAMERA_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "types.h"
 
 #include "pigment/defines.h"
@@ -31,5 +35,9 @@ void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection);
 
 uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
 void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -17,11 +17,19 @@
 #ifndef PIGMENT_SYNCHRONIZATION_H
 #define PIGMENT_SYNCHRONIZATION_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t swapchain_image_count);
 void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const uint32_t max_frame);
 PResult recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t index);
 PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

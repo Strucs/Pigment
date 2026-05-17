@@ -17,6 +17,10 @@
 #ifndef PIGMENT_FRAME_H
 #define PIGMENT_FRAME_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "buffers.h"
 #include "defines.h"
 #include "pipeline.h"
@@ -200,5 +204,9 @@ void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PView
 void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count);
 void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope);
 void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -17,6 +17,10 @@
 #ifndef PIGMENT_PIPELINE_H
 #define PIGMENT_PIPELINE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 typedef enum PStencilOp {
@@ -199,5 +203,9 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
 void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
 
 void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

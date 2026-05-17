@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_TYPES_H
 #define PIGMENT_STD_TYPES_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef float PVec2[2];
 typedef float PVec3[3];
 typedef float PVec4[4];
@@ -30,5 +34,9 @@ typedef float PMat4[4][4];
         {0.0f, 0.0f, 1.0f, 0.0f}, \
         {0.0f, 0.0f, 0.0f, 1.0f}  \
     }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

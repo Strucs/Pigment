@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_DRAW_H
 #define PIGMENT_STD_DRAW_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "bindless.h"
 #include "camera.h"
 #include "mesh.h"
@@ -48,5 +52,9 @@ void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
 void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
 void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot);
 void pigment_std_draw_crt(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

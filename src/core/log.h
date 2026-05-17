@@ -17,6 +17,10 @@
 #ifndef PIGMENT_LOG_H
 #define PIGMENT_LOG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 #include <stddef.h>
@@ -35,7 +39,7 @@ typedef void (*PigmentLogCallback)(
     void* user_data
 );
 
-struct PigmentLoggerCreateInfo{
+struct PigmentLoggerCreateInfo {
     void* user_data;
     PigmentLogSeverity severity_filter;
     PigmentLogType type_filter;
@@ -59,5 +63,9 @@ void pigment_default_log_callback(
     const PigmentLogRecord* record,
     void* user_data
 );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

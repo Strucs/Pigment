@@ -17,6 +17,10 @@
 #ifndef PIGMENT_H
 #define PIGMENT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "device.h"
 #include "buffers.h"
 #include "cmd_sync.h"
@@ -42,5 +46,9 @@ PBool pigment_supports(Pigment* pigment, PFeature feature);
 
 PSampleCount pigment_get_max_sample_count(Pigment* pigment);
 PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

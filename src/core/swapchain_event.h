@@ -17,9 +17,17 @@
 #ifndef PIGMENT_SWAPCHAIN_EVENT_H
 #define PIGMENT_SWAPCHAIN_EVENT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "defines.h"
 
 uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PWindowRenderer* renderer, PSwapchainRecreateFn func, void* user_data);
 void pigment_unregister_swapchain_recreate(Pigment* pigment, uint32_t handle);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

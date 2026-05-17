@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_GLTF_LOADER_H
 #define PIGMENT_STD_GLTF_LOADER_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "bindless.h"
 #include "file_io.h"
 #include "material.h"
@@ -68,5 +72,9 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* f
 void free_mesh_asset(Pigment* pigment, MeshAsset* mesh);
 
 PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

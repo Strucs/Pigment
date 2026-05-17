@@ -17,6 +17,10 @@
 #ifndef PIGMENT_STD_VERTEX_H
 #define PIGMENT_STD_VERTEX_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "types.h"
 
 #include "pigment/defines.h"
@@ -28,5 +32,10 @@ typedef struct PVertex {
     float uv_y;
     PVec4 color;
 } __attribute__((aligned(16))) PVertex;
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
