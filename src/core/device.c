@@ -21,7 +21,8 @@
 
 #include "internal.h"
 
-static const VkQueueFlags QUEUE_USEFUL_FLAGS = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+static const VkQueueFlags QUEUE_USEFUL_FLAGS      = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
+static const VkQueueFlags QUEUE_SPECIALIZED_FLAGS = VK_QUEUE_VIDEO_DECODE_BIT_KHR | VK_QUEUE_VIDEO_ENCODE_BIT_KHR | VK_QUEUE_OPTICAL_FLOW_BIT_NV;
 
 static const PQueueRequest DEFAULT_QUEUE_REQUESTS[] = {
     {.required = P_QUEUE_GRAPHICS_BIT, .count = 1, .priority = 1.0f},
@@ -510,6 +511,10 @@ static uint32_t resolve_queue_requests(const VkQueueFamilyProperties* queue_fami
             uint32_t best_score  = UINT32_MAX;
             for(uint32_t family_idx = 0; family_idx < queue_families_count; family_idx++)
             {
+                if(queue_families[family_idx].queueFlags & QUEUE_SPECIALIZED_FLAGS)
+                {
+                    continue;
+                }
                 VkQueueFlags vk_flags      = queue_families[family_idx].queueFlags & QUEUE_USEFUL_FLAGS;
                 PQueueFlags family_pigment = vk_to_pigment_queue_flags(vk_flags);
                 if((family_pigment & request->required) != request->required)
