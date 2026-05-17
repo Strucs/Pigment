@@ -36,6 +36,27 @@ static inline uint32_t desc_depth(const PImageUploadDesc* upload)
     return upload->depth ? upload->depth : 1;
 }
 
+static inline uint32_t desc_mip_count(const PImageUploadDesc* upload)
+{
+    return upload->mip_count ? upload->mip_count : 1;
+}
+
+static inline uint32_t mip_dim(uint32_t base, uint32_t level)
+{
+    uint32_t value = base >> level;
+    return value ? value : 1;
+}
+
+static inline uint64_t mip_layer_size(const PImageUploadDesc* upload, uint32_t level)
+{
+    return pigment_format_image_size(upload->format, mip_dim(upload->width, level), mip_dim(upload->height, level)) * mip_dim(desc_depth(upload), level);
+}
+
+static inline uint32_t block_align(uint32_t value, uint32_t block)
+{
+    return ((value + block - 1) / block) * block;
+}
+
 PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PBufferUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle)
 {
     if(pigment == NULL || pool == NULL || uploads == NULL || count == 0)
@@ -167,18 +188,26 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQ
 
 static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const PImageUploadDesc* upload)
 {
-    uint32_t pixel_size = pigment_format_pixel_size(upload->format);
-    if(pixel_size == 0)
+    if(mip_layer_size(upload, 0) == 0)
     {
         PLOG_ERROR(pigment, "Unsupported PFormat (%d)!", upload->format);
         return PIGMENT_ERROR;
     }
 
-    uint32_t layer_count = desc_layer_count(upload);
-    uint32_t depth       = desc_depth(upload);
-    uint32_t mip_levels  = 1;
-    if(upload->flags & P_IMAGE_UPLOAD_MIPMAPS)
+    uint32_t layer_count   = desc_layer_count(upload);
+    uint32_t depth         = desc_depth(upload);
+    uint32_t provided_mips = desc_mip_count(upload);
+    uint32_t image_mips    = provided_mips;
+
+    if(upload->flags & P_IMAGE_GENERATE_MIPMAPS)
     {
+        const PFormatFeature mip_features = P_FORMAT_FEATURE_BLIT_SRC | P_FORMAT_FEATURE_BLIT_DST | P_FORMAT_FEATURE_SAMPLED_FILTER_LINEAR;
+        if((pigment_format_features(pigment, upload->format) & mip_features) != mip_features)
+        {
+            PLOG_ERROR(pigment, "Image format does not support blit-based mip generation!");
+            return PIGMENT_ERROR;
+        }
+
         uint32_t max_dim = upload->width;
         if(upload->height > max_dim)
         {
@@ -188,21 +217,19 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
         {
             max_dim = depth;
         }
+        image_mips = 1;
         while(max_dim > 1)
         {
             max_dim >>= 1;
-            mip_levels++;
+            image_mips++;
         }
     }
 
-    if(mip_levels > 1 && !pigment_format_supports_linear_blit(pigment, upload->format))
+    uint64_t total_size = 0;
+    for(uint32_t m = 0; m < provided_mips; m++)
     {
-        PLOG_ERROR(pigment, "Image format does not support linear blitting (needed for mip generation)!");
-        return PIGMENT_ERROR;
+        total_size += mip_layer_size(upload, m) * layer_count;
     }
-
-    uint64_t layer_size = (uint64_t) upload->width * upload->height * depth * pixel_size;
-    uint64_t total_size = layer_size * layer_count;
 
     PBufferDesc staging_desc = {
         .size   = total_size,
@@ -217,9 +244,15 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
     }
 
     unsigned char* mapped = (unsigned char*) pigment_buffer_mapped(*out_staging);
-    for(uint32_t i = 0; i < layer_count; i++)
+    uint64_t offset       = 0;
+    for(uint32_t m = 0; m < provided_mips; m++)
     {
-        memcpy(mapped + i * layer_size, upload->layers[i], (size_t) layer_size);
+        uint64_t layer_size = mip_layer_size(upload, m);
+        for(uint32_t l = 0; l < layer_count; l++)
+        {
+            memcpy(mapped + offset, upload->layers[m * layer_count + l], (size_t) layer_size);
+            offset += layer_size;
+        }
     }
     pigment_buffer_flush(pigment, *out_staging, 0, total_size);
 
@@ -230,7 +263,7 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
         .array_layers       = layer_count,
         .format             = upload->format,
         .usage              = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_SAMPLED,
-        .mip_levels         = mip_levels,
+        .mip_levels         = image_mips,
         .type               = upload->type,
         .shared_queues      = upload->shared_queues,
         .shared_queue_count = upload->shared_queue_count,
@@ -247,9 +280,8 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
 
 static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, const PImageUploadDesc* upload)
 {
-    uint32_t layer_count = desc_layer_count(upload);
-    uint32_t depth       = desc_depth(upload);
-    uint64_t layer_size  = (uint64_t) upload->width * upload->height * depth * pigment_format_pixel_size(upload->format);
+    uint32_t layer_count   = desc_layer_count(upload);
+    uint32_t provided_mips = desc_mip_count(upload);
 
     PImageBarrier to_dst = {
         .image       = image,
@@ -261,23 +293,38 @@ static void record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* i
     };
     pigment_cmd_image_barriers(pigment, cmd, &to_dst, 1);
 
-    P_STACK_OR_HEAP(PBufferImageCopy, regions, layer_count);
+    uint32_t region_count = provided_mips * layer_count;
+    P_STACK_OR_HEAP(PBufferImageCopy, regions, region_count);
     if(regions == NULL)
     {
         return;
     }
-    for(uint32_t i = 0; i < layer_count; i++)
+
+    PFormatInfo format = pigment_format_info(upload->format);
+    uint64_t offset    = 0;
+    uint32_t r         = 0;
+    for(uint32_t m = 0; m < provided_mips; m++)
     {
-        regions[i] = (PBufferImageCopy) {
-            .buffer_offset    = (uint64_t) i * layer_size,
-            .base_array_layer = i,
-            .layer_count      = 1,
-            .extent_w         = upload->width,
-            .extent_h         = upload->height,
-            .extent_d         = depth,
-        };
+        uint64_t layer_size = mip_layer_size(upload, m);
+        uint32_t w          = mip_dim(upload->width, m);
+        uint32_t h          = mip_dim(upload->height, m);
+        for(uint32_t l = 0; l < layer_count; l++)
+        {
+            regions[r++] = (PBufferImageCopy) {
+                .buffer_offset       = offset,
+                .buffer_row_length   = block_align(w, format.block_width),
+                .buffer_image_height = block_align(h, format.block_height),
+                .mip_level           = m,
+                .base_array_layer    = l,
+                .layer_count         = 1,
+                .extent_w            = w,
+                .extent_h            = h,
+                .extent_d            = mip_dim(desc_depth(upload), m),
+            };
+            offset += layer_size;
+        }
     }
-    pigment_cmd_copy_buffer_to_image(pigment, cmd, staging, image, P_IMAGE_LAYOUT_TRANSFER_DST, regions, layer_count);
+    pigment_cmd_copy_buffer_to_image(pigment, cmd, staging, image, P_IMAGE_LAYOUT_TRANSFER_DST, regions, region_count);
     P_STACK_OR_HEAP_FREE(pigment, regions);
 }
 
@@ -285,8 +332,9 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
 {
     *out_image = NULL;
 
-    uint32_t layer_count = desc_layer_count(upload);
-    uint32_t depth       = desc_depth(upload);
+    uint32_t layer_count   = desc_layer_count(upload);
+    uint32_t depth         = desc_depth(upload);
+    uint32_t provided_mips = desc_mip_count(upload);
 
     PImageDesc image_desc = {
         .width              = upload->width,
@@ -294,8 +342,8 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
         .depth              = depth,
         .array_layers       = layer_count,
         .format             = upload->format,
-        .usage              = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER | P_IMAGE_USAGE_TRANSFER_DST,
-        .mip_levels         = 1,
+        .usage              = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER | P_IMAGE_USAGE_TRANSFER_DST | P_IMAGE_USAGE_TRANSFER_SRC,
+        .mip_levels         = provided_mips,
         .type               = upload->type,
         .shared_queues      = upload->shared_queues,
         .shared_queue_count = upload->shared_queue_count,
@@ -309,26 +357,38 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
 
     pigment_image_host_transition(pigment, &(PHostImageTransition) {.image = image, .old_layout = P_IMAGE_LAYOUT_UNDEFINED, .new_layout = P_IMAGE_LAYOUT_GENERAL}, 1);
 
-    P_STACK_OR_HEAP(PHostImageCopy, regions, layer_count);
+    uint32_t region_count = provided_mips * layer_count;
+    P_STACK_OR_HEAP(PHostImageCopy, regions, region_count);
     if(regions == NULL)
     {
         pigment_destroy_image(pigment, image);
         return PIGMENT_ERROR;
     }
 
-    for(uint32_t i = 0; i < layer_count; i++)
+    PFormatInfo format = pigment_format_info(upload->format);
+    uint32_t r         = 0;
+
+    for(uint32_t m = 0; m < provided_mips; m++)
     {
-        regions[i] = (PHostImageCopy) {
-            .host_pointer     = (void*) upload->layers[i],
-            .base_array_layer = i,
-            .layer_count      = 1,
-            .extent_w         = upload->width,
-            .extent_h         = upload->height,
-            .extent_d         = depth,
-        };
+        uint32_t w = mip_dim(upload->width, m);
+        uint32_t h = mip_dim(upload->height, m);
+        for(uint32_t l = 0; l < layer_count; l++)
+        {
+            regions[r++] = (PHostImageCopy) {
+                .host_pointer        = (void*) upload->layers[m * layer_count + l],
+                .memory_row_length   = block_align(w, format.block_width),
+                .memory_image_height = block_align(h, format.block_height),
+                .mip_level           = m,
+                .base_array_layer    = l,
+                .layer_count         = 1,
+                .extent_w            = w,
+                .extent_h            = h,
+                .extent_d            = mip_dim(depth, m),
+            };
+        }
     }
 
-    pigment_image_write(pigment, image, P_IMAGE_LAYOUT_GENERAL, regions, layer_count);
+    pigment_image_write(pigment, image, P_IMAGE_LAYOUT_GENERAL, regions, region_count);
     P_STACK_OR_HEAP_FREE(pigment, regions);
 
     pigment_image_host_transition(pigment, &(PHostImageTransition) {.image = image, .old_layout = P_IMAGE_LAYOUT_GENERAL, .new_layout = P_IMAGE_LAYOUT_TRANSFER_DST}, 1);
@@ -367,7 +427,14 @@ PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, PDeviceQu
     {
         const PImageUploadDesc* upload = &uploads[i];
 
-        if(host_copy && !(upload->flags & P_IMAGE_UPLOAD_MIPMAPS))
+        if((upload->flags & P_IMAGE_GENERATE_MIPMAPS) && upload->mip_count > 1)
+        {
+            PLOG_ERROR(pigment, "Image upload %u sets P_IMAGE_GENERATE_MIPMAPS together with a precomputed mip_count > 1.", i);
+            result = PIGMENT_ERROR;
+            break;
+        }
+
+        if(host_copy && !(upload->flags & P_IMAGE_GENERATE_MIPMAPS) && desc_mip_count(upload) == 1)
         {
             if(host_copy_image(pigment, &out_images[i], upload) == PIGMENT_SUCCESS)
             {
@@ -451,7 +518,21 @@ PResult pigment_std_image_finalize(Pigment* pigment, PCommandPool* pool, PDevice
     pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, NULL);
     for(uint32_t i = 0; i < count; i++)
     {
-        pigment_cmd_generate_mipmaps(pigment, cmd, images[i], 0, desc_layer_count(&uploads[i]), P_IMAGE_LAYOUT_SHADER_READ_ONLY);
+        if(uploads[i].flags & P_IMAGE_GENERATE_MIPMAPS)
+        {
+            pigment_cmd_generate_mipmaps(pigment, cmd, images[i], 0, desc_layer_count(&uploads[i]), P_IMAGE_LAYOUT_SHADER_READ_ONLY);
+            continue;
+        }
+
+        PImageBarrier to_sampled = {
+            .image       = images[i],
+            .old_layout  = P_IMAGE_LAYOUT_TRANSFER_DST,
+            .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
+            .src         = {    P_PIPELINE_STAGE_TRANSFER_BIT, P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
+            .dst         = {P_PIPELINE_STAGE_ALL_COMMANDS_BIT,    P_MEMORY_ACCESS_MEMORY_READ_BIT},
+            .layer_count = desc_layer_count(&uploads[i]),
+        };
+        pigment_cmd_image_barriers(pigment, cmd, &to_sampled, 1);
     }
     pigment_end_recording(pigment, cmd);
 

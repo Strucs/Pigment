@@ -38,6 +38,20 @@ PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* b
 
 uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
 uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
+
+/**
+ * @brief Registers an already-created image into the bindless image array.
+ *
+ * The bindless takes ownership and destroys it with pigment_std_destroy_bindless,
+ * so the caller must not destroy it afterwards.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param image Image to register, already uploaded and in a sampleable layout.
+ *
+ * @return Image slot, or UINT32_MAX on failure.
+ */
+uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image);
 uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const PSamplerDesc* desc);
 
 // 6 face buffers in the order: +X, -X, +Y, -Y, +Z, -Z. All faces must share width/height/format.

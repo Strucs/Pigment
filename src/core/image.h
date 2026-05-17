@@ -41,6 +41,19 @@ typedef enum PImageFlags {
     P_IMAGE_FLAG_HOST_MAPPED = 1 << 0
 } PImageFlags;
 
+typedef enum PFormatFeature {
+    P_FORMAT_FEATURE_SAMPLED                  = 1 << 0,
+    P_FORMAT_FEATURE_SAMPLED_FILTER_LINEAR    = 1 << 1,
+    P_FORMAT_FEATURE_STORAGE                  = 1 << 2,
+    P_FORMAT_FEATURE_COLOR_ATTACHMENT         = 1 << 3,
+    P_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND   = 1 << 4,
+    P_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT = 1 << 5,
+    P_FORMAT_FEATURE_BLIT_SRC                 = 1 << 6,
+    P_FORMAT_FEATURE_BLIT_DST                 = 1 << 7,
+    P_FORMAT_FEATURE_TRANSFER_SRC             = 1 << 8,
+    P_FORMAT_FEATURE_TRANSFER_DST             = 1 << 9,
+} PFormatFeature;
+
 typedef struct PImageDesc {
     uint32_t width;
     uint32_t height;
@@ -48,10 +61,10 @@ typedef struct PImageDesc {
     uint32_t array_layers;    // for arrays/cubes, otherwise 0/1
     PFormat format;
     PImageUsage usage;
-    PSampleCount samples;         // 0 or P_SAMPLE_COUNT_1 for no MSAA
-    uint32_t mip_levels;          // 0 = single mip, otherwise full chain
-    PImageType type;              // 0 = 2D
-    PImageFlags flags;            // 0 = none. P_IMAGE_FLAG_HOST_MAPPED requires 2D, 1 mip, 1 layer, 1 sample
+    PSampleCount samples;                  // 0 or P_SAMPLE_COUNT_1 for no MSAA
+    uint32_t mip_levels;                   // 0 = single mip, otherwise full chain
+    PImageType type;                       // 0 = 2D
+    PImageFlags flags;                     // 0 = none. P_IMAGE_FLAG_HOST_MAPPED requires 2D, 1 mip, 1 layer, 1 sample
     PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE (one queue family at a time, any family). List 2+ queues to share across their families.
     uint32_t shared_queue_count;
     const char* name;
@@ -91,7 +104,7 @@ typedef struct PImageCopy {
 } PImageCopy;
 
 typedef struct PHostImageCopy {
-    void* host_pointer;              // source pixels for _write, destination for _read
+    void* host_pointer;    // source pixels for _write, destination for _read
     uint32_t memory_row_length;
     uint32_t memory_image_height;
     uint32_t mip_level;
@@ -136,8 +149,52 @@ typedef struct PImageBlit {
     int32_t dst_max_z;
 } PImageBlit;
 
-uint32_t pigment_format_pixel_size(PFormat format);
-PBool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format);
+typedef struct PFormatInfo {
+    uint32_t block_width;
+    uint32_t block_height;
+    uint32_t block_size;
+} PFormatInfo;
+
+/**
+ * @brief Returns the block layout of a format.
+ *
+ * Uncompressed formats report a 1x1 block whose size is the texel size. Block-compressed
+ * formats (BC, ETC2, ASTC) report their real block dimensions. Unknown or depth/stencil
+ * formats report a zeroed struct.
+ *
+ * @param format Format to describe.
+ *
+ * @return Block width, height and byte size for the format.
+ */
+PFormatInfo pigment_format_info(PFormat format);
+
+/**
+ * @brief Returns the byte size of one mip level of an image.
+ *
+ * The extent is rounded up to whole blocks, so the size is correct for block-compressed formats.
+ *
+ * @param format Texel format.
+ * @param width Level width in texels.
+ * @param height Level height in texels.
+ *
+ * @return Size in bytes, or 0 for a format without a defined block layout.
+ */
+uint64_t pigment_format_image_size(PFormat format, uint32_t width, uint32_t height);
+
+/**
+ * @brief Asks the driver what a format can be used for on the current device.
+ *
+ * Reports which operations an image of this format supports: sampling, linear filtering,
+ * storage, color or depth attachment, blit and transfer. The answer covers normally created
+ * images, not P_IMAGE_FLAG_HOST_MAPPED ones. Use it to pick a format or to check one before
+ * creating an image.
+ *
+ * @param pigment Pigment instance.
+ * @param format Format to query.
+ *
+ * @return Bitmask of supported PFormatFeature bits, or 0 if the format is unsupported.
+ */
+PFormatFeature pigment_format_features(Pigment* pigment, PFormat format);
 
 void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PImage* dst, PImageLayout dst_layout, const PBufferImageCopy* regions, uint32_t region_count);
 void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PBuffer* dst, const PBufferImageCopy* regions, uint32_t region_count);

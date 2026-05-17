@@ -25,6 +25,12 @@
 
 #define PIGMENT_VIEW_CACHE_INITIAL_CAPACITY 4
 
+typedef struct PImageResources {
+    VkImage image;
+    PVkAllocation* allocation;
+    PImageViewCache view_cache;
+} PImageResources;
+
 static void destroy_image_immediate(Pigment* pigment, void* resource);
 static void destroy_image_resources(Pigment* pigment, void* resource);
 static void translate_image_type(PImageType type, VkImageType* out_image_type, VkImageCreateFlags* out_flags);
@@ -48,43 +54,170 @@ VkImageView pigment_vk_image_view(PImageView* view)
     return (view != NULL) ? view->view : VK_NULL_HANDLE;
 }
 
-uint32_t pigment_format_pixel_size(PFormat format)
+PFormatInfo pigment_format_info(PFormat format)
 {
     switch(format)
     {
         case P_FORMAT_R8_UNORM:
         case P_FORMAT_R8_UINT:
-            return 1;
+            return (PFormatInfo) {1, 1, 1};
         case P_FORMAT_R8G8_UNORM:
         case P_FORMAT_R16_UINT:
-            return 2;
+            return (PFormatInfo) {1, 1, 2};
         case P_FORMAT_R8G8B8A8_UNORM:
         case P_FORMAT_R8G8B8A8_SRGB:
         case P_FORMAT_B8G8R8A8_UNORM:
         case P_FORMAT_B8G8R8A8_SRGB:
-            return 4;
+            return (PFormatInfo) {1, 1, 4};
         case P_FORMAT_R16G16B16A16_SFLOAT:
-            return 8;
+            return (PFormatInfo) {1, 1, 8};
+
+        case P_FORMAT_BC1_RGB_UNORM:
+        case P_FORMAT_BC1_RGB_SRGB:
+        case P_FORMAT_BC1_RGBA_UNORM:
+        case P_FORMAT_BC1_RGBA_SRGB:
+        case P_FORMAT_BC4_UNORM:
+        case P_FORMAT_BC4_SNORM:
+            return (PFormatInfo) {4, 4, 8};
+        case P_FORMAT_BC2_UNORM:
+        case P_FORMAT_BC2_SRGB:
+        case P_FORMAT_BC3_UNORM:
+        case P_FORMAT_BC3_SRGB:
+        case P_FORMAT_BC5_UNORM:
+        case P_FORMAT_BC5_SNORM:
+        case P_FORMAT_BC6H_UFLOAT:
+        case P_FORMAT_BC6H_SFLOAT:
+        case P_FORMAT_BC7_UNORM:
+        case P_FORMAT_BC7_SRGB:
+            return (PFormatInfo) {4, 4, 16};
+
+        case P_FORMAT_ETC2_R8G8B8_UNORM:
+        case P_FORMAT_ETC2_R8G8B8_SRGB:
+        case P_FORMAT_ETC2_R8G8B8A1_UNORM:
+        case P_FORMAT_ETC2_R8G8B8A1_SRGB:
+        case P_FORMAT_EAC_R11_UNORM:
+        case P_FORMAT_EAC_R11_SNORM:
+            return (PFormatInfo) {4, 4, 8};
+        case P_FORMAT_ETC2_R8G8B8A8_UNORM:
+        case P_FORMAT_ETC2_R8G8B8A8_SRGB:
+        case P_FORMAT_EAC_R11G11_UNORM:
+        case P_FORMAT_EAC_R11G11_SNORM:
+            return (PFormatInfo) {4, 4, 16};
+
+        case P_FORMAT_ASTC_4x4_UNORM:
+        case P_FORMAT_ASTC_4x4_SRGB:
+            return (PFormatInfo) {4, 4, 16};
+        case P_FORMAT_ASTC_5x4_UNORM:
+        case P_FORMAT_ASTC_5x4_SRGB:
+            return (PFormatInfo) {5, 4, 16};
+        case P_FORMAT_ASTC_5x5_UNORM:
+        case P_FORMAT_ASTC_5x5_SRGB:
+            return (PFormatInfo) {5, 5, 16};
+        case P_FORMAT_ASTC_6x5_UNORM:
+        case P_FORMAT_ASTC_6x5_SRGB:
+            return (PFormatInfo) {6, 5, 16};
+        case P_FORMAT_ASTC_6x6_UNORM:
+        case P_FORMAT_ASTC_6x6_SRGB:
+            return (PFormatInfo) {6, 6, 16};
+        case P_FORMAT_ASTC_8x5_UNORM:
+        case P_FORMAT_ASTC_8x5_SRGB:
+            return (PFormatInfo) {8, 5, 16};
+        case P_FORMAT_ASTC_8x6_UNORM:
+        case P_FORMAT_ASTC_8x6_SRGB:
+            return (PFormatInfo) {8, 6, 16};
+        case P_FORMAT_ASTC_8x8_UNORM:
+        case P_FORMAT_ASTC_8x8_SRGB:
+            return (PFormatInfo) {8, 8, 16};
+        case P_FORMAT_ASTC_10x5_UNORM:
+        case P_FORMAT_ASTC_10x5_SRGB:
+            return (PFormatInfo) {10, 5, 16};
+        case P_FORMAT_ASTC_10x6_UNORM:
+        case P_FORMAT_ASTC_10x6_SRGB:
+            return (PFormatInfo) {10, 6, 16};
+        case P_FORMAT_ASTC_10x8_UNORM:
+        case P_FORMAT_ASTC_10x8_SRGB:
+            return (PFormatInfo) {10, 8, 16};
+        case P_FORMAT_ASTC_10x10_UNORM:
+        case P_FORMAT_ASTC_10x10_SRGB:
+            return (PFormatInfo) {10, 10, 16};
+        case P_FORMAT_ASTC_12x10_UNORM:
+        case P_FORMAT_ASTC_12x10_SRGB:
+            return (PFormatInfo) {12, 10, 16};
+        case P_FORMAT_ASTC_12x12_UNORM:
+        case P_FORMAT_ASTC_12x12_SRGB:
+            return (PFormatInfo) {12, 12, 16};
+
         default:
-            return 0;
+            return (PFormatInfo) {0, 0, 0};
     }
 }
 
-typedef struct PImageResources {
-    VkImage image;
-    PVkAllocation* allocation;
-    PImageViewCache view_cache;
-} PImageResources;
+uint64_t pigment_format_image_size(PFormat format, uint32_t width, uint32_t height)
+{
+    PFormatInfo info = pigment_format_info(format);
+    if(info.block_size == 0 || info.block_width == 0 || info.block_height == 0)
+    {
+        return 0;
+    }
 
-PBool pigment_format_supports_linear_blit(Pigment* pigment, PFormat format)
+    uint64_t blocks_x = (width + info.block_width - 1) / info.block_width;
+    uint64_t blocks_y = (height + info.block_height - 1) / info.block_height;
+    return blocks_x * blocks_y * info.block_size;
+}
+
+PFormatFeature pigment_format_features(Pigment* pigment, PFormat format)
 {
     if(pigment == NULL || pigment->device == NULL)
     {
-        return P_FALSE;
+        return 0;
     }
-    VkFormatProperties format_properties;
-    vkGetPhysicalDeviceFormatProperties(pigment->device->physical_device, (VkFormat) format, &format_properties);
-    return (format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) != 0;
+
+    VkFormatProperties props;
+    vkGetPhysicalDeviceFormatProperties(pigment->device->physical_device, (VkFormat) format, &props);
+    VkFormatFeatureFlags vk = props.optimalTilingFeatures;
+
+    PFormatFeature out = 0;
+    if(vk & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
+    {
+        out |= P_FORMAT_FEATURE_SAMPLED;
+    }
+    if(vk & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)
+    {
+        out |= P_FORMAT_FEATURE_SAMPLED_FILTER_LINEAR;
+    }
+    if(vk & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)
+    {
+        out |= P_FORMAT_FEATURE_STORAGE;
+    }
+    if(vk & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
+    {
+        out |= P_FORMAT_FEATURE_COLOR_ATTACHMENT;
+    }
+    if(vk & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT)
+    {
+        out |= P_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND;
+    }
+    if(vk & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    {
+        out |= P_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT;
+    }
+    if(vk & VK_FORMAT_FEATURE_BLIT_SRC_BIT)
+    {
+        out |= P_FORMAT_FEATURE_BLIT_SRC;
+    }
+    if(vk & VK_FORMAT_FEATURE_BLIT_DST_BIT)
+    {
+        out |= P_FORMAT_FEATURE_BLIT_DST;
+    }
+    if(vk & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)
+    {
+        out |= P_FORMAT_FEATURE_TRANSFER_SRC;
+    }
+    if(vk & VK_FORMAT_FEATURE_TRANSFER_DST_BIT)
+    {
+        out |= P_FORMAT_FEATURE_TRANSFER_DST;
+    }
+    return out;
 }
 
 VkImageLayout image_layout_to_vk(PImageLayout layout)

@@ -311,6 +311,23 @@ uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindless, const u
     return slot;
 }
 
+uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image)
+{
+    if(pigment == NULL || bindless == NULL || image == NULL)
+    {
+        return UINT32_MAX;
+    }
+
+    uint32_t slot = bindless->images.count;
+    if(image_list_append(pigment, &bindless->images, image) != PIGMENT_SUCCESS)
+    {
+        return UINT32_MAX;
+    }
+
+    write_image_descriptor(pigment, bindless, slot, image);
+    return slot;
+}
+
 uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
 {
     if(pigment == NULL || bindless == NULL || pixels == NULL || count == 0)
@@ -329,7 +346,7 @@ uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, c
 
     for(uint32_t i = 0; i < count; i++)
     {
-        descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = 0};
+        descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = P_IMAGE_GENERATE_MIPMAPS};
     }
 
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, descs, count, new_images, NULL) != PIGMENT_SUCCESS)
@@ -406,7 +423,7 @@ uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const
         .height      = face_height,
         .format      = format,
         .type        = P_IMAGE_TYPE_CUBE,
-        .flags       = P_IMAGE_UPLOAD_MIPMAPS,
+        .flags       = P_IMAGE_GENERATE_MIPMAPS,
     };
     PImage* image = NULL;
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
@@ -617,7 +634,7 @@ static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list)
 
 static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
-    PImageUploadDesc desc = {.layers = &pixels, .width = width, .height = height, .format = format, .flags = P_IMAGE_UPLOAD_MIPMAPS};
+    PImageUploadDesc desc = {.layers = &pixels, .width = width, .height = height, .format = format, .flags = P_IMAGE_GENERATE_MIPMAPS};
     PImage* image         = NULL;
 
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)

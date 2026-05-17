@@ -643,6 +643,9 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     device->features[P_FEATURE_MULTI_DRAW_INDIRECT]          = (PBool) available_2.features.multiDrawIndirect;
     device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] = (PBool) available_2.features.drawIndirectFirstInstance;
     device->features[P_FEATURE_DRAW_INDIRECT_COUNT]          = (PBool) available_12.drawIndirectCount;
+    device->features[P_FEATURE_TEXTURE_COMPRESSION_BC]       = (PBool) available_2.features.textureCompressionBC;
+    device->features[P_FEATURE_TEXTURE_COMPRESSION_ETC2]     = (PBool) available_2.features.textureCompressionETC2;
+    device->features[P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR] = (PBool) available_2.features.textureCompressionASTC_LDR;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
         .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
@@ -685,10 +688,13 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
-                     .fillModeNonSolid          = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
-                     .depthBounds               = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
-                     .multiDrawIndirect         = device->features[P_FEATURE_MULTI_DRAW_INDIRECT] ? VK_TRUE : VK_FALSE,
-                     .drawIndirectFirstInstance = device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] ? VK_TRUE : VK_FALSE,
+                     .fillModeNonSolid           = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
+                     .depthBounds                = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
+                     .multiDrawIndirect          = device->features[P_FEATURE_MULTI_DRAW_INDIRECT] ? VK_TRUE : VK_FALSE,
+                     .drawIndirectFirstInstance  = device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] ? VK_TRUE : VK_FALSE,
+                     .textureCompressionBC       = device->features[P_FEATURE_TEXTURE_COMPRESSION_BC] ? VK_TRUE : VK_FALSE,
+                     .textureCompressionETC2     = device->features[P_FEATURE_TEXTURE_COMPRESSION_ETC2] ? VK_TRUE : VK_FALSE,
+                     .textureCompressionASTC_LDR = device->features[P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR] ? VK_TRUE : VK_FALSE,
                      },
         .pNext = features_head,
     };
