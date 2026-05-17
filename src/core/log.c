@@ -26,8 +26,8 @@
 #define PIGMENT_LOG_SNAPSHOT_MAX 16
 
 typedef struct LoggerSnapshot {
-    PigmentLogCallback callback;
     void* user_data;
+    PigmentLogCallback callback;
 } LoggerSnapshot;
 
 static void recompute_active_masks_locked(PLogState* log)

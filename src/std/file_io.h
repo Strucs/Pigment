@@ -22,11 +22,11 @@
 typedef struct Pigment Pigment;
 
 typedef struct IOCallbacks {
+    void* user_data;
+
     unsigned char* (*read_file)(void* user_data, const char* path, uint64_t* out_size);
     int (*write_file)(void* user_data, const char* path, const void* data, uint64_t size);
     void (*free_file)(void* user_data, unsigned char* data);
-
-    void* user_data;
 } IOCallbacks;
 
 IOCallbacks pigment_std_default_file_io(Pigment* pigment);

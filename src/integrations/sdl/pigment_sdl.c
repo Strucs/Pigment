@@ -130,9 +130,9 @@ static void sdl_free_file(void* user_data, unsigned char* data)
 IOCallbacks pigment_sdl_default_file_io(void)
 {
     return (IOCallbacks) {
+        .user_data  = NULL,
         .read_file  = sdl_read_file,
         .write_file = sdl_write_file,
         .free_file  = sdl_free_file,
-        .user_data  = NULL,
     };
 }

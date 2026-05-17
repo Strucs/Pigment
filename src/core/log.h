@@ -36,17 +36,17 @@ typedef void (*PigmentLogCallback)(
 );
 
 struct PigmentLoggerCreateInfo{
+    void* user_data;
     PigmentLogSeverity severity_filter;
     PigmentLogType type_filter;
     PigmentLogCallback callback;
-    void* user_data;
 };
 
 struct PigmentLogger {
+    void* user_data;
     PigmentLogSeverity severity_filter;
     PigmentLogType type_filter;
     PigmentLogCallback callback;
-    void* user_data;
     PigmentLogger* next;
 };
 

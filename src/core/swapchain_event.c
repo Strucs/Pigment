@@ -78,8 +78,8 @@ uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PWindowRenderer* 
     }
 
     list->callbacks[reuse_index] = (PSwapchainCallback) {
-        .func      = func,
         .user_data = user_data,
+        .func      = func,
         .renderer  = renderer,
         .handle    = handle,
         .alive     = P_TRUE,

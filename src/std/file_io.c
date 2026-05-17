@@ -95,9 +95,9 @@ static void stdio_free_file(void* user_data, unsigned char* data)
 IOCallbacks pigment_std_default_file_io(Pigment* pigment)
 {
     return (IOCallbacks) {
+        .user_data  = pigment,
         .read_file  = stdio_read_file,
         .write_file = stdio_write_file,
         .free_file  = stdio_free_file,
-        .user_data  = pigment,
     };
 }

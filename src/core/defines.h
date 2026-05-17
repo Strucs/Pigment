@@ -419,6 +419,8 @@ typedef enum PInternalAllocationType {
 } PInternalAllocationType;
 
 typedef struct PAllocator {
+    void* user_data;
+
     void* (*alloc)(void* user_data, uint64_t size, uint64_t alignment, PAllocScope scope);
     void* (*calloc)(void* user_data, uint64_t size, uint64_t alignment, PAllocScope scope);
     void* (*realloc)(void* user_data, void* ptr, uint64_t old_size, uint64_t new_size, uint64_t alignment, PAllocScope scope);
@@ -427,8 +429,6 @@ typedef struct PAllocator {
     // Optional callbacks for driver-internal allocations. NULL = not tracked.
     void (*internal_alloc_notify)(void* user_data, uint64_t size, PInternalAllocationType type, PAllocScope scope);
     void (*internal_free_notify)(void* user_data, uint64_t size, PInternalAllocationType type, PAllocScope scope);
-
-    void* user_data;
 } PAllocator;
 
 extern const PAllocator pigment_default_allocator;

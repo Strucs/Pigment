@@ -345,8 +345,8 @@ struct PSampler {
 };
 
 typedef struct PSwapchainCallback {
-    PSwapchainRecreateFn func;
     void* user_data;
+    PSwapchainRecreateFn func;
     PWindowRenderer* renderer;
     uint32_t handle;
     PBool alive;
