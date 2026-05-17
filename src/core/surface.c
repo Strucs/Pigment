@@ -630,7 +630,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
-    PDeviceQueue* graphics = device_find_queue(device, P_QUEUE_GRAPHICS_BIT, 0);
+    PDeviceQueue* graphics = device_find_queue(device, P_QUEUE_GRAPHICS_BIT);
     if(graphics == NULL)
     {
         PLOG_ERROR(pigment, "Cannot create swapchain: device has no graphics queue");

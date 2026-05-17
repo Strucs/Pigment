@@ -102,13 +102,11 @@ typedef enum PQueueFlags {
 } PQueueFlags;
 
 /**
- * One queue to create at device init. The queue can be accessed via pigment_get_queue_at by the
- * same index in the queue_requests array. Multiple requests can target the same family, up to
- * the per-family hardware limit.
+ * Queues to create at device init.
  */
 typedef struct PQueueRequest {
     PQueueFlags required;
-    PQueueFlags forbidden;
+    uint32_t count;       // 0 = 1. Distinct queues wanted, clamped to what the hardware exposes.
     float priority;
 } PQueueRequest;
 
@@ -443,7 +441,7 @@ typedef struct PigmentConfig {
     PBool enable_best_practices;
     float depth_clear_value;                // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
     const PAllocator* allocator;            // NULL = uses pigment_default_allocator (malloc/free)
-    const PQueueRequest* queue_requests;    // explicit queue layout. NULL or count=0 = default policy (1 graphics + 1 dedicated compute + 1 dedicated transfer when hardware exposes them).
+    const PQueueRequest* queue_requests;    // explicit queue layout. NULL or count=0 = default policy (1 graphics + 1 compute + 1 transfer, most specialized the hardware exposes).
     uint32_t queue_request_count;
     const void* extra;
 } PigmentConfig;

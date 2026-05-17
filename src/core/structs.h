@@ -154,11 +154,18 @@ struct PDeviceQueue {
     _Atomic uint64_t next_value;
 };
 
+typedef struct PQueueRange {
+    uint32_t offset;
+    uint32_t count;
+} PQueueRange;
+
 struct PDevice {
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
     PDeviceQueue* queues;
     uint32_t queue_count;
+    PQueueRange* queue_ranges;
+    uint32_t queue_range_count;
     ExtensionList* extensions;
     PBool features[P_FEATURE_COUNT];
 };

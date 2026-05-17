@@ -24,9 +24,9 @@
 static const VkQueueFlags QUEUE_USEFUL_FLAGS = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
 
 static const PQueueRequest DEFAULT_QUEUE_REQUESTS[] = {
-    {.required = P_QUEUE_GRAPHICS_BIT,                                          .forbidden = 0, .priority = 1.0f},
-    { .required = P_QUEUE_COMPUTE_BIT,                       .forbidden = P_QUEUE_GRAPHICS_BIT, .priority = 1.0f},
-    {.required = P_QUEUE_TRANSFER_BIT, .forbidden = P_QUEUE_GRAPHICS_BIT | P_QUEUE_COMPUTE_BIT, .priority = 1.0f},
+    {.required = P_QUEUE_GRAPHICS_BIT, .count = 1, .priority = 1.0f},
+    { .required = P_QUEUE_COMPUTE_BIT, .count = 1, .priority = 1.0f},
+    {.required = P_QUEUE_TRANSFER_BIT, .count = 1, .priority = 1.0f},
 };
 
 #define DEFAULT_QUEUE_REQUEST_COUNT (sizeof(DEFAULT_QUEUE_REQUESTS) / sizeof(DEFAULT_QUEUE_REQUESTS[0]))
@@ -45,7 +45,7 @@ static void merge_features_chain_or(void* dst, const void* src, const void* avai
 static PBool check_device_extensions_supported(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* required);
 static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
 static PResult pick_physical_device(Pigment* pigment, PDevice* device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
-static PResult resolve_queue_requests(Pigment* pigment, const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PBool optional);
+static uint32_t resolve_queue_requests(const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PQueueRange* ranges);
 static PResult create_logical_device(Pigment* pigment, PDevice* device);
 
 static inline VkPhysicalDeviceFeatures pigment_req_features(void)
@@ -109,7 +109,7 @@ static inline PQueueFlags vk_to_pigment_queue_flags(VkQueueFlags flags)
     {
         out |= P_QUEUE_COMPUTE_BIT;
     }
-    if(flags & VK_QUEUE_TRANSFER_BIT)
+    if(flags & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
     {
         out |= P_QUEUE_TRANSFER_BIT;
     }
@@ -376,7 +376,7 @@ PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, Vk
     return supported ? P_TRUE : P_FALSE;
 }
 
-PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFlags forbidden)
+PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required)
 {
     if(device == NULL)
     {
@@ -389,10 +389,6 @@ PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFla
     {
         PQueueFlags flags = device->queues[i].flags;
         if((flags & required) != required)
-        {
-            continue;
-        }
-        if((flags & forbidden) != 0)
         {
             continue;
         }
@@ -409,14 +405,14 @@ PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required, PQueueFla
     return best;
 }
 
-PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required, PQueueFlags forbidden)
+PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required)
 {
     if(pigment == NULL)
     {
         return NULL;
     }
 
-    return device_find_queue(pigment->device, required, forbidden);
+    return device_find_queue(pigment->device, required);
 }
 
 uint32_t pigment_get_queue_count(Pigment* pigment)
@@ -437,6 +433,32 @@ PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index)
     }
 
     return &pigment->device->queues[index];
+}
+
+uint32_t pigment_request_queue_count(Pigment* pigment, uint32_t request_index)
+{
+    if(pigment == NULL || pigment->device == NULL || request_index >= pigment->device->queue_range_count)
+    {
+        return 0;
+    }
+
+    return pigment->device->queue_ranges[request_index].count;
+}
+
+PDeviceQueue* pigment_request_queue(Pigment* pigment, uint32_t request_index, uint32_t index)
+{
+    if(pigment == NULL || pigment->device == NULL || request_index >= pigment->device->queue_range_count)
+    {
+        return NULL;
+    }
+
+    PQueueRange range = pigment->device->queue_ranges[request_index];
+    if(index >= range.count)
+    {
+        return NULL;
+    }
+
+    return &pigment->device->queues[range.offset + index];
 }
 
 uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags)
@@ -470,58 +492,60 @@ uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags)
     return total;
 }
 
-static PResult resolve_queue_requests(Pigment* pigment, const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PBool optional)
+static uint32_t resolve_queue_requests(const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PQueueRange* ranges)
 {
+    uint32_t resolved_count = 0;
     for(uint32_t req_idx = 0; req_idx < request_count; req_idx++)
     {
         const PQueueRequest* request = &requests[req_idx];
-        uint32_t best_family         = UINT32_MAX;
-        uint32_t best_score          = UINT32_MAX;
+        uint32_t want                = request->count > 0 ? request->count : 1;
+        float priority               = request->priority > 0.0f ? request->priority : 1.0f;
 
-        for(uint32_t family_idx = 0; family_idx < queue_families_count; family_idx++)
+        ranges[req_idx].offset = resolved_count;
+
+        uint32_t got = 0;
+        for(uint32_t slot = 0; slot < want; slot++)
         {
-            VkQueueFlags vk_flags      = queue_families[family_idx].queueFlags & QUEUE_USEFUL_FLAGS;
-            PQueueFlags family_pigment = vk_to_pigment_queue_flags(vk_flags);
-            if((family_pigment & request->required) != request->required)
+            uint32_t best_family = UINT32_MAX;
+            uint32_t best_score  = UINT32_MAX;
+            for(uint32_t family_idx = 0; family_idx < queue_families_count; family_idx++)
             {
-                continue;
-            }
-            if((family_pigment & request->forbidden) != 0)
-            {
-                continue;
-            }
-            if(requested_per_family[family_idx] >= queue_families[family_idx].queueCount)
-            {
-                continue;
-            }
-            uint32_t score = count_useful_bits(family_pigment);
+                VkQueueFlags vk_flags      = queue_families[family_idx].queueFlags & QUEUE_USEFUL_FLAGS;
+                PQueueFlags family_pigment = vk_to_pigment_queue_flags(vk_flags);
+                if((family_pigment & request->required) != request->required)
+                {
+                    continue;
+                }
+                if(requested_per_family[family_idx] >= queue_families[family_idx].queueCount)
+                {
+                    continue;
+                }
+                uint32_t score = count_useful_bits(family_pigment);
 
-            // Prefer queues with the lowest score because the less bits set, the more specialized the queue is.
-            if(score < best_score)
-            {
-                best_score  = score;
-                best_family = family_idx;
+                // Prefer queues with the lowest score because the less bits set, the more specialized the queue is.
+                if(score < best_score)
+                {
+                    best_score  = score;
+                    best_family = family_idx;
+                }
             }
+
+            if(best_family == UINT32_MAX)
+            {
+                break;
+            }
+
+            resolved[resolved_count].family                = best_family;
+            resolved[resolved_count].queue_index_in_family = requested_per_family[best_family]++;
+            resolved[resolved_count].priority              = priority;
+            resolved_count++;
+            got++;
         }
 
-        if(best_family == UINT32_MAX)
-        {
-            if(optional)
-            {
-                resolved[req_idx].family = UINT32_MAX;
-                continue;
-            }
-            PLOG_ERROR(pigment, "Queue request %u (required=0x%x, forbidden=0x%x) could not be satisfied by this device", req_idx, request->required, request->forbidden);
-            return PIGMENT_ERROR_VULKAN;
-        }
-
-        float priority                          = request->priority > 0.0f ? request->priority : 1.0f;
-        resolved[req_idx].family                = best_family;
-        resolved[req_idx].queue_index_in_family = requested_per_family[best_family]++;
-        resolved[req_idx].priority              = priority;
+        ranges[req_idx].count = got;
     }
 
-    return PIGMENT_SUCCESS;
+    return resolved_count;
 }
 
 static PResult create_logical_device(Pigment* pigment, PDevice* device)
@@ -552,11 +576,18 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         request_count = DEFAULT_QUEUE_REQUEST_COUNT;
     }
 
+    uint32_t total_wanted = 0;
+    for(uint32_t r = 0; r < request_count; r++)
+    {
+        total_wanted += user_requests[r].count > 0 ? user_requests[r].count : 1;
+    }
+
     requested_per_family = P_NEW_ARRAY_FOR_COMMAND(pigment, requested_per_family, queue_families_count);
-    priority_pool        = P_NEW_ARRAY_FOR_COMMAND(pigment, priority_pool, request_count);
-    resolved             = P_NEW_ARRAY_FOR_COMMAND(pigment, resolved, request_count);
+    priority_pool        = P_NEW_ARRAY_FOR_COMMAND(pigment, priority_pool, total_wanted);
+    resolved             = P_NEW_ARRAY_FOR_COMMAND(pigment, resolved, total_wanted);
     queue_infos          = P_NEW_ARRAY_FOR_COMMAND(pigment, queue_infos, queue_families_count);
-    if(requested_per_family == NULL || priority_pool == NULL || resolved == NULL || queue_infos == NULL)
+    device->queue_ranges = P_NEW_ARRAY_FOR_OBJECT(pigment, device->queue_ranges, request_count);
+    if(requested_per_family == NULL || priority_pool == NULL || resolved == NULL || queue_infos == NULL || device->queue_ranges == NULL)
     {
         goto ERROR;
     }
@@ -566,12 +597,8 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         requested_per_family[i] = 0;
     }
 
-    PResult resolve_result = resolve_queue_requests(pigment, queue_families, queue_families_count, user_requests, request_count, resolved, requested_per_family, default_policy);
-    if(resolve_result != PIGMENT_SUCCESS)
-    {
-        result = resolve_result;
-        goto ERROR;
-    }
+    uint32_t resolved_count   = resolve_queue_requests(queue_families, queue_families_count, user_requests, request_count, resolved, requested_per_family, device->queue_ranges);
+    device->queue_range_count = request_count;
 
     uint32_t selected_count  = 0;
     uint32_t priority_offset = 0;
@@ -582,11 +609,11 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
             continue;
         }
 
-        for(uint32_t req_idx = 0; req_idx < request_count; req_idx++)
+        for(uint32_t i = 0; i < resolved_count; i++)
         {
-            if(resolved[req_idx].family == family_idx)
+            if(resolved[i].family == family_idx)
             {
-                priority_pool[priority_offset + resolved[req_idx].queue_index_in_family] = resolved[req_idx].priority;
+                priority_pool[priority_offset + resolved[i].queue_index_in_family] = resolved[i].priority;
             }
         }
 
@@ -706,15 +733,6 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     }
     volkLoadDevice(device->logical_device);
 
-    uint32_t resolved_count = 0;
-    for(uint32_t r = 0; r < request_count; r++)
-    {
-        if(resolved[r].family != UINT32_MAX)
-        {
-            resolved_count++;
-        }
-    }
-
     device->queues = P_NEW_ARRAY_FOR_OBJECT(pigment, device->queues, resolved_count);
     if(device->queues == NULL)
     {
@@ -723,16 +741,11 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     }
     device->queue_count = resolved_count;
 
-    uint32_t queue_index = 0;
-    for(uint32_t r = 0; r < request_count; r++)
+    for(uint32_t r = 0; r < resolved_count; r++)
     {
-        if(resolved[r].family == UINT32_MAX)
-        {
-            continue;
-        }
-        PDeviceQueue* queue = &device->queues[queue_index];
+        PDeviceQueue* queue = &device->queues[r];
         queue->family_index = resolved[r].family;
-        queue->slot         = queue_index;
+        queue->slot         = r;
         queue->flags        = vk_to_pigment_queue_flags(queue_families[resolved[r].family].queueFlags & QUEUE_USEFUL_FLAGS);
         atomic_store_explicit(&queue->next_value, 0, memory_order_relaxed);
         vkGetDeviceQueue(device->logical_device, resolved[r].family, resolved[r].queue_index_in_family, &queue->queue);
@@ -749,7 +762,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         if(vkCreateSemaphore(device->logical_device, &sem_info, &pigment->vk_alloc, &queue->timeline) != VK_SUCCESS)
         {
             PLOG_ERROR(pigment, "Failed to create timeline semaphore for queue family %u", resolved[r].family);
-            for(uint32_t j = 0; j < queue_index; j++)
+            for(uint32_t j = 0; j < r; j++)
             {
                 vkDestroySemaphore(device->logical_device, device->queues[j].timeline, &pigment->vk_alloc);
             }
@@ -758,7 +771,6 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
             result         = PIGMENT_ERROR_VULKAN;
             goto ERROR;
         }
-        queue_index++;
     }
 
     PLOG_DEBUG(pigment, "Resolved %u queue%s:", device->queue_count, device->queue_count > 1 ? "s" : "");
@@ -924,6 +936,7 @@ ERROR:
             P_FREE(pigment, device->extensions->names);
         }
         P_FREE(pigment, device->extensions);
+        P_FREE(pigment, device->queue_ranges);
         P_FREE(pigment, device);
     }
     return NULL;
@@ -953,6 +966,7 @@ void destroy_device(Pigment* pigment)
     }
     P_FREE(pigment, device->extensions);
     P_FREE(pigment, device->queues);
+    P_FREE(pigment, device->queue_ranges);
     P_FREE(pigment, device);
 }
 
@@ -989,4 +1003,9 @@ VkQueue pigment_vk_queue(PDeviceQueue* queue)
 uint32_t pigment_queue_family(PDeviceQueue* queue)
 {
     return (queue != NULL) ? queue->family_index : UINT32_MAX;
+}
+
+PQueueFlags pigment_queue_flags(PDeviceQueue* queue)
+{
+    return (queue != NULL) ? queue->flags : 0;
 }

@@ -390,7 +390,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
         return PIGMENT_ERROR;
     }
 
-    PDeviceQueue* graphics_default = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
+    PDeviceQueue* graphics_default = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
 
     uint32_t total_cmd_count  = 0;
     uint32_t total_wait_count = 0;
@@ -694,7 +694,7 @@ static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_fam
 
 static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags)
 {
-    PDeviceQueue* found = device_find_queue(pigment->device, flags, 0);
+    PDeviceQueue* found = device_find_queue(pigment->device, flags);
     if(found == NULL)
     {
         PLOG_ERROR(pigment, "resolve_queue_family_index: no queue family on the picked GPU has flags %d.", (unsigned) flags);

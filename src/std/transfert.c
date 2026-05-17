@@ -294,7 +294,7 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
         .depth              = depth,
         .array_layers       = layer_count,
         .format             = upload->format,
-        .usage              = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER,
+        .usage              = P_IMAGE_USAGE_SAMPLED | P_IMAGE_USAGE_HOST_TRANSFER | P_IMAGE_USAGE_TRANSFER_DST,
         .mip_levels         = 1,
         .type               = upload->type,
         .shared_queues      = upload->shared_queues,

@@ -20,27 +20,21 @@
 #include "defines.h"
 
 /**
- * @brief Find a queue that has all `required` flags and none of the `forbidden` flags.
+ * @brief Find a queue that has all `required` flags.
  *
- * When several queues match, picks the most specialized one (the one with the fewest extra
- * flags). For example, pigment_get_queue(p, P_QUEUE_TRANSFER_BIT, 0) returns a dedicated
- * transfer queue if one exists, else the next-most-specialized fallback.
+ * When several queues match, picks the most specialized one (the fewest extra flags). A graphics
+ * or compute queue always reports transfer support, so pigment_get_queue(p, P_QUEUE_TRANSFER_BIT)
+ * returns a dedicated transfer queue when one exists, else the next-most-specialized fallback.
  *
  * @param pigment Pigment instance.
  * @param required Flags the queue must support.
- * @param forbidden Flags the queue must NOT support. 0 means any match works.
  *
  * @return The matching queue, or NULL if none found.
  */
-PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required, PQueueFlags forbidden);
+PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required);
 
 /**
  * @brief How many queues Pigment created on the device.
- *
- * With explicit PQueueRequest config it  always equals queue_request_count
- * (any failed request aborts init_pigment). With the default policy it is the number
- * of defaults the hardware could provide (1 graphics always, +1 dedicated compute if available,
- * +1 dedicated transfer if available).
  *
  * @param pigment Pigment instance.
  *
@@ -49,9 +43,7 @@ PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required, PQueueFl
 uint32_t pigment_get_queue_count(Pigment* pigment);
 
 /**
- * @brief Returns the queue at position `index`. The order matches PigmentConfig.queue_requests
- *        when set, or the default order (graphics, then dedicated compute, then dedicated transfer)
- *        otherwise.
+ * @brief Returns the queue at `index` in the internal device queue list.
  *
  * @param pigment Pigment instance.
  * @param index Queue index, must be less than pigment_get_queue_count.
@@ -61,6 +53,32 @@ uint32_t pigment_get_queue_count(Pigment* pigment);
 PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index);
 
 /**
+ * @brief How many queues the request at `request_index` actually obtained.
+ *
+ * A request asks for up to PQueueRequest.count distinct queues and is clamped to what the hardware
+ * exposes, so this can be less than requested. The index matches PigmentConfig.queue_requests, or
+ * the default order (graphics, compute, transfer) when no requests are set. Use it to size a
+ * worker pool to the queues actually available.
+ *
+ * @param pigment Pigment instance.
+ * @param request_index Index into PigmentConfig.queue_requests.
+ *
+ * @return Realized queue count for that request, 0 if request_index is out of bounds.
+ */
+uint32_t pigment_request_queue_count(Pigment* pigment, uint32_t request_index);
+
+/**
+ * @brief Returns the `index`-th queue obtained by the request at `request_index`.
+ *
+ * @param pigment Pigment instance.
+ * @param request_index Index into PigmentConfig.queue_requests.
+ * @param index Queue index within the request, must be less than pigment_request_queue_count.
+ *
+ * @return The queue, or NULL if either index is out of bounds.
+ */
+PDeviceQueue* pigment_request_queue(Pigment* pigment, uint32_t request_index, uint32_t index);
+
+/**
  * @brief Index of the Vulkan queue family this queue belongs to.
  *
  * @param queue Queue to query.
@@ -68,5 +86,17 @@ PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index);
  * @return The queue family index, or UINT32_MAX if queue is NULL.
  */
 uint32_t pigment_queue_family(PDeviceQueue* queue);
+
+/**
+ * @brief Capability flags this queue supports.
+ *
+ * These are the queue family capabilities, so a queue can support more than the request that
+ * reserved it asked for (a transfer queue from the graphics family have graphics flag too).
+ *
+ * @param queue Queue to query.
+ *
+ * @return The queue flags, or 0 if queue is NULL.
+ */
+PQueueFlags pigment_queue_flags(PDeviceQueue* queue);
 
 #endif

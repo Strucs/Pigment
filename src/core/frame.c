@@ -684,7 +684,7 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
 
     if(queue == NULL)
     {
-        queue = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT, 0);
+        queue = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
     }
 
     if(queue == NULL || queue->timeline == VK_NULL_HANDLE)
