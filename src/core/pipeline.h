@@ -90,10 +90,10 @@ typedef struct PSpecializationInfo {
 typedef struct PPipelineDesc {
     PLayout* layout;
 
-    const uint32_t* vertex_spv;
-    uint32_t vertex_spv_size;
-    const uint32_t* fragment_spv;
-    uint32_t fragment_spv_size;
+    const uint32_t* vertex_shader;
+    uint32_t vertex_shader_size;
+    const uint32_t* fragment_shader;
+    uint32_t fragment_shader_size;
 
     /**
      * Per-stage specialization constants. NULL = no specialization for that stage.
@@ -138,8 +138,8 @@ typedef struct PPipelineDesc {
 typedef struct PComputePipelineDesc {
     PLayout* layout;
 
-    const uint32_t* compute_spv;
-    uint32_t compute_spv_size;
+    const uint32_t* compute_shader;
+    uint32_t compute_shader_size;
 
     /**
      * Specialization constants applied to the compute shader.

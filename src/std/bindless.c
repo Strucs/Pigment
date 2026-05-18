@@ -31,6 +31,9 @@ typedef struct PImageList {
     PImage** images;
     uint32_t count;
     uint32_t capacity;
+    uint32_t* free_slots;
+    uint32_t free_count;
+    uint32_t free_capacity;
 } PImageList;
 
 typedef struct PSamplerList {
@@ -75,8 +78,10 @@ struct PStdBindless {
 #define PIGMENT_BINDLESS_BINDING_IMAGES 3
 
 static PResult image_list_append(Pigment* pigment, PImageList* image_list, PImage* image);
+static uint32_t image_list_put(Pigment* pigment, PImageList* image_list, PImage* image);
+static void image_list_free_slot(Pigment* pigment, PImageList* image_list, uint32_t slot);
 static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage** images, uint32_t count);
-static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+static PImage* add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
 static PResult add_default_image(Pigment* pigment, PStdBindless* bindless);
 static PResult sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers);
 static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list);
@@ -96,6 +101,22 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
         return NULL;
     }
 
+    uint32_t cubemaps      = (max_cubemaps == 0) ? 1 : max_cubemaps;
+    uint32_t targets       = (max_render_targets == 0) ? 1 : max_render_targets;
+    uint32_t sampled_total = max_images + cubemaps + targets;
+
+    PDeviceLimits limits = pigment_device_limits(pigment);
+    if(sampled_total > limits.max_sampled_images)
+    {
+        PLOG_ERROR(pigment, "Bindless needs %u sampled images (%u images + %u cubemaps + %u render targets) but the device caps at %u.", sampled_total, max_images, cubemaps, targets, limits.max_sampled_images);
+        return NULL;
+    }
+    if(max_samplers > limits.max_samplers)
+    {
+        PLOG_ERROR(pigment, "Bindless needs %u samplers but the device caps at %u.", max_samplers, limits.max_samplers);
+        return NULL;
+    }
+
     PStdBindless* bindless = P_NEW_FOR_OBJECT(pigment, bindless);
     if(bindless == NULL)
     {
@@ -108,28 +129,28 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
          .type    = P_DESCRIPTOR_TYPE_SAMPLER,
          .count   = max_samplers,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
-         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
          },
         {
          .binding = PIGMENT_BINDLESS_BINDING_CUBEMAPS,
          .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .count   = (max_cubemaps == 0) ? 1 : max_cubemaps,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
-         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
          },
         {
          .binding = PIGMENT_BINDLESS_BINDING_RENDER_TARGETS,
          .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .count   = (max_render_targets == 0) ? 1 : max_render_targets,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
-         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
          },
         {
          .binding = PIGMENT_BINDLESS_BINDING_IMAGES,
          .type    = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
          .count   = max_images,
          .stages  = P_SHADER_STAGE_FRAGMENT_BIT,
-         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT,
+         .flags   = P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT,
          },
     };
 
@@ -165,9 +186,10 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
     };
 
     PDescriptorPoolDesc pool_desc = {
-        .pool_sizes      = pool_sizes,
-        .pool_size_count = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
-        .max_sets        = frames,
+        .pool_sizes              = pool_sizes,
+        .pool_size_count         = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
+        .max_sets                = frames,
+        .allow_update_after_bind = P_TRUE,
     };
 
     bindless->pool = pigment_create_descriptor_pool(pigment, &pool_desc);
@@ -300,15 +322,20 @@ uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindless, const u
         return UINT32_MAX;
     }
 
-    uint32_t slot = bindless->images.count;
-
-    if(add_image_from_pixels(pigment, bindless, pixels, width, height, format) != PIGMENT_SUCCESS)
+    PImage* image = add_image_from_pixels(pigment, bindless, pixels, width, height, format);
+    if(image == NULL)
     {
         return UINT32_MAX;
     }
 
-    write_image_descriptor(pigment, bindless, slot, bindless->images.images[slot]);
+    uint32_t slot = image_list_put(pigment, &bindless->images, image);
+    if(slot == UINT32_MAX)
+    {
+        pigment_destroy_image(pigment, image);
+        return UINT32_MAX;
+    }
 
+    write_image_descriptor(pigment, bindless, slot, image);
     return slot;
 }
 
@@ -319,14 +346,31 @@ uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PI
         return UINT32_MAX;
     }
 
-    uint32_t slot = bindless->images.count;
-    if(image_list_append(pigment, &bindless->images, image) != PIGMENT_SUCCESS)
+    uint32_t slot = image_list_put(pigment, &bindless->images, image);
+    if(slot == UINT32_MAX)
     {
         return UINT32_MAX;
     }
 
     write_image_descriptor(pigment, bindless, slot, image);
     return slot;
+}
+
+void pigment_std_unregister_image(Pigment* pigment, PStdBindless* bindless, uint32_t slot)
+{
+    if(pigment == NULL || bindless == NULL)
+    {
+        return;
+    }
+
+    if(slot == 0 || slot >= bindless->images.count || bindless->images.images[slot] == NULL)
+    {
+        PLOG_ERROR(pigment, "Cannot unregister bindless image slot %u: out of range, already free, or the default slot.", slot);
+        return;
+    }
+
+    pigment_destroy_image(pigment, bindless->images.images[slot]);
+    image_list_free_slot(pigment, &bindless->images, slot);
 }
 
 uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
@@ -539,7 +583,10 @@ PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindles
     {
         for(uint32_t i = 0; i < bindless->images.count; i++)
         {
-            pigment_cmd_use_image(pigment, cmd, bindless->images.images[i]);
+            if(bindless->images.images[i] != NULL)
+            {
+                pigment_cmd_use_image(pigment, cmd, bindless->images.images[i]);
+            }
         }
         for(uint32_t i = 0; i < bindless->cubemaps.count; i++)
         {
@@ -564,11 +611,15 @@ static void image_list_destroy(Pigment* pigment, PImageList* image_list, PBool o
     {
         for(uint32_t i = 0; i < image_list->count; i++)
         {
-            pigment_destroy_image(pigment, image_list->images[i]);
+            if(image_list->images[i] != NULL)
+            {
+                pigment_destroy_image(pigment, image_list->images[i]);
+            }
         }
     }
 
     P_FREE(pigment, image_list->images);
+    P_FREE(pigment, image_list->free_slots);
 }
 
 static PResult image_list_append(Pigment* pigment, PImageList* image_list, PImage* image)
@@ -581,6 +632,34 @@ static PResult image_list_append(Pigment* pigment, PImageList* image_list, PImag
     image_list->images[image_list->count++] = image;
 
     return PIGMENT_SUCCESS;
+}
+
+static uint32_t image_list_put(Pigment* pigment, PImageList* image_list, PImage* image)
+{
+    if(image_list->free_count > 0)
+    {
+        uint32_t slot            = image_list->free_slots[--image_list->free_count];
+        image_list->images[slot] = image;
+        return slot;
+    }
+
+    if(P_ARRAY_RESERVE_OBJECT(pigment, image_list->images, image_list->count, image_list->capacity, 1, 1) != PIGMENT_SUCCESS)
+    {
+        return UINT32_MAX;
+    }
+
+    uint32_t slot            = image_list->count++;
+    image_list->images[slot] = image;
+    return slot;
+}
+
+static void image_list_free_slot(Pigment* pigment, PImageList* image_list, uint32_t slot)
+{
+    image_list->images[slot] = NULL;
+    if(P_ARRAY_RESERVE_OBJECT(pigment, image_list->free_slots, image_list->free_count, image_list->free_capacity, 1, 4) == PIGMENT_SUCCESS)
+    {
+        image_list->free_slots[image_list->free_count++] = slot;
+    }
 }
 
 static PResult sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers)
@@ -633,7 +712,7 @@ static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list)
     P_FREE(pigment, sampler_list->descs);
 }
 
-static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
+static PImage* add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
     PImageUploadDesc desc = {.layers = &pixels, .width = width, .height = height, .format = format, .flags = P_IMAGE_GENERATE_MIPMAPS};
     PImage* image         = NULL;
@@ -641,28 +720,33 @@ static PResult add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, c
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to add image from pixels.");
-        return PIGMENT_ERROR;
+        return NULL;
     }
 
     if(pigment_std_image_finalize(pigment, bindless->upload_pool, NULL, &image, &desc, 1, NULL) != PIGMENT_SUCCESS)
     {
         pigment_destroy_image(pigment, image);
-        return PIGMENT_ERROR;
+        return NULL;
     }
 
-    if(image_list_append(pigment, &bindless->images, image) != PIGMENT_SUCCESS)
-    {
-        pigment_destroy_image(pigment, image);
-        return PIGMENT_ERROR;
-    }
-
-    return PIGMENT_SUCCESS;
+    return image;
 }
 
 static PResult add_default_image(Pigment* pigment, PStdBindless* bindless)
 {
     unsigned char white[] = {255, 255, 255, 255};
-    return add_image_from_pixels(pigment, bindless, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM);
+    PImage* image         = add_image_from_pixels(pigment, bindless, white, 1, 1, P_FORMAT_R8G8B8A8_UNORM);
+    if(image == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    if(image_list_put(pigment, &bindless->images, image) == UINT32_MAX)
+    {
+        pigment_destroy_image(pigment, image);
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+    return PIGMENT_SUCCESS;
 }
 
 static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage** images, uint32_t count)

@@ -40,7 +40,7 @@ static PResult build_specialization(Pigment* pigment, const PSpecializationInfo*
 
 static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc)
 {
-    if(pigment == NULL || desc == NULL || desc->vertex_spv == NULL)
+    if(pigment == NULL || desc == NULL || desc->vertex_shader == NULL)
     {
         return NULL;
     }
@@ -51,7 +51,7 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         return NULL;
     }
 
-    build->vertex_module = create_shader_module(pigment, desc->vertex_spv, desc->vertex_spv_size);
+    build->vertex_module = create_shader_module(pigment, desc->vertex_shader, desc->vertex_shader_size);
     if(build->vertex_module == NULL)
     {
         goto ERROR;
@@ -61,9 +61,9 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         goto ERROR;
     }
 
-    if(desc->fragment_spv != NULL)
+    if(desc->fragment_shader != NULL)
     {
-        build->fragment_module = create_shader_module(pigment, desc->fragment_spv, desc->fragment_spv_size);
+        build->fragment_module = create_shader_module(pigment, desc->fragment_shader, desc->fragment_shader_size);
         if(build->fragment_module == NULL)
         {
             goto ERROR;
@@ -376,14 +376,14 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
     for(uint32_t i = 0; i < count; i++)
     {
         const PComputePipelineDesc* desc = &descs[i];
-        if(desc->layout == NULL || desc->compute_spv == NULL)
+        if(desc->layout == NULL || desc->compute_shader == NULL)
         {
-            PLOG_ERROR(pigment, "pigment_create_compute_pipelines: desc[%u] missing layout or compute_spv", i);
+            PLOG_ERROR(pigment, "pigment_create_compute_pipelines: desc[%u] missing layout or compute_shader", i);
             status = PIGMENT_ERROR;
             goto FREE;
         }
 
-        modules[i] = create_shader_module(pigment, desc->compute_spv, desc->compute_spv_size);
+        modules[i] = create_shader_module(pigment, desc->compute_shader, desc->compute_shader_size);
         if(modules[i] == VK_NULL_HANDLE)
         {
             status = PIGMENT_ERROR_VULKAN;

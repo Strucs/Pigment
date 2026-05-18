@@ -78,18 +78,18 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PS
     }
 
     PPipelineDesc pipeline_desc = {
-        .layout             = canvas->layout,
-        .vertex_spv         = (const uint32_t*) ndc_vertex_spv,
-        .vertex_spv_size    = (uint32_t) sizeof(ndc_vertex_spv),
-        .fragment_spv       = (const uint32_t*) ndc_fragment_spv,
-        .fragment_spv_size  = (uint32_t) sizeof(ndc_fragment_spv),
-        .color_formats      = &color_format,
-        .color_format_count = 1,
-        .depth_format       = P_FORMAT_UNDEFINED,
-        .polygon_mode       = P_POLYGON_MODE_FILL,
-        .topology           = P_TOPOLOGY_TRIANGLE_LIST,
-        .sample_count       = samples,
-        .name               = "std_canvas_pipeline",
+        .layout               = canvas->layout,
+        .vertex_shader        = (const uint32_t*) ndc_vertex_spv,
+        .vertex_shader_size   = (uint32_t) sizeof(ndc_vertex_spv),
+        .fragment_shader      = (const uint32_t*) ndc_fragment_spv,
+        .fragment_shader_size = (uint32_t) sizeof(ndc_fragment_spv),
+        .color_formats        = &color_format,
+        .color_format_count   = 1,
+        .depth_format         = P_FORMAT_UNDEFINED,
+        .polygon_mode         = P_POLYGON_MODE_FILL,
+        .topology             = P_TOPOLOGY_TRIANGLE_LIST,
+        .sample_count         = samples,
+        .name                 = "std_canvas_pipeline",
     };
 
     if(pigment_create_graphic_pipelines(pigment, NULL, &pipeline_desc, 1, &canvas->pipeline) != PIGMENT_SUCCESS)

@@ -60,14 +60,16 @@ static inline VkPhysicalDeviceFeatures pigment_req_features(void)
 static inline VkPhysicalDeviceVulkan12Features pigment_req_features_12(void)
 {
     return (VkPhysicalDeviceVulkan12Features) {
-        .sType                                     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .descriptorIndexing                        = VK_TRUE,
-        .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-        .descriptorBindingVariableDescriptorCount  = VK_TRUE,
-        .descriptorBindingPartiallyBound           = VK_TRUE,
-        .runtimeDescriptorArray                    = VK_TRUE,
-        .bufferDeviceAddress                       = VK_TRUE,
-        .timelineSemaphore                         = VK_TRUE,
+        .sType                                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .descriptorIndexing                           = VK_TRUE,
+        .shaderSampledImageArrayNonUniformIndexing    = VK_TRUE,
+        .descriptorBindingVariableDescriptorCount     = VK_TRUE,
+        .descriptorBindingPartiallyBound              = VK_TRUE,
+        .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+        .descriptorBindingUpdateUnusedWhilePending    = VK_TRUE,
+        .runtimeDescriptorArray                       = VK_TRUE,
+        .bufferDeviceAddress                          = VK_TRUE,
+        .timelineSemaphore                            = VK_TRUE,
     };
 }
 
@@ -491,6 +493,41 @@ uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags)
         }
     }
     return total;
+}
+
+PDeviceLimits pigment_device_limits(Pigment* pigment)
+{
+    PDeviceLimits limits = {0};
+    if(pigment == NULL || pigment->device == NULL)
+    {
+        return limits;
+    }
+
+    VkPhysicalDeviceDescriptorIndexingProperties indexing = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES};
+    VkPhysicalDeviceProperties2 props                     = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &indexing};
+    vkGetPhysicalDeviceProperties2(pigment->device->physical_device, &props);
+
+    const VkPhysicalDeviceLimits* core = &props.properties.limits;
+
+    uint32_t set_images        = indexing.maxDescriptorSetUpdateAfterBindSampledImages;
+    uint32_t stage_images      = indexing.maxPerStageDescriptorUpdateAfterBindSampledImages;
+    uint32_t set_samplers      = indexing.maxDescriptorSetUpdateAfterBindSamplers;
+    uint32_t stage_samplers    = indexing.maxPerStageDescriptorUpdateAfterBindSamplers;
+    uint32_t set_storage_img   = indexing.maxDescriptorSetUpdateAfterBindStorageImages;
+    uint32_t stage_storage_img = indexing.maxPerStageDescriptorUpdateAfterBindStorageImages;
+    uint32_t set_storage_buf   = indexing.maxDescriptorSetUpdateAfterBindStorageBuffers;
+    uint32_t stage_storage_buf = indexing.maxPerStageDescriptorUpdateAfterBindStorageBuffers;
+
+    limits.max_sampled_images        = (set_images < stage_images) ? set_images : stage_images;
+    limits.max_samplers              = (set_samplers < stage_samplers) ? set_samplers : stage_samplers;
+    limits.max_storage_images        = (set_storage_img < stage_storage_img) ? set_storage_img : stage_storage_img;
+    limits.max_storage_buffers       = (set_storage_buf < stage_storage_buf) ? set_storage_buf : stage_storage_buf;
+    limits.max_bound_descriptor_sets = core->maxBoundDescriptorSets;
+    limits.max_push_constants_size   = core->maxPushConstantsSize;
+    limits.max_image_dimension_2d    = core->maxImageDimension2D;
+    limits.max_color_attachments     = core->maxColorAttachments;
+
+    return limits;
 }
 
 static uint32_t resolve_queue_requests(const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PQueueRange* ranges)

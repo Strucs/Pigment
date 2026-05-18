@@ -56,6 +56,16 @@ uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, c
  * @return Image slot, or UINT32_MAX on failure.
  */
 uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image);
+
+/**
+ * @brief Unregisters an image and frees its bindless slot for reuse.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param slot Image slot returned by pigment_std_register_image or pigment_std_add_image.
+ */
+void pigment_std_unregister_image(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
+
 uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const PSamplerDesc* desc);
 
 // 6 face buffers in the order: +X, -X, +Y, -Y, +Z, -Z. All faces must share width/height/format.

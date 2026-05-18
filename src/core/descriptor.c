@@ -655,6 +655,10 @@ static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flag
     {
         out |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
     }
+    if(flags & P_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT)
+    {
+        out |= VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+    }
     return out;
 }
 

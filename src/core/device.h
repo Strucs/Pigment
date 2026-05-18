@@ -23,6 +23,17 @@ extern "C" {
 
 #include "defines.h"
 
+typedef struct PDeviceLimits {
+    uint32_t max_sampled_images;           // sampled images bindable in one descriptor set
+    uint32_t max_samplers;                 // samplers bindable in one descriptor set
+    uint32_t max_storage_images;           // storage images bindable in one descriptor set
+    uint32_t max_storage_buffers;          // storage buffers bindable in one descriptor set
+    uint32_t max_bound_descriptor_sets;    // descriptor sets bound at once
+    uint32_t max_push_constants_size;      // push constant bytes, at least 128
+    uint32_t max_image_dimension_2d;       // largest width or height of a 2D image
+    uint32_t max_color_attachments;        // color attachments in one render pass
+} PDeviceLimits;
+
 /**
  * @brief Bytes the device can still allocate for memory matching the given flags.
  *
@@ -32,6 +43,15 @@ extern "C" {
  * @return Allocatable bytes, or UINT64_MAX when the budget cannot be measured.
  */
 uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags);
+
+/**
+ * @brief Query the hardware limits of the selected device.
+ *
+ * @param pigment Pigment instance.
+ *
+ * @return The device limits, every field zero when `pigment` is NULL.
+ */
+PDeviceLimits pigment_device_limits(Pigment* pigment);
 
 #ifdef __cplusplus
 }

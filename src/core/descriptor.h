@@ -34,10 +34,11 @@ typedef enum PDescriptorType {
 } PDescriptorType;
 
 typedef enum PDescriptorBindingFlags {
-    P_DESCRIPTOR_BINDING_NONE_BIT              = 0,
-    P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT   = 1 << 0,
-    P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT    = 1 << 1,
-    P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT = 1 << 2,
+    P_DESCRIPTOR_BINDING_NONE_BIT                        = 0,
+    P_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT             = 1 << 0,
+    P_DESCRIPTOR_BINDING_VARIABLE_COUNT_BIT              = 1 << 1,
+    P_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT           = 1 << 2,
+    P_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT = 1 << 3,
 } PDescriptorBindingFlags;
 
 typedef enum PImageDescriptorLayout {
