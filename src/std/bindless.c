@@ -17,12 +17,13 @@
 #include "bindless.h"
 
 #include "transfert.h"
+#include "std_internal.h"
 
 #include "pigment/commands.h"
 #include "pigment/pigment.h"
 
-#include "internal.h"
-#include "std_internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <string.h>
 
@@ -154,7 +155,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
         goto ERROR;
     }
 
-    uint32_t frames = pigment->config.max_frames_in_flight;
+    uint32_t frames = pigment_max_frames_in_flight(pigment);
 
     PDescriptorPoolSize pool_sizes[] = {
         {      .type  = P_DESCRIPTOR_TYPE_SAMPLER,

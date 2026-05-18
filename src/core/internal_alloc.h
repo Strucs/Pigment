@@ -17,34 +17,14 @@
 #ifndef PIGMENT_INTERNAL_ALLOC_H
 #define PIGMENT_INTERNAL_ALLOC_H
 
-#include "structs.h"
+#include "defines.h"
 
 #include <string.h>
 
-static inline void* p_alloc_impl(Pigment* pigment, uint64_t size, uint64_t alignment, PAllocScope scope)
-{
-    return pigment->cpu_allocator.alloc(pigment->cpu_allocator.user_data, size, alignment, scope);
-}
-
-static inline void* p_calloc_impl(Pigment* pigment, uint64_t count, uint64_t size, uint64_t alignment, PAllocScope scope)
-{
-    return pigment->cpu_allocator.calloc(pigment->cpu_allocator.user_data, count * size, alignment, scope);
-}
-
-static inline void* p_realloc_impl(Pigment* pigment, void* ptr, uint64_t old_size, uint64_t new_size, uint64_t alignment, PAllocScope scope)
-{
-    return pigment->cpu_allocator.realloc(pigment->cpu_allocator.user_data, ptr, old_size, new_size, alignment, scope);
-}
-
-static inline void p_free_impl(Pigment* pigment, void* ptr)
-{
-    if(ptr == NULL)
-    {
-        return;
-    }
-
-    pigment->cpu_allocator.free(pigment->cpu_allocator.user_data, ptr);
-}
+void* p_alloc_impl(Pigment* pigment, uint64_t size, uint64_t alignment, PAllocScope scope);
+void* p_calloc_impl(Pigment* pigment, uint64_t count, uint64_t size, uint64_t alignment, PAllocScope scope);
+void* p_realloc_impl(Pigment* pigment, void* ptr, uint64_t old_size, uint64_t new_size, uint64_t alignment, PAllocScope scope);
+void p_free_impl(Pigment* pigment, void* ptr);
 
 // === ALLOC HELPERS ===
 

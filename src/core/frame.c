@@ -100,6 +100,11 @@ uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer)
     return renderer->swapchain->current_frame;
 }
 
+uint32_t pigment_max_frames_in_flight(Pigment* pigment)
+{
+    return (pigment != NULL) ? pigment->config.max_frames_in_flight : 0;
+}
+
 PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer)
 {
     if(renderer == NULL || renderer->swapchain == NULL)

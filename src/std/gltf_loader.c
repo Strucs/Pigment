@@ -16,7 +16,8 @@
 
 #include "gltf_loader.h"
 
-#include "internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <cgltf.h>
 #include <stb_image.h>

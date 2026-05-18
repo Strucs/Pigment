@@ -16,10 +16,12 @@
 
 #include "camera.h"
 
+#include "std_internal.h"
+
 #include "pigment/pigment.h"
 
-#include "internal.h"
-#include "std_internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <string.h>
 
@@ -50,7 +52,7 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
     }
 
     camera->data                = (PCameraData) {.view = P_MAT4_IDENTITY, .projection = P_MAT4_IDENTITY};
-    camera->frame_count         = pigment->config.max_frames_in_flight;
+    camera->frame_count         = pigment_max_frames_in_flight(pigment);
     camera->last_uploaded_frame = UINT32_MAX;
     camera->dirty               = P_TRUE;
 

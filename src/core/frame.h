@@ -128,6 +128,15 @@ void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer);
 uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
 
 /**
+ * @brief Return the number of frames the renderer keeps in flight.
+ *
+ * @param pigment Pigment instance.
+ *
+ * @return The configured maximum number of frames in flight.
+ */
+uint32_t pigment_max_frames_in_flight(Pigment* pigment);
+
+/**
  * @brief Return the current frame's command buffer (same one returned by pigment_begin_frame).
  *
  * @param renderer The renderer to query.

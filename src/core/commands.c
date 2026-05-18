@@ -845,6 +845,53 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
     tracker->last_used = NULL;
 }
 
+void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker)
+{
+    if(pigment == NULL || tracker == NULL || pigment->device == NULL || tracker->last_used == NULL)
+    {
+        return;
+    }
+
+    PDevice* device = pigment->device;
+
+    P_STACK_OR_HEAP(VkSemaphore, semaphores, device->queue_count);
+    P_STACK_OR_HEAP(uint64_t, values, device->queue_count);
+    if(semaphores == NULL || values == NULL)
+    {
+        P_STACK_OR_HEAP_FREE(pigment, semaphores);
+        P_STACK_OR_HEAP_FREE(pigment, values);
+        return;
+    }
+
+    uint32_t count = 0;
+    for(uint32_t q = 0; q < device->queue_count; q++)
+    {
+        uint64_t value = atomic_load_explicit(&tracker->last_used[q], memory_order_relaxed);
+        if(value == 0 || device->queues[q].timeline == VK_NULL_HANDLE)
+        {
+            continue;
+        }
+
+        semaphores[count] = device->queues[q].timeline;
+        values[count]     = value;
+        count++;
+    }
+
+    if(count > 0)
+    {
+        VkSemaphoreWaitInfo wait_info = {
+            .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+            .semaphoreCount = count,
+            .pSemaphores    = semaphores,
+            .pValues        = values,
+        };
+        vkWaitSemaphores(device->logical_device, &wait_info, UINT64_MAX);
+    }
+
+    P_STACK_OR_HEAP_FREE(pigment, semaphores);
+    P_STACK_OR_HEAP_FREE(pigment, values);
+}
+
 PResourceTracker* pigment_create_resource_tracker(Pigment* pigment)
 {
     if(pigment == NULL)

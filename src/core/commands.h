@@ -219,6 +219,16 @@ void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracke
 void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
 
 /**
+ * @brief Block until the GPU has finished every submit stamped on the tracker.
+ *
+ * Use it on custom resource tracker.
+ *
+ * @param pigment Pigment instance.
+ * @param tracker Tracker from pigment_create_resource_tracker.
+ */
+void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker);
+
+/**
  * @brief Stamp a buffer's tracker at submit time.
  *
  * Required when the buffer is touched by the command buffer but Pigment cannot see it in the

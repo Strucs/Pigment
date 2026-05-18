@@ -86,6 +86,8 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         return NULL;
     }
 
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, desc->name);
+
     buffer->size         = desc->size;
     buffer->memory_flags = alloc->get_memory_flags(alloc->user_data, buffer->allocation);
 
@@ -181,6 +183,16 @@ void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offse
 
     PVkAllocator* alloc = pigment->gpu_allocator;
     alloc->invalidate(alloc->user_data, buffer->allocation, (VkDeviceSize) offset, (size == 0) ? VK_WHOLE_SIZE : (VkDeviceSize) size);
+}
+
+void pigment_buffer_wait(Pigment* pigment, PBuffer* buffer)
+{
+    if(buffer == NULL)
+    {
+        return;
+    }
+
+    pigment_resource_tracker_wait(pigment, &buffer->tracker);
 }
 
 VkBuffer pigment_vk_buffer(PBuffer* buffer)

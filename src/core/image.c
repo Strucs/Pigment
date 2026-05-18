@@ -669,6 +669,16 @@ void pigment_image_invalidate(Pigment* pigment, PImage* image)
     alloc->invalidate(alloc->user_data, image->image_allocation, 0, VK_WHOLE_SIZE);
 }
 
+void pigment_image_wait(Pigment* pigment, PImage* image)
+{
+    if(image == NULL)
+    {
+        return;
+    }
+
+    pigment_resource_tracker_wait(pigment, &image->tracker);
+}
+
 void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count)
 {
     if(pigment == NULL || image == NULL || regions == NULL || region_count == 0)
@@ -841,6 +851,8 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
         PLOG_TRACE(pigment, "Failed to create image (result: %d)", result);
         return PIGMENT_ERROR_VULKAN;
     }
+
+    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_IMAGE, (uint64_t) image->image, image->name);
 
     return PIGMENT_SUCCESS;
 }

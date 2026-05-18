@@ -28,6 +28,7 @@ extern "C" {
 #include "std/camera_math.h"
 #include "std/canvas/canvas.h"
 #include "std/draw.h"
+#include "std/dynamic_image.h"
 #include "std/file_io.h"
 #include "std/gltf_loader.h"
 #include "std/lights.h"

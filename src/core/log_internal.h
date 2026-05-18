@@ -17,10 +17,7 @@
 #ifndef PIGMENT_LOG_INTERNAL_H
 #define PIGMENT_LOG_INTERNAL_H
 
-#include "structs.h"
-
-#include <stdatomic.h>
-#include <stdint.h>
+#include "defines.h"
 
 PResult pigment_log_init(Pigment* pigment);
 void pigment_log_destroy(Pigment* pigment);
@@ -28,12 +25,7 @@ void pigment_log_destroy(Pigment* pigment);
 void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, PigmentLogType type, const char* message_id_name, int32_t message_id, const char* fmt, ...)
     __attribute__((format(printf, 6, 7)));
 
-static inline PBool pigment_log_should_dispatch(const Pigment* p, PigmentLogSeverity sev, PigmentLogType type)
-{
-    uint32_t active_sev  = atomic_load_explicit(&p->log->active_severities, memory_order_relaxed);
-    uint32_t active_type = atomic_load_explicit(&p->log->active_types, memory_order_relaxed);
-    return (active_sev & sev) && (active_type & type);
-}
+PBool pigment_log_should_dispatch(const Pigment* p, PigmentLogSeverity sev, PigmentLogType type);
 
 #define PLOG(pigment, sev, type, id_name, id, fmt, ...)                                               \
     do                                                                                                \

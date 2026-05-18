@@ -147,6 +147,13 @@ void pigment_logger_destroy(Pigment* pigment, PigmentLogger* logger)
     P_FREE(pigment, logger);
 }
 
+PBool pigment_log_should_dispatch(const Pigment* p, PigmentLogSeverity sev, PigmentLogType type)
+{
+    uint32_t active_sev  = atomic_load_explicit(&p->log->active_severities, memory_order_relaxed);
+    uint32_t active_type = atomic_load_explicit(&p->log->active_types, memory_order_relaxed);
+    return (active_sev & sev) && (active_type & type);
+}
+
 void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, PigmentLogType type, const char* message_id_name, int32_t message_id, const char* fmt, ...)
 {
     PLogState* log = pigment->log;

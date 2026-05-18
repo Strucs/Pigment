@@ -56,4 +56,9 @@ struct PStdPipelineLayouts {
     PLayout* crt_layout;
 };
 
+static inline uint32_t block_align(uint32_t value, uint32_t block)
+{
+    return ((value + block - 1) / block) * block;
+}
+
 #endif

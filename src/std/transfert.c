@@ -16,9 +16,12 @@
 
 #include "transfert.h"
 
+#include "std_internal.h"
+
 #include "pigment/pigment.h"
 
-#include "internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <string.h>
 
@@ -50,11 +53,6 @@ static inline uint32_t mip_dim(uint32_t base, uint32_t level)
 static inline uint64_t mip_layer_size(const PImageUploadDesc* upload, uint32_t level)
 {
     return pigment_format_image_size(upload->format, mip_dim(upload->width, level), mip_dim(upload->height, level)) * mip_dim(desc_depth(upload), level);
-}
-
-static inline uint32_t block_align(uint32_t value, uint32_t block)
-{
-    return ((value + block - 1) / block) * block;
 }
 
 PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PBufferUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle)
@@ -267,6 +265,7 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
         .type               = upload->type,
         .shared_queues      = upload->shared_queues,
         .shared_queue_count = upload->shared_queue_count,
+        .name               = upload->name,
     };
 
     *out_image = pigment_create_image(pigment, &image_desc);
@@ -347,6 +346,7 @@ static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImag
         .type               = upload->type,
         .shared_queues      = upload->shared_queues,
         .shared_queue_count = upload->shared_queue_count,
+        .name               = upload->name,
     };
 
     PImage* image = pigment_create_image(pigment, &image_desc);

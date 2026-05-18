@@ -220,6 +220,14 @@ void pigment_image_flush(Pigment* pigment, PImage* image);
 void pigment_image_invalidate(Pigment* pigment, PImage* image);
 
 /**
+ * @brief Blocks until the GPU has finished every submitted command that used the image.
+ *
+ * @param pigment Pigment instance.
+ * @param image Image to wait on.
+ */
+void pigment_image_wait(Pigment* pigment, PImage* image);
+
+/**
  * Require P_FEATURE_HOST_IMAGE_COPY, on an image created with P_IMAGE_USAGE_HOST_TRANSFER.
  */
 

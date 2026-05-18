@@ -16,10 +16,12 @@
 
 #include "pipeline_loader.h"
 
+#include "std_internal.h"
+
 #include "pigment/pigment.h"
 
-#include "internal.h"
-#include "std_internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <stdalign.h>
 #include <string.h>

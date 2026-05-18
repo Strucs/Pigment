@@ -20,11 +20,12 @@
 #include "camera.h"
 #include "lights.h"
 #include "material.h"
+#include "std_internal.h"
 
 #include "pigment/pigment.h"
 
-#include "internal.h"
-#include "std_internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <string.h>
 
@@ -49,7 +50,7 @@ PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_i
         return NULL;
     }
 
-    uint32_t frame_count = pigment->config.max_frames_in_flight;
+    uint32_t frame_count = pigment_max_frames_in_flight(pigment);
     PBufferDesc desc     = {
         .size   = (uint64_t) max_instances_per_frame * frame_count * sizeof(PInstanceData),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,

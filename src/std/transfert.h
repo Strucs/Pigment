@@ -53,6 +53,7 @@ typedef struct PImageUploadDesc {
     PImageUploadFlags flags;               // 0 = single mip
     PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. List every queue that touches the image (upload, finalize, sampling).
     uint32_t shared_queue_count;
+    const char* name;
 } PImageUploadDesc;
 
 /**

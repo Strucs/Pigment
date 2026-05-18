@@ -19,7 +19,8 @@
 #include "pigment/pigment.h"
 #include "pigment/surface.h"
 
-#include "internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <stdalign.h>
 

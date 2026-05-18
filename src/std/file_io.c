@@ -16,7 +16,8 @@
 
 #include "file_io.h"
 
-#include "internal.h"
+#include "internal_alloc.h"
+#include "log_internal.h"
 
 #include <stdio.h>
 
