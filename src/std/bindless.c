@@ -656,7 +656,7 @@ static uint32_t image_list_put(Pigment* pigment, PImageList* image_list, PImage*
 static void image_list_free_slot(Pigment* pigment, PImageList* image_list, uint32_t slot)
 {
     image_list->images[slot] = NULL;
-    if(P_ARRAY_RESERVE_OBJECT(pigment, image_list->free_slots, image_list->free_count, image_list->free_capacity, 1, 4) == PIGMENT_SUCCESS)
+    if(P_ARRAY_RESERVE_OBJECT(pigment, image_list->free_slots, image_list->free_count, image_list->free_capacity, 1, PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY) == PIGMENT_SUCCESS)
     {
         image_list->free_slots[image_list->free_count++] = slot;
     }

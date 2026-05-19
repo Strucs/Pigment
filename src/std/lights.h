@@ -50,7 +50,7 @@ typedef struct PLightDesc {
     float outer_cone_cos;
 } __attribute__((aligned(16))) PLightDesc;
 
-PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights);
+PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size);
 void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);
 
 void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color);

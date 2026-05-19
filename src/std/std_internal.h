@@ -19,6 +19,8 @@
 
 #include "pigment/defines.h"
 
+#define PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY 8
+
 typedef struct PStdPushConstants {
     uint64_t vertex_buffer;
     uint64_t instance_buffer;

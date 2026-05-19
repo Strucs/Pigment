@@ -71,6 +71,17 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
 // 6 face buffers in the order: +X, -X, +Y, -Y, +Z, -Z. All faces must share width/height/format.
 uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
+/**
+ * @brief Registers a render target's color (or depth) images into the bindless.
+ *
+ * Unlike `pigment_std_register_image`, bindless does not take ownership.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param rt Render target to register.
+ *
+ * @return First image slot, or UINT32_MAX on failure.
+ */
 uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
 uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
 

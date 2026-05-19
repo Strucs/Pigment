@@ -25,6 +25,7 @@
 #include "log_internal.h"
 
 #include <stddef.h>
+#include <string.h>
 
 typedef struct PLightsHeader {
     PVec3 ambient_color;
@@ -39,6 +40,7 @@ struct PLights {
 
     uint32_t* free_slots;
     uint32_t free_count;
+    uint32_t free_capacity;
 };
 
 static PLightsHeader* lights_header(PLights* lights)
@@ -51,9 +53,9 @@ static PLightDesc* lights_data(PLights* lights)
     return (PLightDesc*) ((unsigned char*) pigment_buffer_mapped(lights->buffer) + sizeof(PLightsHeader));
 }
 
-PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
+PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size)
 {
-    if(pigment == NULL || max_lights == 0)
+    if(pigment == NULL || initial_size == 0)
     {
         return NULL;
     }
@@ -64,14 +66,8 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
         return NULL;
     }
 
-    lights->free_slots = P_NEW_ARRAY_FOR_OBJECT(pigment, lights->free_slots, max_lights);
-    if(lights->free_slots == NULL)
-    {
-        goto ERROR;
-    }
-
     PBufferDesc desc = {
-        .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) max_lights * sizeof(PLightDesc),
+        .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) initial_size * sizeof(PLightDesc),
         .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
         .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
     };
@@ -82,7 +78,7 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t max_lights)
         goto ERROR;
     }
 
-    lights->capacity   = max_lights;
+    lights->capacity   = initial_size;
     lights->count      = 0;
     lights->free_count = 0;
 
@@ -128,6 +124,32 @@ void pigment_std_destroy_lights(Pigment* pigment, PLights* lights)
     P_FREE(pigment, lights);
 }
 
+static PResult lights_grow(Pigment* pigment, PLights* lights)
+{
+    uint32_t new_capacity = lights->capacity * 2;
+
+    PBufferDesc desc = {
+        .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) new_capacity * sizeof(PLightDesc),
+        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
+        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
+    };
+    PBuffer* new_buffer = pigment_create_buffer(pigment, &desc);
+    if(new_buffer == NULL)
+    {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+
+    uint64_t used = sizeof(PLightsHeader) + (uint64_t) lights->count * sizeof(PLightDesc);
+    memcpy(pigment_buffer_mapped(new_buffer), pigment_buffer_mapped(lights->buffer), (size_t) used);
+    pigment_buffer_flush(pigment, new_buffer, 0, used);
+
+    pigment_destroy_buffer(pigment, lights->buffer);
+
+    lights->buffer   = new_buffer;
+    lights->capacity = new_capacity;
+    return PIGMENT_SUCCESS;
+}
+
 uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc)
 {
     if(pigment == NULL || lights == NULL || desc == NULL)
@@ -141,16 +163,16 @@ uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLigh
     {
         id = lights->free_slots[--lights->free_count];
     }
-    else if(lights->count < lights->capacity)
+    else
     {
+        if(lights->count >= lights->capacity && lights_grow(pigment, lights) != PIGMENT_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "PLights capacity (%u) reached and grow failed.", lights->capacity);
+            return UINT32_MAX;
+        }
         id                           = lights->count++;
         lights_header(lights)->count = lights->count;
         count_changed                = P_TRUE;
-    }
-    else
-    {
-        PLOG_ERROR(pigment, "PLights capacity (%u) reached, cannot create more lights.", lights->capacity);
-        return UINT32_MAX;
     }
 
     lights_data(lights)[id] = *desc;
@@ -177,8 +199,14 @@ void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, co
 
 void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id)
 {
-    if(pigment == NULL || lights == NULL || id >= lights->capacity || lights->free_count >= lights->capacity)
+    if(pigment == NULL || lights == NULL || id >= lights->capacity)
     {
+        return;
+    }
+
+    if(P_ARRAY_RESERVE_OBJECT(pigment, lights->free_slots, lights->free_count, lights->free_capacity, 1, PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY) != PIGMENT_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to record freed light slot %u.", id);
         return;
     }
 
