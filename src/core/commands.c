@@ -841,7 +841,7 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
         return;
     }
 
-    P_FREE(pigment, tracker->last_used);
+    P_FREE(pigment, (void*) tracker->last_used);
     tracker->last_used = NULL;
 }
 

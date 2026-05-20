@@ -36,7 +36,7 @@ typedef enum PLightType {
     P_LIGHT_TYPE_SPOT        = 3,
 } PLightType;
 
-typedef struct PLightDesc {
+typedef struct PIGMENT_ALIGN(16) PLightDesc {
     PVec3 position;
     uint32_t type;
 
@@ -48,7 +48,7 @@ typedef struct PLightDesc {
 
     float inner_cone_cos;
     float outer_cone_cos;
-} __attribute__((aligned(16))) PLightDesc;
+} PLightDesc;
 
 PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size);
 void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);

@@ -33,10 +33,10 @@ typedef struct PInstanceRing PInstanceRing;
 typedef struct PMaterials PMaterials;
 typedef struct PLights PLights;
 
-typedef struct PInstanceData {
+typedef struct PIGMENT_ALIGN(16) PInstanceData {
     PMat4 transform;
     uint32_t material_id;
-} __attribute__((aligned(16))) PInstanceData;
+} PInstanceData;
 
 typedef struct PDrawCall {
     PMeshBuffers* mesh;

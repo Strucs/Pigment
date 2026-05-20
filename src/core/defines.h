@@ -23,6 +23,14 @@ extern "C" {
 
 #include <stdint.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+    #define PIGMENT_ALIGN(n) __attribute__((aligned(n)))
+#elif defined(_MSC_VER)
+    #define PIGMENT_ALIGN(n) __declspec(align(n))
+#else
+    #define PIGMENT_ALIGN(n)
+#endif
+
 typedef unsigned char PBool;
 #define P_TRUE 1
 #define P_FALSE 0

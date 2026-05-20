@@ -4,3 +4,4 @@ build
 powermake_config.json
 **/.spv
 .cache
+__pycache__

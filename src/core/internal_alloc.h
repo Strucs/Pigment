@@ -56,17 +56,17 @@ void p_free_impl(Pigment* pigment, void* ptr);
 
 // === TYPE-INFERRED ALLOCATORS ===
 
-#define P_NEW_FOR_COMMAND(pigment, ptr) ((typeof(ptr)) P_CALLOC_COMMAND((pigment), 1, sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_FOR_OBJECT(pigment, ptr) ((typeof(ptr)) P_CALLOC_OBJECT((pigment), 1, sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_FOR_CACHE(pigment, ptr) ((typeof(ptr)) P_CALLOC_CACHE((pigment), 1, sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_FOR_DEVICE(pigment, ptr) ((typeof(ptr)) P_CALLOC_DEVICE((pigment), 1, sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_FOR_INSTANCE(pigment, ptr) ((typeof(ptr)) P_CALLOC_INSTANCE((pigment), 1, sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
+#define P_NEW_FOR_COMMAND(pigment, ptr) ((__typeof__(ptr)) P_CALLOC_COMMAND((pigment), 1, sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_FOR_OBJECT(pigment, ptr) ((__typeof__(ptr)) P_CALLOC_OBJECT((pigment), 1, sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_FOR_CACHE(pigment, ptr) ((__typeof__(ptr)) P_CALLOC_CACHE((pigment), 1, sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_FOR_DEVICE(pigment, ptr) ((__typeof__(ptr)) P_CALLOC_DEVICE((pigment), 1, sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_FOR_INSTANCE(pigment, ptr) ((__typeof__(ptr)) P_CALLOC_INSTANCE((pigment), 1, sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
 
-#define P_NEW_ARRAY_FOR_COMMAND(pigment, ptr, n) ((typeof(ptr)) P_CALLOC_COMMAND((pigment), (n), sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_ARRAY_FOR_OBJECT(pigment, ptr, n) ((typeof(ptr)) P_CALLOC_OBJECT((pigment), (n), sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_ARRAY_FOR_CACHE(pigment, ptr, n) ((typeof(ptr)) P_CALLOC_CACHE((pigment), (n), sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_ARRAY_FOR_DEVICE(pigment, ptr, n) ((typeof(ptr)) P_CALLOC_DEVICE((pigment), (n), sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
-#define P_NEW_ARRAY_FOR_INSTANCE(pigment, ptr, n) ((typeof(ptr)) P_CALLOC_INSTANCE((pigment), (n), sizeof(*(ptr)), _Alignof(typeof(*(ptr)))))
+#define P_NEW_ARRAY_FOR_COMMAND(pigment, ptr, n) ((__typeof__(ptr)) P_CALLOC_COMMAND((pigment), (n), sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_ARRAY_FOR_OBJECT(pigment, ptr, n) ((__typeof__(ptr)) P_CALLOC_OBJECT((pigment), (n), sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_ARRAY_FOR_CACHE(pigment, ptr, n) ((__typeof__(ptr)) P_CALLOC_CACHE((pigment), (n), sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_ARRAY_FOR_DEVICE(pigment, ptr, n) ((__typeof__(ptr)) P_CALLOC_DEVICE((pigment), (n), sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
+#define P_NEW_ARRAY_FOR_INSTANCE(pigment, ptr, n) ((__typeof__(ptr)) P_CALLOC_INSTANCE((pigment), (n), sizeof(*(ptr)), _Alignof(__typeof__(*(ptr)))))
 
 // === STACK OR HEAP HELPERS ===
 
@@ -111,18 +111,18 @@ static inline PResult p_array_reserve_impl(Pigment* pigment, void** ptr, uint32_
 }
 
 #define P_ARRAY_RESERVE_COMMAND(pigment, array, count, cap, add, initial) \
-    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(typeof(*(array))), P_ALLOC_SCOPE_COMMAND)
+    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(__typeof__(*(array))), P_ALLOC_SCOPE_COMMAND)
 
 #define P_ARRAY_RESERVE_OBJECT(pigment, array, count, cap, add, initial) \
-    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(typeof(*(array))), P_ALLOC_SCOPE_OBJECT)
+    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(__typeof__(*(array))), P_ALLOC_SCOPE_OBJECT)
 
 #define P_ARRAY_RESERVE_CACHE(pigment, array, count, cap, add, initial) \
-    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(typeof(*(array))), P_ALLOC_SCOPE_CACHE)
+    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(__typeof__(*(array))), P_ALLOC_SCOPE_CACHE)
 
 #define P_ARRAY_RESERVE_DEVICE(pigment, array, count, cap, add, initial) \
-    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(typeof(*(array))), P_ALLOC_SCOPE_DEVICE)
+    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(__typeof__(*(array))), P_ALLOC_SCOPE_DEVICE)
 
 #define P_ARRAY_RESERVE_INSTANCE(pigment, array, count, cap, add, initial) \
-    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(typeof(*(array))), P_ALLOC_SCOPE_INSTANCE)
+    p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(__typeof__(*(array))), P_ALLOC_SCOPE_INSTANCE)
 
 #endif

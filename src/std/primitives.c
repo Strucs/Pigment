@@ -211,13 +211,13 @@ PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segments, uint32_t 
 
     for(uint32_t lat = 0; lat <= lat_segments; lat++)
     {
-        float theta     = (float) lat * M_PI / (float) lat_segments;
+        float theta     = (float) lat * (float) M_PI / (float) lat_segments;
         float sin_theta = sinf(theta);
         float cos_theta = cosf(theta);
 
         for(uint32_t lon = 0; lon <= lon_segments; lon++)
         {
-            float phi     = (float) lon * 2.0f * M_PI / (float) lon_segments;
+            float phi     = (float) lon * 2.0f * (float) M_PI / (float) lon_segments;
             float sin_phi = sinf(phi);
             float cos_phi = cosf(phi);
 

@@ -27,7 +27,7 @@ extern "C" {
 
 typedef struct PMaterials PMaterials;
 
-typedef struct PMaterialDesc {
+typedef struct PIGMENT_ALIGN(16) PMaterialDesc {
     PVec4 base_color_factor;
     PVec4 emissive_factor;
 
@@ -46,7 +46,7 @@ typedef struct PMaterialDesc {
     int32_t emissive_sampler;
     int32_t occlusion_image;
     int32_t occlusion_sampler;
-} __attribute__((aligned(16))) PMaterialDesc;
+} PMaterialDesc;
 
 PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size);
 void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials);

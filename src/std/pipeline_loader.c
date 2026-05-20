@@ -23,33 +23,16 @@
 #include "internal_alloc.h"
 #include "log_internal.h"
 
-#include <stdalign.h>
 #include <string.h>
 
-alignas(uint32_t) static constexpr unsigned char default_vertex_spv[] = {
-    #embed <default_vert.spv>
-};
-alignas(uint32_t) static constexpr unsigned char default_fragment_spv[] = {
-    #embed <default_frag.spv>
-};
-alignas(uint32_t) static constexpr unsigned char light_gizmo_vertex_spv[] = {
-    #embed <light_gizmo_vert.spv>
-};
-alignas(uint32_t) static constexpr unsigned char light_gizmo_fragment_spv[] = {
-    #embed <light_gizmo_frag.spv>
-};
-alignas(uint32_t) static constexpr unsigned char skybox_vertex_spv[] = {
-    #embed <skybox_vert.spv>
-};
-alignas(uint32_t) static constexpr unsigned char skybox_fragment_spv[] = {
-    #embed <skybox_frag.spv>
-};
-alignas(uint32_t) static constexpr unsigned char crt_vertex_spv[] = {
-    #embed <crt_vert.spv>
-};
-alignas(uint32_t) static constexpr unsigned char crt_fragment_spv[] = {
-    #embed <crt_frag.spv>
-};
+#include "default_vert_spv.h"
+#include "default_frag_spv.h"
+#include "light_gizmo_vert_spv.h"
+#include "light_gizmo_frag_spv.h"
+#include "skybox_vert_spv.h"
+#include "skybox_frag_spv.h"
+#include "crt_vert_spv.h"
+#include "crt_frag_spv.h"
 
 char* load_shader_code(Pigment* pigment, const IOCallbacks* io, const char* file_path, uint32_t* shader_size)
 {
@@ -126,10 +109,10 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
 
     desc.layout = default_pipeline_layout(pigment, bindless);
 
-    desc.vertex_shader        = (const uint32_t*) default_vertex_spv;
-    desc.vertex_shader_size   = (uint32_t) sizeof(default_vertex_spv);
-    desc.fragment_shader      = (const uint32_t*) default_fragment_spv;
-    desc.fragment_shader_size = (uint32_t) sizeof(default_fragment_spv);
+    desc.vertex_shader        = (const uint32_t*) default_vert_spv;
+    desc.vertex_shader_size   = (uint32_t) sizeof(default_vert_spv);
+    desc.fragment_shader      = (const uint32_t*) default_frag_spv;
+    desc.fragment_shader_size = (uint32_t) sizeof(default_frag_spv);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;
@@ -174,10 +157,10 @@ PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* 
 
     desc.layout = default_light_gizmo_pipeline_layout(pigment, bindless);
 
-    desc.vertex_shader        = (const uint32_t*) light_gizmo_vertex_spv;
-    desc.vertex_shader_size   = (uint32_t) sizeof(light_gizmo_vertex_spv);
-    desc.fragment_shader      = (const uint32_t*) light_gizmo_fragment_spv;
-    desc.fragment_shader_size = (uint32_t) sizeof(light_gizmo_fragment_spv);
+    desc.vertex_shader        = (const uint32_t*) light_gizmo_vert_spv;
+    desc.vertex_shader_size   = (uint32_t) sizeof(light_gizmo_vert_spv);
+    desc.fragment_shader      = (const uint32_t*) light_gizmo_frag_spv;
+    desc.fragment_shader_size = (uint32_t) sizeof(light_gizmo_frag_spv);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;
@@ -221,10 +204,10 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
 
     desc.layout = default_skybox_pipeline_layout(pigment, bindless);
 
-    desc.vertex_shader        = (const uint32_t*) skybox_vertex_spv;
-    desc.vertex_shader_size   = (uint32_t) sizeof(skybox_vertex_spv);
-    desc.fragment_shader      = (const uint32_t*) skybox_fragment_spv;
-    desc.fragment_shader_size = (uint32_t) sizeof(skybox_fragment_spv);
+    desc.vertex_shader        = (const uint32_t*) skybox_vert_spv;
+    desc.vertex_shader_size   = (uint32_t) sizeof(skybox_vert_spv);
+    desc.fragment_shader      = (const uint32_t*) skybox_frag_spv;
+    desc.fragment_shader_size = (uint32_t) sizeof(skybox_frag_spv);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;
@@ -268,10 +251,10 @@ PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless
 
     desc.layout = default_crt_pipeline_layout(pigment, bindless);
 
-    desc.vertex_shader        = (const uint32_t*) crt_vertex_spv;
-    desc.vertex_shader_size   = (uint32_t) sizeof(crt_vertex_spv);
-    desc.fragment_shader      = (const uint32_t*) crt_fragment_spv;
-    desc.fragment_shader_size = (uint32_t) sizeof(crt_fragment_spv);
+    desc.vertex_shader        = (const uint32_t*) crt_vert_spv;
+    desc.vertex_shader_size   = (uint32_t) sizeof(crt_vert_spv);
+    desc.fragment_shader      = (const uint32_t*) crt_frag_spv;
+    desc.fragment_shader_size = (uint32_t) sizeof(crt_frag_spv);
 
     desc.color_formats      = color_formats;
     desc.color_format_count = color_format_count;

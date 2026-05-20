@@ -22,14 +22,8 @@
 #include "internal_alloc.h"
 #include "log_internal.h"
 
-#include <stdalign.h>
-
-alignas(uint32_t) static constexpr unsigned char ndc_vertex_spv[] = {
-    #embed <ndc_vert.spv>
-};
-alignas(uint32_t) static constexpr unsigned char ndc_fragment_spv[] = {
-    #embed <ndc_frag.spv>
-};
+#include "ndc_vert_spv.h"
+#include "ndc_frag_spv.h"
 
 typedef struct PStdCanvasPushConstants {
     float pos[2];
@@ -79,10 +73,10 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PS
 
     PPipelineDesc pipeline_desc = {
         .layout               = canvas->layout,
-        .vertex_shader        = (const uint32_t*) ndc_vertex_spv,
-        .vertex_shader_size   = (uint32_t) sizeof(ndc_vertex_spv),
-        .fragment_shader      = (const uint32_t*) ndc_fragment_spv,
-        .fragment_shader_size = (uint32_t) sizeof(ndc_fragment_spv),
+        .vertex_shader        = (const uint32_t*) ndc_vert_spv,
+        .vertex_shader_size   = (uint32_t) sizeof(ndc_vert_spv),
+        .fragment_shader      = (const uint32_t*) ndc_frag_spv,
+        .fragment_shader_size = (uint32_t) sizeof(ndc_frag_spv),
         .color_formats        = &color_format,
         .color_format_count   = 1,
         .depth_format         = P_FORMAT_UNDEFINED,

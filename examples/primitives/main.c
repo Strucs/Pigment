@@ -1,16 +1,12 @@
 #include <pigment/pigment_std.h>
 #include <pigment/pigment_sdl.h>
 
-#include <stdalign.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "../common/fps_camera.h"
-
-alignas(uint32_t) static const unsigned char wave_compute_spv[] = {
-    #embed <wave_comp.spv>
-};
+#include "wave_comp_spv.h"
 
 #define SPHERE_INSTANCE_COUNT 100
 
@@ -274,8 +270,8 @@ int main(void)
 
     PComputePipelineDesc wave_desc = {
         .layout           = wave_layout,
-        .compute_shader      = (const uint32_t*) wave_compute_spv,
-        .compute_shader_size = (uint32_t) sizeof(wave_compute_spv),
+        .compute_shader      = (const uint32_t*) wave_comp_spv,
+        .compute_shader_size = (uint32_t) sizeof(wave_comp_spv),
         .name             = "wave_compute",
     };
     if(pigment_create_compute_pipelines(pigment, NULL, &wave_desc, 1, &wave_pipeline) != PIGMENT_SUCCESS)

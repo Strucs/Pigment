@@ -10,7 +10,7 @@
 
 static inline float deg_to_rad(float deg)
 {
-    return deg * (M_PI / 180.0f);
+    return deg * ((float) M_PI / 180.0f);
 }
 
 static inline void vec3_copy(const PVec3 src, PVec3 dst)
@@ -61,7 +61,7 @@ static inline void vec3_normalize(PVec3 v)
     v[2] /= len;
 }
 
-static inline void mat4_copy(const PMat4 src, PMat4 dst)
+static inline void mat4_copy(PMat4 src, PMat4 dst)
 {
     memcpy(dst, src, sizeof(PMat4));
 }

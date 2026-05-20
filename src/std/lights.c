@@ -27,10 +27,10 @@
 #include <stddef.h>
 #include <string.h>
 
-typedef struct PLightsHeader {
+typedef struct PIGMENT_ALIGN(16) PLightsHeader {
     PVec3 ambient_color;
     uint32_t count;
-} __attribute__((aligned(16))) PLightsHeader;
+} PLightsHeader;
 
 struct PLights {
     PBuffer* buffer;

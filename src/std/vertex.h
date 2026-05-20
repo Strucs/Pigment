@@ -25,13 +25,13 @@ extern "C" {
 
 #include "pigment/defines.h"
 
-typedef struct PVertex {
+typedef struct PIGMENT_ALIGN(16) PVertex {
     PVec3 pos;
     float uv_x;
     PVec3 normal;
     float uv_y;
     PVec4 color;
-} __attribute__((aligned(16))) PVertex;
+} PVertex;
 
 
 #ifdef __cplusplus

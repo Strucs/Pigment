@@ -26,6 +26,7 @@
 #define NO_MATERIAL UINT32_MAX
 #define MISSING_TEXTURE UINT32_MAX
 #define DEFAULT_CAPACITY 8
+#define P_MAX_ALIGN 16
 
 typedef struct PrimAttrs {
     cgltf_accessor* pos;
@@ -432,7 +433,7 @@ static void io_cgltf_release(const cgltf_memory_options* memory_options, const c
 
 static void* pigment_cgltf_alloc(void* user, cgltf_size size)
 {
-    return P_ALLOC_OBJECT((Pigment*) user, size, _Alignof(max_align_t));
+    return P_ALLOC_OBJECT((Pigment*) user, size, P_MAX_ALIGN);
 }
 
 static void pigment_cgltf_free(void* user, void* ptr)
@@ -493,8 +494,10 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* f
 
         for(size_t i = 0; i < data->images_count; i++)
         {
-            cgltf_image* img = &data->images[i];
-            int w, h, channels;
+            cgltf_image* img      = &data->images[i];
+            int w                 = 0;
+            int h                 = 0;
+            int channels          = 0;
             unsigned char* pixels = NULL;
 
             if(img->buffer_view)
