@@ -23,12 +23,12 @@ extern "C" {
 
 #include "defines.h"
 
-PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc);
-void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer);
-void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height);
-void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);
-void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace color_space);
-void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples);
+PIGMENT_API PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc);
+PIGMENT_API void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height);
+PIGMENT_API void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);
+PIGMENT_API void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace color_space);
+PIGMENT_API void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples);
 
 /**
  * @brief Recreate the renderer's swapchain if it was flagged dirty by an acquire failure or a
@@ -42,13 +42,13 @@ void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples);
  * @return PIGMENT_SUCCESS on success or no-op. On failure the renderer keeps a old swapchain
  *         and stays flagged so the user can retry next frame.
  */
-PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
 
-PFormat pigment_get_color_format(PWindowRenderer* renderer);
-PFormat pigment_get_depth_format(PWindowRenderer* renderer);
-PColorSpace pigment_get_color_space(PWindowRenderer* renderer);
-PSampleCount pigment_get_sample_count(PWindowRenderer* renderer);
-void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height);
+PIGMENT_API PFormat pigment_get_color_format(PWindowRenderer* renderer);
+PIGMENT_API PFormat pigment_get_depth_format(PWindowRenderer* renderer);
+PIGMENT_API PColorSpace pigment_get_color_space(PWindowRenderer* renderer);
+PIGMENT_API PSampleCount pigment_get_sample_count(PWindowRenderer* renderer);
+PIGMENT_API void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height);
 
 #ifdef __cplusplus
 }

@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_INTERNAL_ALLOC_H
-#define PIGMENT_INTERNAL_ALLOC_H
+#ifndef PIGMENT_ALLOC_H
+#define PIGMENT_ALLOC_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "defines.h"
 
 #include <string.h>
 
-void* p_alloc_impl(Pigment* pigment, uint64_t size, uint64_t alignment, PAllocScope scope);
-void* p_calloc_impl(Pigment* pigment, uint64_t count, uint64_t size, uint64_t alignment, PAllocScope scope);
-void* p_realloc_impl(Pigment* pigment, void* ptr, uint64_t old_size, uint64_t new_size, uint64_t alignment, PAllocScope scope);
-void p_free_impl(Pigment* pigment, void* ptr);
+PIGMENT_API void* p_alloc_impl(Pigment* pigment, uint64_t size, uint64_t alignment, PAllocScope scope);
+PIGMENT_API void* p_calloc_impl(Pigment* pigment, uint64_t count, uint64_t size, uint64_t alignment, PAllocScope scope);
+PIGMENT_API void* p_realloc_impl(Pigment* pigment, void* ptr, uint64_t old_size, uint64_t new_size, uint64_t alignment, PAllocScope scope);
+PIGMENT_API void p_free_impl(Pigment* pigment, void* ptr);
 
 // === ALLOC HELPERS ===
 
@@ -124,5 +128,9 @@ static inline PResult p_array_reserve_impl(Pigment* pigment, void** ptr, uint32_
 
 #define P_ARRAY_RESERVE_INSTANCE(pigment, array, count, cap, add, initial) \
     p_array_reserve_impl((pigment), (void**) &(array), (count), &(cap), (add), (initial), sizeof(*(array)), _Alignof(__typeof__(*(array))), P_ALLOC_SCOPE_INSTANCE)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

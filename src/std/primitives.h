@@ -33,14 +33,14 @@ typedef struct PMeshData {
     uint32_t index_count;
 } PMeshData;
 
-PMeshData pigment_cube_mesh(Pigment* pigment);
-PMeshData pigment_quad_mesh(Pigment* pigment);
-PMeshData pigment_plane_mesh(Pigment* pigment, uint32_t segments);
-PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segments, uint32_t lon_segments);
+PIGMENT_API PMeshData pigment_cube_mesh(Pigment* pigment);
+PIGMENT_API PMeshData pigment_quad_mesh(Pigment* pigment);
+PIGMENT_API PMeshData pigment_plane_mesh(Pigment* pigment, uint32_t segments);
+PIGMENT_API PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segments, uint32_t lon_segments);
 
-void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh);
+PIGMENT_API void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh);
 
-PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data);
+PIGMENT_API PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data);
 
 #ifdef __cplusplus
 }

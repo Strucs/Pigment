@@ -50,18 +50,18 @@ typedef struct PIGMENT_ALIGN(16) PLightDesc {
     float outer_cone_cos;
 } PLightDesc;
 
-PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size);
-void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);
+PIGMENT_API PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size);
+PIGMENT_API void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);
 
-void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color);
+PIGMENT_API void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color);
 
-uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc);
-void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc);
-void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id);
+PIGMENT_API uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc);
+PIGMENT_API void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc);
+PIGMENT_API void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id);
 
-uint64_t pigment_std_light_address(PLights* lights);
+PIGMENT_API uint64_t pigment_std_light_address(PLights* lights);
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
 
 #ifdef __cplusplus
 }

@@ -60,22 +60,22 @@ typedef struct PRenderTargetDesc {
     PAttachmentDesc depth;    // depth.format == 0 -> no depth target
 } PRenderTargetDesc;
 
-PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderTargetDesc* desc);
-void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target);
+PIGMENT_API PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderTargetDesc* desc);
+PIGMENT_API void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target);
 
-PImage** pigment_std_render_target_colors(PRenderTarget* target);
-uint32_t pigment_std_render_target_color_count(PRenderTarget* target);
-PImage* pigment_std_render_target_depth(PRenderTarget* target);
-PImage* pigment_std_render_target_color_sampled(PRenderTarget* target, uint32_t index);
-PImage* pigment_std_render_target_depth_sampled(PRenderTarget* target);
-uint32_t pigment_std_render_target_width(PRenderTarget* target);
-uint32_t pigment_std_render_target_height(PRenderTarget* target);
-uint32_t pigment_std_render_target_generation(PRenderTarget* target);
+PIGMENT_API PImage** pigment_std_render_target_colors(PRenderTarget* target);
+PIGMENT_API uint32_t pigment_std_render_target_color_count(PRenderTarget* target);
+PIGMENT_API PImage* pigment_std_render_target_depth(PRenderTarget* target);
+PIGMENT_API PImage* pigment_std_render_target_color_sampled(PRenderTarget* target, uint32_t index);
+PIGMENT_API PImage* pigment_std_render_target_depth_sampled(PRenderTarget* target);
+PIGMENT_API uint32_t pigment_std_render_target_width(PRenderTarget* target);
+PIGMENT_API uint32_t pigment_std_render_target_height(PRenderTarget* target);
+PIGMENT_API uint32_t pigment_std_render_target_generation(PRenderTarget* target);
 
-PAttachmentRef pigment_std_render_target_color_ref(PRenderTarget* target, uint32_t index);
-PAttachmentRef pigment_std_render_target_depth_ref(PRenderTarget* target);
-PAttachmentRef pigment_std_render_target_color_layer_ref(PRenderTarget* target, uint32_t index, uint32_t base_layer, uint32_t layer_count);
-PAttachmentRef pigment_std_render_target_depth_layer_ref(PRenderTarget* target, uint32_t base_layer, uint32_t layer_count);
+PIGMENT_API PAttachmentRef pigment_std_render_target_color_ref(PRenderTarget* target, uint32_t index);
+PIGMENT_API PAttachmentRef pigment_std_render_target_depth_ref(PRenderTarget* target);
+PIGMENT_API PAttachmentRef pigment_std_render_target_color_layer_ref(PRenderTarget* target, uint32_t index, uint32_t base_layer, uint32_t layer_count);
+PIGMENT_API PAttachmentRef pigment_std_render_target_depth_layer_ref(PRenderTarget* target, uint32_t base_layer, uint32_t layer_count);
 
 #ifdef __cplusplus
 }

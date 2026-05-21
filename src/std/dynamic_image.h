@@ -43,7 +43,7 @@ typedef struct PDynamicImageDesc {
  *
  * @return The created dynamic image, or NULL on failure.
  */
-PDynamicImage* pigment_std_create_dynamic_image(Pigment* pigment, const PDynamicImageDesc* desc);
+PIGMENT_API PDynamicImage* pigment_std_create_dynamic_image(Pigment* pigment, const PDynamicImageDesc* desc);
 
 /**
  * @brief Destroys a dynamic image and its staging ring.
@@ -51,7 +51,7 @@ PDynamicImage* pigment_std_create_dynamic_image(Pigment* pigment, const PDynamic
  * @param pigment Pigment instance.
  * @param dynamic_image Dynamic image to destroy.
  */
-void pigment_std_destroy_dynamic_image(Pigment* pigment, PDynamicImage* dynamic_image);
+PIGMENT_API void pigment_std_destroy_dynamic_image(Pigment* pigment, PDynamicImage* dynamic_image);
 
 /**
  * @brief Update the dynamic image.
@@ -64,7 +64,7 @@ void pigment_std_destroy_dynamic_image(Pigment* pigment, PDynamicImage* dynamic_
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PResult pigment_std_update_dynamic_image(Pigment* pigment, PCommandBuffer* cmd, PDynamicImage* dynamic_image, const void* pixels, uint64_t size);
+PIGMENT_API PResult pigment_std_update_dynamic_image(Pigment* pigment, PCommandBuffer* cmd, PDynamicImage* dynamic_image, const void* pixels, uint64_t size);
 
 /**
  * @brief Returns the underlying image, sampleable after the first update.
@@ -73,7 +73,7 @@ PResult pigment_std_update_dynamic_image(Pigment* pigment, PCommandBuffer* cmd, 
  *
  * @return The backing image, or NULL.
  */
-PImage* pigment_std_dynamic_image_get(PDynamicImage* dynamic_image);
+PIGMENT_API PImage* pigment_std_dynamic_image_get(PDynamicImage* dynamic_image);
 
 #ifdef __cplusplus
 }

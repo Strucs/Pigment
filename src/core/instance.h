@@ -23,10 +23,10 @@ extern "C" {
 
 #include "defines.h"
 
-PInstance* create_instance(Pigment* pigment, PAppInfo* info);
-void destroy_instance(Pigment* pigment);
+PIGMENT_API PInstance* create_instance(Pigment* pigment, PAppInfo* info);
+PIGMENT_API void destroy_instance(Pigment* pigment);
 
-void setup_debug_messenger(Pigment* pigment);
+PIGMENT_API void setup_debug_messenger(Pigment* pigment);
 
 #ifdef __cplusplus
 }

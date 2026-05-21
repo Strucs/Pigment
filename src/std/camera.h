@@ -27,14 +27,14 @@ extern "C" {
 
 typedef struct PCamera PCamera;
 
-PCamera* pigment_std_create_camera(Pigment* pigment);
-void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
+PIGMENT_API PCamera* pigment_std_create_camera(Pigment* pigment);
+PIGMENT_API void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
 
-void pigment_std_camera_set_view(PCamera* camera, PMat4 view);
-void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection);
+PIGMENT_API void pigment_std_camera_set_view(PCamera* camera, PMat4 view);
+PIGMENT_API void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection);
 
-uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
-void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);
+PIGMENT_API uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
+PIGMENT_API void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);
 
 #ifdef __cplusplus
 }

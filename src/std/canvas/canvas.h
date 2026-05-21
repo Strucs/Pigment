@@ -48,7 +48,7 @@ typedef enum PStdCanvasAnchor {
  *
  * @return A new PStdCanvas context, or NULL on failure.
  */
-PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PSampleCount samples);
+PIGMENT_API PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PSampleCount samples);
 
 /**
  * Destroys a canvas context and frees its resources. Does not free the Pigment instance.
@@ -56,7 +56,7 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PS
  * @param pigment Pigment instance.
  * @param canvas Canvas context to destroy.
  */
-void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas);
+PIGMENT_API void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas);
 
 /**
  * Get the pipeline used internally by the canvas context. Useful for setting render states or push constant ranges.
@@ -65,7 +65,7 @@ void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas);
  *
  * @return Internal pipeline used for 2D rendering.
  */
-PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas);
+PIGMENT_API PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas);
 
 /**
  * Bind the canvas pipeline and disable depth test/write. Call once at the start of your 2D pass.
@@ -74,7 +74,7 @@ PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas);
  * @param canvas Canvas context.
  * @param cmd Command buffer to record into.
  */
-void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd);
+PIGMENT_API void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd);
 
 /**
  * @brief Draws a filled rectangle in NDC space.
@@ -94,7 +94,7 @@ void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuff
  * @param h Height of the rectangle in NDC space.
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
-void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, const float color[4]);
 
 /**
  * @brief Draws a filled rectangle in pixel coordinates (top-left origin, Y down).
@@ -109,7 +109,7 @@ void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandB
  * @param h Height of the rectangle in pixel coordinates.
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
-void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4]);
 
 /**
  * @brief Draws a filled rectangle anchored to one of 9 screen positions, offset in pixels.
@@ -125,7 +125,7 @@ void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PComman
  * @param h Height of the rectangle in pixel coordinates.
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
-void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4]);
 
 #ifdef __cplusplus
 }

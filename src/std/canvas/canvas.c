@@ -17,10 +17,6 @@
 #include "canvas.h"
 
 #include "pigment/pigment.h"
-#include "pigment/surface.h"
-
-#include "internal_alloc.h"
-#include "log_internal.h"
 
 #include "ndc_vert_spv.h"
 #include "ndc_frag_spv.h"

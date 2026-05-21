@@ -21,6 +21,7 @@
 extern "C" {
 #endif
 
+#include "alloc.h"
 #include "device.h"
 #include "buffers.h"
 #include "cmd_sync.h"
@@ -38,14 +39,14 @@ extern "C" {
 #include "surface.h"
 #include "swapchain_event.h"
 
-Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
-void destroy_pigment(Pigment* pigment);
-void pigment_wait_idle(Pigment* pigment);
+PIGMENT_API Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
+PIGMENT_API void destroy_pigment(Pigment* pigment);
+PIGMENT_API void pigment_wait_idle(Pigment* pigment);
 
-PBool pigment_supports(Pigment* pigment, PFeature feature);
+PIGMENT_API PBool pigment_supports(Pigment* pigment, PFeature feature);
 
-PSampleCount pigment_get_max_sample_count(Pigment* pigment);
-PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples);
+PIGMENT_API PSampleCount pigment_get_max_sample_count(Pigment* pigment);
+PIGMENT_API PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples);
 
 #ifdef __cplusplus
 }

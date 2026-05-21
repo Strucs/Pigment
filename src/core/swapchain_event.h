@@ -23,8 +23,8 @@ extern "C" {
 
 #include "defines.h"
 
-uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PWindowRenderer* renderer, PSwapchainRecreateFn func, void* user_data);
-void pigment_unregister_swapchain_recreate(Pigment* pigment, uint32_t handle);
+PIGMENT_API uint32_t pigment_register_swapchain_recreate(Pigment* pigment, PWindowRenderer* renderer, PSwapchainRecreateFn func, void* user_data);
+PIGMENT_API void pigment_unregister_swapchain_recreate(Pigment* pigment, uint32_t handle);
 
 #ifdef __cplusplus
 }

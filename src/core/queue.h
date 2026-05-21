@@ -35,7 +35,7 @@ extern "C" {
  *
  * @return The matching queue, or NULL if none found.
  */
-PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required);
+PIGMENT_API PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required);
 
 /**
  * @brief How many queues Pigment created on the device.
@@ -44,7 +44,7 @@ PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags required);
  *
  * @return Queue count.
  */
-uint32_t pigment_get_queue_count(Pigment* pigment);
+PIGMENT_API uint32_t pigment_get_queue_count(Pigment* pigment);
 
 /**
  * @brief Returns the queue at `index` in the internal device queue list.
@@ -54,7 +54,7 @@ uint32_t pigment_get_queue_count(Pigment* pigment);
  *
  * @return The queue, or NULL if index is out of bounds.
  */
-PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index);
+PIGMENT_API PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index);
 
 /**
  * @brief How many queues the request at `request_index` actually obtained.
@@ -69,7 +69,7 @@ PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index);
  *
  * @return Realized queue count for that request, 0 if request_index is out of bounds.
  */
-uint32_t pigment_request_queue_count(Pigment* pigment, uint32_t request_index);
+PIGMENT_API uint32_t pigment_request_queue_count(Pigment* pigment, uint32_t request_index);
 
 /**
  * @brief Returns the `index`-th queue obtained by the request at `request_index`.
@@ -80,7 +80,7 @@ uint32_t pigment_request_queue_count(Pigment* pigment, uint32_t request_index);
  *
  * @return The queue, or NULL if either index is out of bounds.
  */
-PDeviceQueue* pigment_request_queue(Pigment* pigment, uint32_t request_index, uint32_t index);
+PIGMENT_API PDeviceQueue* pigment_request_queue(Pigment* pigment, uint32_t request_index, uint32_t index);
 
 /**
  * @brief Index of the Vulkan queue family this queue belongs to.
@@ -89,7 +89,7 @@ PDeviceQueue* pigment_request_queue(Pigment* pigment, uint32_t request_index, ui
  *
  * @return The queue family index, or UINT32_MAX if queue is NULL.
  */
-uint32_t pigment_queue_family(PDeviceQueue* queue);
+PIGMENT_API uint32_t pigment_queue_family(PDeviceQueue* queue);
 
 /**
  * @brief Capability flags this queue supports.
@@ -101,7 +101,7 @@ uint32_t pigment_queue_family(PDeviceQueue* queue);
  *
  * @return The queue flags, or 0 if queue is NULL.
  */
-PQueueFlags pigment_queue_flags(PDeviceQueue* queue);
+PIGMENT_API PQueueFlags pigment_queue_flags(PDeviceQueue* queue);
 
 #ifdef __cplusplus
 }

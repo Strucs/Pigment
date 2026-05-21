@@ -66,7 +66,7 @@ typedef struct PCommandBufferInheritance {
  *
  * @return Newly created command pool, or NULL on failure.
  */
-PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc);
+PIGMENT_API PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc);
 
 /**
  * @brief Defer destruction of a command pool until the GPU is done with it. All command buffers
@@ -75,7 +75,7 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
  * @param pigment Pigment instance.
  * @param pool Pool to destroy.
  */
-void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
+PIGMENT_API void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
 
 /**
  * @brief Reset every command buffer in this pool to the initial state at once, ready to be
@@ -88,7 +88,7 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
  * @param pigment Pigment instance.
  * @param pool Pool to reset.
  */
-void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool);
+PIGMENT_API void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool);
 
 /**
  * @brief Allocate command buffers from a pool. Call pigment_begin_recording before recording into it.
@@ -102,7 +102,7 @@ void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool);
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds);
+PIGMENT_API PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds);
 
 /**
  * @brief Defer destruction of command buffers until the GPU is done with it. The buffers are
@@ -113,7 +113,7 @@ PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCo
  * @param cmds Array of command buffers to destroy.
  * @param count Number of command buffers in the array.
  */
-void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, uint32_t count);
+PIGMENT_API void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, uint32_t count);
 
 /**
  * @brief Open a command buffer for recording. Required before any pigment_cmd_* function.
@@ -124,7 +124,7 @@ void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, ui
  *              must set P_CMD_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT.
  * @param inheritance Required for SECONDARY level inside a render pass, NULL otherwise.
  */
-void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags, const PCommandBufferInheritance* inheritance);
+PIGMENT_API void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags, const PCommandBufferInheritance* inheritance);
 
 /**
  * @brief Execute secondary command buffers from inside a primary's render pass. Secondaries must
@@ -135,7 +135,7 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
  * @param secondaries Array of secondary command buffers to execute.
  * @param count Number of secondaries.
  */
-void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCommandBuffer** secondaries, uint32_t count);
+PIGMENT_API void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCommandBuffer** secondaries, uint32_t count);
 
 /**
  * @brief Close a command buffer recording. The buffer becomes submittable.
@@ -143,7 +143,7 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
  * @param pigment Pigment instance.
  * @param cmd Command buffer to finalize.
  */
-void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
+PIGMENT_API void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
 
 /**
  * @brief Batched submit. Consecutive submits on the same queue are coalesced into one
@@ -156,7 +156,7 @@ void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count, PSubmitHandle* handles_out);
+PIGMENT_API PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count, PSubmitHandle* handles_out);
 
 /**
  * @brief Returns P_TRUE if the GPU has completed all work tracked by this handle.
@@ -166,7 +166,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
  *
  * @return P_TRUE if the submit is complete, P_FALSE otherwise.
  */
-PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle);
+PIGMENT_API PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle);
 
 /**
  * @brief Block until the GPU has completed all work tracked by this handle.
@@ -174,11 +174,11 @@ PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle);
  * @param pigment Pigment instance.
  * @param handle Submit handle returned by pigment_queue_submit.
  */
-void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
+PIGMENT_API void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
 
-void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
-void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
-void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
+PIGMENT_API void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
+PIGMENT_API void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
+PIGMENT_API void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
 
 /**
  * @brief Create a resource tracker for a user-defined resource type.
@@ -192,7 +192,7 @@ void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char*
  *
  * @return A new tracker, or NULL on failure. Release it with pigment_destroy_resource_tracker.
  */
-PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
+PIGMENT_API PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
 
 /**
  * @brief Destroy a tracker created by pigment_create_resource_tracker.
@@ -200,7 +200,7 @@ PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
  * @param pigment Pigment instance.
  * @param tracker Tracker to destroy.
  */
-void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracker);
+PIGMENT_API void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracker);
 
 /**
  * @brief Stamp a custom resource tracker at submit time.
@@ -216,7 +216,7 @@ void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracke
  * @param cmd Command buffer being recorded.
  * @param tracker Tracker from pigment_create_resource_tracker.
  */
-void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
+PIGMENT_API void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
 
 /**
  * @brief Block until the GPU has finished every submit stamped on the tracker.
@@ -226,7 +226,7 @@ void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tr
  * @param pigment Pigment instance.
  * @param tracker Tracker from pigment_create_resource_tracker.
  */
-void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker);
+PIGMENT_API void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker);
 
 /**
  * @brief Stamp a buffer's tracker at submit time.
@@ -240,7 +240,7 @@ void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tra
  * @param cmd Command buffer being recorded.
  * @param buffer Buffer used by the command buffer.
  */
-void pigment_cmd_use_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* buffer);
+PIGMENT_API void pigment_cmd_use_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* buffer);
 
 /**
  * @brief Stamp an image's tracker at submit time.
@@ -254,7 +254,7 @@ void pigment_cmd_use_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* buff
  * @param cmd Command buffer being recorded.
  * @param image Image used by the command buffer.
  */
-void pigment_cmd_use_image(Pigment* pigment, PCommandBuffer* cmd, PImage* image);
+PIGMENT_API void pigment_cmd_use_image(Pigment* pigment, PCommandBuffer* cmd, PImage* image);
 
 /**
  * @brief Stamp a sampler's tracker at submit time.
@@ -269,7 +269,7 @@ void pigment_cmd_use_image(Pigment* pigment, PCommandBuffer* cmd, PImage* image)
  * @param cmd Command buffer being recorded.
  * @param sampler Sampler used by the command buffer.
  */
-void pigment_cmd_use_sampler(Pigment* pigment, PCommandBuffer* cmd, PSampler* sampler);
+PIGMENT_API void pigment_cmd_use_sampler(Pigment* pigment, PCommandBuffer* cmd, PSampler* sampler);
 
 #ifdef __cplusplus
 }

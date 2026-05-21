@@ -46,12 +46,12 @@ typedef struct PDrawCall {
     uint32_t index_count;
 } PDrawCall;
 
-PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_instances_per_frame);
-void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
+PIGMENT_API PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, uint32_t max_instances_per_frame);
+PIGMENT_API void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
 
-void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
-void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot);
-void pigment_std_draw_crt(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time);
+PIGMENT_API void pigment_draw(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
+PIGMENT_API void pigment_std_draw_skybox(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot);
+PIGMENT_API void pigment_std_draw_crt(Pigment* pigment, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time);
 
 #ifdef __cplusplus
 }

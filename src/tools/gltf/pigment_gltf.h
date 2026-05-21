@@ -14,20 +14,20 @@
  * limitations under the License.
  */
 
-#ifndef PIGMENT_STD_GLTF_LOADER_H
-#define PIGMENT_STD_GLTF_LOADER_H
+#ifndef PIGMENT_GLTF_H
+#define PIGMENT_GLTF_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "bindless.h"
-#include "file_io.h"
-#include "material.h"
-#include "types.h"
-#include "vertex.h"
-
 #include "pigment/defines.h"
+
+#include "pigment/std/bindless.h"
+#include "pigment/std/file_io.h"
+#include "pigment/std/material.h"
+#include "pigment/std/types.h"
+#include "pigment/std/vertex.h"
 
 typedef struct PRawSurface {
     uint32_t start_index;
@@ -42,7 +42,7 @@ typedef struct PRawImage {
     uint32_t height;
 } PRawImage;
 
-typedef struct MeshAsset {
+typedef struct PGltfMesh {
     PVertex* vertices;
     uint32_t vertex_count;
     uint32_t vertex_capacity;
@@ -66,12 +66,12 @@ typedef struct MeshAsset {
 
     PSamplerDesc* sampler_descs;
     uint32_t sampler_count;
-} MeshAsset;
+} PGltfMesh;
 
-MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* filepath);
-void free_mesh_asset(Pigment* pigment, MeshAsset* mesh);
+PIGMENT_API PGltfMesh* pigment_gltf_load_mesh(Pigment* pigment, const IOCallbacks* io, const char* filepath);
+PIGMENT_API void pigment_gltf_free_mesh(Pigment* pigment, PGltfMesh* mesh);
 
-PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials);
+PIGMENT_API PResult pigment_gltf_upload_textures(Pigment* pigment, PStdBindless* bindless, PGltfMesh* asset, PMaterials* materials);
 
 #ifdef __cplusplus
 }

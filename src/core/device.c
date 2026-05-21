@@ -38,6 +38,31 @@ typedef struct ResolvedQueue {
     float priority;
 } ResolvedQueue;
 
+static const VkPhysicalDeviceFeatures PIGMENT_REQ_FEATURES = {
+    .samplerAnisotropy                      = VK_TRUE,
+    .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+};
+
+static const VkPhysicalDeviceVulkan12Features PIGMENT_REQ_FEATURES_12 = {
+    .sType                                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+    .descriptorIndexing                           = VK_TRUE,
+    .shaderSampledImageArrayNonUniformIndexing    = VK_TRUE,
+    .descriptorBindingVariableDescriptorCount     = VK_TRUE,
+    .descriptorBindingPartiallyBound              = VK_TRUE,
+    .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+    .descriptorBindingUpdateUnusedWhilePending    = VK_TRUE,
+    .runtimeDescriptorArray                       = VK_TRUE,
+    .bufferDeviceAddress                          = VK_TRUE,
+    .timelineSemaphore                            = VK_TRUE,
+};
+
+static const VkPhysicalDeviceVulkan13Features PIGMENT_REQ_FEATURES_13 = {
+    .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+    .dynamicRendering = VK_TRUE,
+    .synchronization2 = VK_TRUE,
+    .maintenance4     = VK_TRUE,
+};
+
 static PBool features10_supports(const VkPhysicalDeviceFeatures* req, const VkPhysicalDeviceFeatures* available);
 static PBool features_chain_supports(const void* req, const void* available, size_t struct_size);
 static void merge_features10_or(VkPhysicalDeviceFeatures* dst, const VkPhysicalDeviceFeatures* src, const VkPhysicalDeviceFeatures* available);
@@ -48,40 +73,6 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const Extens
 static PResult pick_physical_device(Pigment* pigment, PDevice* device, const ExtensionList* req_extensions, const PVkInitInfo* vk_init);
 static uint32_t resolve_queue_requests(const VkQueueFamilyProperties* queue_families, uint32_t queue_families_count, const PQueueRequest* requests, uint32_t request_count, ResolvedQueue* resolved, uint32_t* requested_per_family, PQueueRange* ranges);
 static PResult create_logical_device(Pigment* pigment, PDevice* device);
-
-static inline VkPhysicalDeviceFeatures pigment_req_features(void)
-{
-    return (VkPhysicalDeviceFeatures) {
-        .samplerAnisotropy                      = VK_TRUE,
-        .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
-    };
-}
-
-static inline VkPhysicalDeviceVulkan12Features pigment_req_features_12(void)
-{
-    return (VkPhysicalDeviceVulkan12Features) {
-        .sType                                        = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-        .descriptorIndexing                           = VK_TRUE,
-        .shaderSampledImageArrayNonUniformIndexing    = VK_TRUE,
-        .descriptorBindingVariableDescriptorCount     = VK_TRUE,
-        .descriptorBindingPartiallyBound              = VK_TRUE,
-        .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-        .descriptorBindingUpdateUnusedWhilePending    = VK_TRUE,
-        .runtimeDescriptorArray                       = VK_TRUE,
-        .bufferDeviceAddress                          = VK_TRUE,
-        .timelineSemaphore                            = VK_TRUE,
-    };
-}
-
-static inline VkPhysicalDeviceVulkan13Features pigment_req_features_13(void)
-{
-    return (VkPhysicalDeviceVulkan13Features) {
-        .sType            = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-        .dynamicRendering = VK_TRUE,
-        .synchronization2 = VK_TRUE,
-        .maintenance4     = VK_TRUE,
-    };
-}
 
 static inline uint32_t count_useful_bits(PQueueFlags flags)
 {
@@ -255,10 +246,7 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const Extens
     VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
     vkGetPhysicalDeviceFeatures2(device, &available_2);
 
-    const VkPhysicalDeviceFeatures req         = pigment_req_features();
-    const VkPhysicalDeviceVulkan12Features r12 = pigment_req_features_12();
-    const VkPhysicalDeviceVulkan13Features r13 = pigment_req_features_13();
-    if(!features10_supports(&req, &available_2.features) || !features_chain_supports(&r12, &available_12, sizeof(available_12)) || !features_chain_supports(&r13, &available_13, sizeof(available_13)))
+    if(!features10_supports(&PIGMENT_REQ_FEATURES, &available_2.features) || !features_chain_supports(&PIGMENT_REQ_FEATURES_12, &available_12, sizeof(available_12)) || !features_chain_supports(&PIGMENT_REQ_FEATURES_13, &available_13, sizeof(available_13)))
     {
         PLOG_TRACE(pigment, "Device rejected: missing core Pigment features");
         goto FREE;
@@ -736,12 +724,9 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         .pNext = features_head,
     };
 
-    const VkPhysicalDeviceFeatures req         = pigment_req_features();
-    const VkPhysicalDeviceVulkan12Features r12 = pigment_req_features_12();
-    const VkPhysicalDeviceVulkan13Features r13 = pigment_req_features_13();
-    merge_features10_or(&features.features, &req, NULL);
-    merge_features_chain_or(&vk12_features, &r12, NULL, sizeof(vk12_features));
-    merge_features_chain_or(&vk13_features, &r13, NULL, sizeof(vk13_features));
+    merge_features10_or(&features.features, &PIGMENT_REQ_FEATURES, NULL);
+    merge_features_chain_or(&vk12_features, &PIGMENT_REQ_FEATURES_12, NULL, sizeof(vk12_features));
+    merge_features_chain_or(&vk13_features, &PIGMENT_REQ_FEATURES_13, NULL, sizeof(vk13_features));
 
     if(vk_init != NULL)
     {

@@ -1,5 +1,6 @@
 #include <pigment/pigment_std.h>
 #include <pigment/pigment_sdl.h>
+#include <pigment/pigment_gltf.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,9 +27,9 @@ int main(void)
     PLights* lights                  = NULL;
     PPipeline* pipelines[2]          = {NULL, NULL};
     PMeshBuffers* gpu_mesh           = NULL;
-    MeshAsset* asset                 = NULL;
+    PGltfMesh* asset                 = NULL;
     PMeshBuffers* gpu_mesh2          = NULL;
-    MeshAsset* asset2                = NULL;
+    PGltfMesh* asset2                = NULL;
     PDrawCall* draw_calls            = NULL;
     PDrawCall* draw_calls2           = NULL;
     PInstanceData* instance_storage  = NULL;
@@ -164,14 +165,14 @@ int main(void)
 
     // SUZANNE (opaque)
 
-    asset = load_gltf_mesh(pigment, NULL, MODELS_DIR "/Suzanne.gltf");
+    asset = pigment_gltf_load_mesh(pigment, NULL, MODELS_DIR "/Suzanne.gltf");
     if(asset == NULL)
     {
         fprintf(stderr, "Failed to load Suzanne!\n");
         goto FREE;
     }
 
-    if(upload_mesh_textures(pigment, bindless, asset, materials) != PIGMENT_SUCCESS)
+    if(pigment_gltf_upload_textures(pigment, bindless, asset, materials) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to upload mesh textures/materials!\n");
         goto FREE;
@@ -206,19 +207,19 @@ int main(void)
         draw_calls[i].first_index       = s->start_index;
         draw_calls[i].index_count       = s->index_count;
     }
-    free_mesh_asset(pigment, asset);
+    pigment_gltf_free_mesh(pigment, asset);
     asset = NULL;
 
     // CUBE (additive blend)
 
-    asset2 = load_gltf_mesh(pigment, NULL, MODELS_DIR "/BoxVertexColors.glb");
+    asset2 = pigment_gltf_load_mesh(pigment, NULL, MODELS_DIR "/BoxVertexColors.glb");
     if(asset2 == NULL)
     {
         fprintf(stderr, "Failed to load cube!\n");
         goto FREE;
     }
 
-    if(upload_mesh_textures(pigment, bindless, asset2, materials) != PIGMENT_SUCCESS)
+    if(pigment_gltf_upload_textures(pigment, bindless, asset2, materials) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to upload mesh textures/materials!\n");
         goto FREE;
@@ -255,7 +256,7 @@ int main(void)
         draw_calls2[i].first_index       = s->start_index;
         draw_calls2[i].index_count       = s->index_count;
     }
-    free_mesh_asset(pigment, asset2);
+    pigment_gltf_free_mesh(pigment, asset2);
     asset2 = NULL;
 
     SDL_ShowWindow(window);
@@ -327,8 +328,8 @@ FREE:
     free(draw_calls2);
     free(instance_storage);
     free(instance_storage2);
-    free_mesh_asset(pigment, asset);
-    free_mesh_asset(pigment, asset2);
+    pigment_gltf_free_mesh(pigment, asset);
+    pigment_gltf_free_mesh(pigment, asset2);
     pigment_destroy_pipeline(pigment, pipelines[0]);
     pigment_destroy_pipeline(pigment, pipelines[1]);
     pigment_renderer_destroy(pigment, renderer);

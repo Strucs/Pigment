@@ -29,16 +29,16 @@ extern "C" {
 #include "pigment/descriptor.h"
 #include "pigment/pipeline.h"
 
-char* load_shader_code(Pigment* pigment, const IOCallbacks* io, const char* file_path, uint32_t* shader_size);
+PIGMENT_API char* load_shader_code(Pigment* pigment, const IOCallbacks* io, const char* file_path, uint32_t* shader_size);
 
-PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
-PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
-PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
+PIGMENT_API PLayout* default_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
+PIGMENT_API PLayout* default_light_gizmo_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
+PIGMENT_API PLayout* default_skybox_pipeline_layout(Pigment* pigment, PStdBindless* bindless);
 
-PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
-PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
-PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
-PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
+PIGMENT_API PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
+PIGMENT_API PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
+PIGMENT_API PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
+PIGMENT_API PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless, const PFormat* color_formats, uint32_t color_format_count, PFormat depth_format, PSampleCount samples);
 
 #ifdef __cplusplus
 }

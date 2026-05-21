@@ -182,8 +182,17 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer)
 
     VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
 
-    VkImageView color_view = multisample ? image_get_or_create_view(pigment, swapchain->color_multisample, &(PImageViewDesc) {0})->view
-                                         : swapchain->image_views[image_index];
+    VkImageView color_view = swapchain->image_views[image_index];
+    if(multisample)
+    {
+        PImageView* msaa_view = image_get_or_create_view(pigment, swapchain->color_multisample, &(PImageViewDesc) {0});
+        if(msaa_view == NULL)
+        {
+            PLOG_ERROR(pigment, "Failed to get multisample color view");
+            return;
+        }
+        color_view = msaa_view->view;
+    }
 
     VkRenderingAttachmentInfo color_attachment = {
         .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
@@ -198,6 +207,11 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer)
     };
 
     PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth, &(PImageViewDesc) {0});
+    if(depth_view == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to get depth view");
+        return;
+    }
 
     VkRenderingAttachmentInfo depth_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
@@ -387,6 +401,11 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         };
 
         PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
+        if(view == NULL)
+        {
+            PLOG_ERROR(pigment, "Failed to get color view for attachment %u", i);
+            goto FREE;
+        }
 
         VkImageView resolve_view_handle = VK_NULL_HANDLE;
         if(has_resolve)
@@ -410,7 +429,12 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
                 .mip_count   = 1,
             };
             PImageView* resolve_view = image_get_or_create_view(pigment, ref->resolve_image, &resolve_view_desc);
-            resolve_view_handle      = resolve_view->view;
+            if(resolve_view == NULL)
+            {
+                PLOG_ERROR(pigment, "Failed to get color resolve view for attachment %u", i);
+                goto FREE;
+            }
+            resolve_view_handle = resolve_view->view;
         }
 
         color[i] = (VkRenderingAttachmentInfo) {
@@ -452,6 +476,11 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
             .mip_count   = 1,
         };
         PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
+        if(view == NULL)
+        {
+            PLOG_ERROR(pigment, "Failed to get depth view");
+            goto FREE;
+        }
 
         VkImageView depth_resolve_view_handle = VK_NULL_HANDLE;
         if(has_depth_resolve)
@@ -474,7 +503,12 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
                 .base_mip    = ref->resolve_mip_level,
                 .mip_count   = 1,
             };
-            PImageView* resolve_view  = image_get_or_create_view(pigment, ref->resolve_image, &resolve_view_desc);
+            PImageView* resolve_view = image_get_or_create_view(pigment, ref->resolve_image, &resolve_view_desc);
+            if(resolve_view == NULL)
+            {
+                PLOG_ERROR(pigment, "Failed to get depth resolve view");
+                goto FREE;
+            }
             depth_resolve_view_handle = resolve_view->view;
         }
 

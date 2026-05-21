@@ -30,7 +30,6 @@ extern "C" {
 #include "std/draw.h"
 #include "std/dynamic_image.h"
 #include "std/file_io.h"
-#include "std/gltf_loader.h"
 #include "std/lights.h"
 #include "std/material.h"
 #include "std/mesh.h"

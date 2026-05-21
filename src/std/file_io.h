@@ -21,6 +21,8 @@
 extern "C" {
 #endif
 
+#include "pigment/attributes.h"
+
 #include <stdint.h>
 
 typedef struct Pigment Pigment;
@@ -33,7 +35,7 @@ typedef struct IOCallbacks {
     void (*free_file)(void* user_data, unsigned char* data);
 } IOCallbacks;
 
-IOCallbacks pigment_std_default_file_io(Pigment* pigment);
+PIGMENT_API IOCallbacks pigment_std_default_file_io(Pigment* pigment);
 
 #ifdef __cplusplus
 }

@@ -115,19 +115,19 @@ typedef struct PDescriptorSetAllocate {
     const char* name;
 } PDescriptorSetAllocate;
 
-PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
-void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayout* layout);
+PIGMENT_API PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
+PIGMENT_API void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayout* layout);
 
-PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc);
-void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
-void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
+PIGMENT_API PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc);
+PIGMENT_API void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
+PIGMENT_API void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
 
-PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets);
-void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, uint32_t count);
+PIGMENT_API PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets);
+PIGMENT_API void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, uint32_t count);
 
-void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
+PIGMENT_API void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
 
-void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t first_set, PDescriptorSet* const* sets, uint32_t set_count, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count);
+PIGMENT_API void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t first_set, PDescriptorSet* const* sets, uint32_t set_count, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count);
 
 #ifdef __cplusplus
 }

@@ -20,9 +20,6 @@
 
 #include "pigment/pigment.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
-
 #include <string.h>
 
 struct PMaterials {

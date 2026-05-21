@@ -18,8 +18,7 @@
 
 #include "mesh.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
+#include "pigment/alloc.h"
 
 #define _USE_MATH_DEFINES
 #include <math.h>

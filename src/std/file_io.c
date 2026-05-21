@@ -16,8 +16,7 @@
 
 #include "file_io.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
+#include "pigment/alloc.h"
 
 #include <stdio.h>
 

@@ -35,13 +35,13 @@ extern "C" {
 typedef struct PStdBindless PStdBindless;
 typedef struct PStdPipelineLayouts PStdPipelineLayouts;
 
-PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
-void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless);
+PIGMENT_API PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
+PIGMENT_API void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless);
 
-PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* bindless);
+PIGMENT_API PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* bindless);
 
-uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
-uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
+PIGMENT_API uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
+PIGMENT_API uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 
 /**
  * @brief Registers an already-created image into the bindless image array.
@@ -55,7 +55,7 @@ uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, c
  *
  * @return Image slot, or UINT32_MAX on failure.
  */
-uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image);
+PIGMENT_API uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image);
 
 /**
  * @brief Unregisters an image and frees its bindless slot for reuse.
@@ -64,12 +64,12 @@ uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PI
  * @param bindless Bindless context.
  * @param slot Image slot returned by pigment_std_register_image or pigment_std_add_image.
  */
-void pigment_std_unregister_image(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
+PIGMENT_API void pigment_std_unregister_image(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
 
-uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const PSamplerDesc* desc);
+PIGMENT_API uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const PSamplerDesc* desc);
 
 // 6 face buffers in the order: +X, -X, +Y, -Y, +Z, -Z. All faces must share width/height/format.
-uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
+PIGMENT_API uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
 /**
  * @brief Registers a render target's color (or depth) images into the bindless.
@@ -82,17 +82,17 @@ uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const
  *
  * @return First image slot, or UINT32_MAX on failure.
  */
-uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
-uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
+PIGMENT_API uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
+PIGMENT_API uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
 
-PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
+PIGMENT_API PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
 
 /**
  * Return the bindless descriptor set for the current frame and stamp all registered resources
  * (images, cubemaps, render targets, samplers) as in-use on the given command buffer.
  * It allows the user to delete resources without causing use-after-free on the GPU on runtime.
  */
-PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame);
+PIGMENT_API PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame);
 
 #ifdef __cplusplus
 }

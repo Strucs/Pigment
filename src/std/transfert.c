@@ -20,9 +20,6 @@
 
 #include "pigment/pigment.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
-
 #include <string.h>
 
 static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffer** out_staging, const PImageUploadDesc* upload);

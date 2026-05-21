@@ -64,15 +64,15 @@ typedef struct PBufferCopy {
     uint64_t size;
 } PBufferCopy;
 
-PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc);
-void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
+PIGMENT_API PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc);
+PIGMENT_API void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
 
-void* pigment_buffer_mapped(PBuffer* buffer);
-uint64_t pigment_buffer_address(PBuffer* buffer);
-uint64_t pigment_buffer_size(PBuffer* buffer);
+PIGMENT_API void* pigment_buffer_mapped(PBuffer* buffer);
+PIGMENT_API uint64_t pigment_buffer_address(PBuffer* buffer);
+PIGMENT_API uint64_t pigment_buffer_size(PBuffer* buffer);
 
-void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
-void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
+PIGMENT_API void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
+PIGMENT_API void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
 
 /**
  * @brief Blocks until the GPU has finished every submitted command that used the buffer.
@@ -80,9 +80,9 @@ void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offse
  * @param pigment Pigment instance.
  * @param buffer Buffer to wait on.
  */
-void pigment_buffer_wait(Pigment* pigment, PBuffer* buffer);
+PIGMENT_API void pigment_buffer_wait(Pigment* pigment, PBuffer* buffer);
 
-void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count);
+PIGMENT_API void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count);
 
 #ifdef __cplusplus
 }

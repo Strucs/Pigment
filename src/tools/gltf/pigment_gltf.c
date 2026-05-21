@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#include "gltf_loader.h"
+#include "pigment_gltf.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
+#include "pigment/log.h"
+#include "pigment/alloc.h"
 
 #include <cgltf.h>
 #include <stb_image.h>
@@ -37,11 +37,11 @@ typedef struct PrimAttrs {
 
 static PSamplerDesc convert_gltf_sampler(cgltf_sampler* s);
 static PrimAttrs find_primitive_attrs(cgltf_primitive* prim);
-static PResult append_primitive_vertices(Pigment* pigment, MeshAsset* asset, const PrimAttrs* attrs);
+static PResult append_primitive_vertices(Pigment* pigment, PGltfMesh* asset, const PrimAttrs* attrs);
 static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data* data);
-static PResult append_surface(Pigment* pigment, MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc);
-static PResult process_primitive(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
-static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_node* node);
+static PResult append_surface(Pigment* pigment, PGltfMesh* asset, PRawSurface surface, const PMaterialDesc* desc);
+static PResult process_primitive(Pigment* pigment, PGltfMesh* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx);
+static PResult process_node(Pigment* pigment, PGltfMesh* asset, cgltf_data* data, cgltf_node* node);
 static cgltf_result io_cgltf_read(const cgltf_memory_options* memory_options, const cgltf_file_options* file, const char* path, cgltf_size* size, void** data);
 static void io_cgltf_release(const cgltf_memory_options* memory_options, const cgltf_file_options* file, void* data);
 static void* pigment_cgltf_alloc(void* user, cgltf_size size);
@@ -140,7 +140,7 @@ static PrimAttrs find_primitive_attrs(cgltf_primitive* prim)
     return attributes;
 }
 
-static PResult append_primitive_vertices(Pigment* pigment, MeshAsset* asset, const PrimAttrs* attrs)
+static PResult append_primitive_vertices(Pigment* pigment, PGltfMesh* asset, const PrimAttrs* attrs)
 {
     if(attrs->pos == NULL || attrs->pos->count == 0)
     {
@@ -190,7 +190,7 @@ static PResult append_primitive_vertices(Pigment* pigment, MeshAsset* asset, con
     return PIGMENT_SUCCESS;
 }
 
-static PResult append_primitive_indices(Pigment* pigment, MeshAsset* asset, cgltf_accessor* indices, uint32_t base_vertex)
+static PResult append_primitive_indices(Pigment* pigment, PGltfMesh* asset, cgltf_accessor* indices, uint32_t base_vertex)
 {
     if(indices == NULL || indices->count == 0)
     {
@@ -293,7 +293,7 @@ static PMaterialDesc resolve_primitive_material(cgltf_material* mat, cgltf_data*
     return desc;
 }
 
-static PResult append_surface(Pigment* pigment, MeshAsset* asset, PRawSurface surface, const PMaterialDesc* desc)
+static PResult append_surface(Pigment* pigment, PGltfMesh* asset, PRawSurface surface, const PMaterialDesc* desc)
 {
     uint32_t cap_a = asset->surface_capacity;
     uint32_t cap_b = asset->surface_capacity;
@@ -317,7 +317,7 @@ static PResult append_surface(Pigment* pigment, MeshAsset* asset, PRawSurface su
     return PIGMENT_SUCCESS;
 }
 
-static PResult process_primitive(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx)
+static PResult process_primitive(Pigment* pigment, PGltfMesh* asset, cgltf_data* data, cgltf_primitive* prim, uint32_t node_idx)
 {
     PrimAttrs attrs = find_primitive_attrs(prim);
 
@@ -365,7 +365,7 @@ static PResult process_primitive(Pigment* pigment, MeshAsset* asset, cgltf_data*
     return append_surface(pigment, asset, surface, &desc);
 }
 
-static PResult process_node(Pigment* pigment, MeshAsset* asset, cgltf_data* data, cgltf_node* node)
+static PResult process_node(Pigment* pigment, PGltfMesh* asset, cgltf_data* data, cgltf_node* node)
 {
     if(node->mesh)
     {
@@ -441,7 +441,7 @@ static void pigment_cgltf_free(void* user, void* ptr)
     P_FREE((Pigment*) user, ptr);
 }
 
-MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* filepath)
+PGltfMesh* pigment_gltf_load_mesh(Pigment* pigment, const IOCallbacks* io, const char* filepath)
 {
     IOCallbacks default_io = pigment_std_default_file_io(pigment);
     if(io == NULL)
@@ -454,7 +454,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* f
         .file   = {            .read = io_cgltf_read,     .release = io_cgltf_release, .user_data = (void*) io},
     };
     cgltf_data* data = NULL;
-    MeshAsset* asset = NULL;
+    PGltfMesh* asset = NULL;
     size_t base_len  = 0;
 
     if(cgltf_parse_file(&options, filepath, &data) != cgltf_result_success)
@@ -597,7 +597,7 @@ MeshAsset* load_gltf_mesh(Pigment* pigment, const IOCallbacks* io, const char* f
     goto FREE;
 
 ERROR:
-    free_mesh_asset(pigment, asset);
+    pigment_gltf_free_mesh(pigment, asset);
     asset = NULL;
 
 FREE:
@@ -605,7 +605,7 @@ FREE:
     return asset;
 }
 
-PResult upload_mesh_textures(Pigment* pigment, PStdBindless* bindless, MeshAsset* asset, PMaterials* materials)
+PResult pigment_gltf_upload_textures(Pigment* pigment, PStdBindless* bindless, PGltfMesh* asset, PMaterials* materials)
 {
     if(pigment == NULL || asset == NULL)
     {
@@ -734,7 +734,7 @@ FREE:
     return status;
 }
 
-void free_mesh_asset(Pigment* pigment, MeshAsset* asset)
+void pigment_gltf_free_mesh(Pigment* pigment, PGltfMesh* asset)
 {
     if(!asset)
     {

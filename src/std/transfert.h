@@ -72,7 +72,7 @@ typedef struct PImageUploadDesc {
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PBufferUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle);
+PIGMENT_API PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PBufferUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle);
 
 /**
  * @brief Create `count` images from the pixel data in `uploads`.
@@ -93,7 +93,7 @@ PResult pigment_std_buffer_upload(Pigment* pigment, PCommandPool* pool, PDeviceQ
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PImageUploadDesc* uploads, uint32_t count, PImage** out_images, PSubmitHandle* out_handle);
+PIGMENT_API PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PImageUploadDesc* uploads, uint32_t count, PImage** out_images, PSubmitHandle* out_handle);
 
 /**
  * @brief Finalize uploaded images and transition them to a sampleable layout.
@@ -112,7 +112,7 @@ PResult pigment_std_image_upload(Pigment* pigment, PCommandPool* pool, PDeviceQu
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */
-PResult pigment_std_image_finalize(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, PImage* const* images, const PImageUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle);
+PIGMENT_API PResult pigment_std_image_finalize(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, PImage* const* images, const PImageUploadDesc* uploads, uint32_t count, PSubmitHandle* out_handle);
 
 #ifdef __cplusplus
 }

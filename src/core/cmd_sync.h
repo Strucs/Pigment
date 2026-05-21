@@ -63,9 +63,9 @@ typedef struct PMemoryBarrier {
     PDependencyFlags flags;
 } PMemoryBarrier;
 
-void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PImageBarrier* barriers, uint32_t count);
-void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PBufferBarrier* barriers, uint32_t count);
-void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PMemoryBarrier* barriers, uint32_t count);
+PIGMENT_API void pigment_cmd_image_barriers(Pigment* pigment, PCommandBuffer* cmd, const PImageBarrier* barriers, uint32_t count);
+PIGMENT_API void pigment_cmd_buffer_barriers(Pigment* pigment, PCommandBuffer* cmd, const PBufferBarrier* barriers, uint32_t count);
+PIGMENT_API void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PMemoryBarrier* barriers, uint32_t count);
 
 #ifdef __cplusplus
 }

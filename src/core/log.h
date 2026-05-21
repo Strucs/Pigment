@@ -54,15 +54,45 @@ struct PigmentLogger {
     PigmentLogger* next;
 };
 
-PigmentLogger* pigment_logger_create(Pigment* pigment, const PigmentLoggerCreateInfo* info);
-void pigment_logger_destroy(Pigment* pigment, PigmentLogger* logger);
+PIGMENT_API PigmentLogger* pigment_logger_create(Pigment* pigment, const PigmentLoggerCreateInfo* info);
+PIGMENT_API void pigment_logger_destroy(Pigment* pigment, PigmentLogger* logger);
 
-void pigment_default_log_callback(
+PIGMENT_API void pigment_default_log_callback(
     PigmentLogSeverity severity,
     PigmentLogType type,
     const PigmentLogRecord* record,
     void* user_data
 );
+
+PIGMENT_API void pigment_log_dispatch(Pigment* pigment, PigmentLogSeverity severity, PigmentLogType type, const char* message_id_name, int32_t message_id, const char* fmt, ...) PIGMENT_PRINTF_FORMAT(6, 7);
+
+PIGMENT_API PBool pigment_log_should_dispatch(const Pigment* p, PigmentLogSeverity sev, PigmentLogType type);
+
+#define PLOG(pigment, sev, type, id_name, id, ...)                                 \
+    do                                                                             \
+    {                                                                              \
+        Pigment* _p = (pigment);                                                   \
+        if(pigment_log_should_dispatch(_p, (sev), (type)))                         \
+        {                                                                          \
+            pigment_log_dispatch(_p, (sev), (type), (id_name), (id), __VA_ARGS__); \
+        }                                                                          \
+    }                                                                              \
+    while(0)
+
+#define PLOG_TRACE(p, ...) \
+    PLOG(p, PIGMENT_LOG_TRACE_BIT, PIGMENT_LOG_TYPE_GENERAL_BIT, NULL, 0, __VA_ARGS__)
+
+#define PLOG_DEBUG(p, ...) \
+    PLOG(p, PIGMENT_LOG_DEBUG_BIT, PIGMENT_LOG_TYPE_GENERAL_BIT, NULL, 0, __VA_ARGS__)
+
+#define PLOG_INFO(p, ...) \
+    PLOG(p, PIGMENT_LOG_INFO_BIT, PIGMENT_LOG_TYPE_GENERAL_BIT, NULL, 0, __VA_ARGS__)
+
+#define PLOG_WARN(p, ...) \
+    PLOG(p, PIGMENT_LOG_WARN_BIT, PIGMENT_LOG_TYPE_GENERAL_BIT, NULL, 0, __VA_ARGS__)
+
+#define PLOG_ERROR(p, ...) \
+    PLOG(p, PIGMENT_LOG_ERROR_BIT, PIGMENT_LOG_TYPE_GENERAL_BIT, NULL, 0, __VA_ARGS__)
 
 #ifdef __cplusplus
 }

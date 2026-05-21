@@ -18,9 +18,6 @@
 
 #include "pigment/pigment.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
-
 struct PRenderTarget {
     PImage** colors;
     PImage** color_resolves;    // parallel to colors, NULL slot when samples == 1

@@ -25,7 +25,7 @@ extern "C" {
 
 #include <volk.h>
 
-VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandles* handles);
+PIGMENT_API VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandles* handles);
 
 #ifdef __cplusplus
 }

@@ -5,7 +5,7 @@ import subprocess
 
 from scripts import spv_to_header
 
-INTERNAL_HEADERS = {"structs.h", "internal.h", "log_internal.h", "internal_alloc.h", "std_internal.h"}
+INTERNAL_HEADERS = {"structs.h", "internal.h", "std_internal.h"}
 
 CONVENIENCE_HEADERS = {"pigment.h", "pigment_std.h", "pigment_sdl.h", "pigment_vk.h"}
 
@@ -31,6 +31,8 @@ def public_path_for_header(file: str) -> str | None:
     if module == "vulkan":
         return f"pigment/vulkan/{filename}"
     if module == "integrations":
+        return f"pigment/{filename}"
+    if module == "tools":
         return f"pigment/{filename}"
     return None
 
@@ -101,23 +103,38 @@ def build_pigment(config: powermake.Config):
     tools_files = {f for f in all_files if os.sep + "tools" + os.sep in os.path.normpath(f)}
     project_files = set(all_files) - integration_files - tools_files
 
-    external_files = [src for src in ("external/volk/volk.c", "external/cgltf/cgltf.c", "external/stb_image/stb_image.c") if os.path.exists(src)]
+    external_files = [src for src in ("external/volk/volk.c",) if os.path.exists(src)]
 
     ext_config = config.copy()
     if is_msvc(ext_config):
-        ext_config.remove_flags("/W4", "/W3", "/W2", "/W1")
+        ext_config.remove_flags("/W4", "/W3", "/W2", "/W1", "/GL")
     else:
         ext_config.add_flags("-w")
+        ext_config.remove_flags("-flto=auto", "-flto")
+        if shared_build:
+            ext_config.add_c_flags("-fvisibility=hidden")
 
     ext_objects = powermake.compile_files(ext_config, external_files)
 
-    config.target_name = "pigment"
-    objects = powermake.compile_files(config, project_files)
+    p_config = config.copy()
+    p_config.target_name = "pigment"
+    if shared_build:
+        p_config.add_defines("PIGMENT_EXPORTS")
+        if not is_msvc(p_config):
+            p_config.add_c_flags("-fvisibility=hidden")
 
-    if is_msvc(config):
-        powermake.archive_files(config, list(objects) + list(ext_objects), archive_name=config.target_name)
+    objects = powermake.compile_files(p_config, project_files)
+
+    if shared_build:
+        if p_config.target_is_mingw():
+            implib = os.path.join(p_config.lib_build_directory, "libpigment.dll.a")
+            p_config.add_shared_linker_flags(f"-Wl,--out-implib,{implib}")
+        lib_name = "pigment" if p_config.target_is_windows() else None
+        powermake.link_shared_lib(p_config, list(objects) + list(ext_objects), lib_name=lib_name)
+    elif is_msvc(p_config):
+        powermake.archive_files(p_config, list(objects) + list(ext_objects), archive_name=p_config.target_name)
     else:
-        powermake.archive_files(config, list(objects) + list(ext_objects))
+        powermake.archive_files(p_config, list(objects) + list(ext_objects))
 
     config.remove_includedirs(include_dir, "src/core", "src/std", "src/vulkan", shaders_dir, *EXTERNAL_INCLUDE_DIRS)
 
@@ -137,6 +154,33 @@ def build_sdl_integration(config: powermake.Config):
         powermake.archive_files(config, objects, archive_name=sdl_config.target_name)
     else:
         powermake.archive_files(sdl_config, objects)
+
+def build_gltf_tool(config: powermake.Config):
+    gltf_files = list(powermake.get_files("./src/tools/gltf/**/*.c"))
+    if not gltf_files:
+        return
+
+    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
+    gltf_config = config.copy()
+    gltf_config.target_name = "pigment_gltf"
+    gltf_config.add_includedirs(include_dir, "src/tools/gltf", "external/cgltf", "external/stb_image")
+
+    external_files = [src for src in ("external/cgltf/cgltf.c", "external/stb_image/stb_image.c") if os.path.exists(src)]
+
+    ext_config = gltf_config.copy()
+    if is_msvc(ext_config):
+        ext_config.remove_flags("/W4", "/W3", "/W2", "/W1", "/GL")
+    else:
+        ext_config.add_flags("-w")
+        ext_config.remove_flags("-flto=auto", "-flto")
+
+    ext_objects = powermake.compile_files(ext_config, external_files)
+    objects = powermake.compile_files(gltf_config, gltf_files)
+
+    if is_msvc(gltf_config):
+        powermake.archive_files(gltf_config, list(objects) + list(ext_objects), archive_name=gltf_config.target_name)
+    else:
+        powermake.archive_files(gltf_config, list(objects) + list(ext_objects))
 
 def build_shaderc_tool(config: powermake.Config):
     shaderc_files = list(powermake.get_files("./src/tools/shaderc/**/*.c"))
@@ -159,6 +203,7 @@ def build_shaderc_tool(config: powermake.Config):
 def build_example(config: powermake.Config, example_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     lib_dir     = os.path.join(os.path.dirname(config.lib_build_directory), "lib")
+    bin_dir     = os.path.join(os.path.dirname(config.lib_build_directory), "bin")
     example_shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "example_shaders", example_name)
     config.add_includedirs(include_dir)
 
@@ -172,11 +217,13 @@ def build_example(config: powermake.Config, example_name: str):
     objects = powermake.compile_files(config, example_files)
 
     archives = [
-        archive_path(config, lib_dir, "pigment"),
-        archive_path(config, lib_dir, "pigment_sdl"),
+        link_target_path(config, lib_dir, "pigment_sdl"),
+        link_target_path(config, lib_dir, "pigment_gltf"),
+        link_target_path(config, lib_dir, "pigment"),
     ]
 
     print(f"{example_name} :", powermake.link_files(config, objects, archives, executable_name=example_name))
+    copy_shared_runtime(config, lib_dir, bin_dir)
 
     if has_shaders:
         config.remove_includedirs(example_shaders_dir)
@@ -184,6 +231,7 @@ def build_example(config: powermake.Config, example_name: str):
 def build_test(config: powermake.Config, test_name: str):
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     lib_dir     = os.path.join(os.path.dirname(config.lib_build_directory), "lib")
+    bin_dir     = os.path.join(os.path.dirname(config.lib_build_directory), "bin")
     config.add_includedirs(include_dir)
 
     test_files = powermake.get_files(f"./tests/{test_name}/**/*.c")
@@ -191,11 +239,13 @@ def build_test(config: powermake.Config, test_name: str):
     objects = powermake.compile_files(config, test_files)
 
     archives = [
-        archive_path(config, lib_dir, "pigment"),
-        archive_path(config, lib_dir, "pigment_sdl"),
+        link_target_path(config, lib_dir, "pigment_sdl"),
+        link_target_path(config, lib_dir, "pigment_gltf"),
+        link_target_path(config, lib_dir, "pigment"),
     ]
 
     print(f"{test_name} :", powermake.link_files(config, objects, archives, executable_name=test_name))
+    copy_shared_runtime(config, lib_dir, bin_dir)
 
 def is_msvc(config: powermake.Config) -> bool:
     return config.c_compiler is not None and config.c_compiler.type in ("msvc", "clang-cl")
@@ -210,6 +260,26 @@ def archive_path(config: powermake.Config, lib_dir: str, base: str) -> str:
 
     return os.path.join(lib_dir, f"{prefix}{base}.{ext}")
 
+def link_target_path(config: powermake.Config, lib_dir: str, base: str) -> str:
+    if shared_build and base == "pigment":
+        if is_msvc(config):
+            return os.path.join(lib_dir, "pigment.lib")
+        if config.target_is_mingw():
+            return os.path.join(lib_dir, "libpigment.dll.a")
+        if config.target_is_macos():
+            return os.path.join(lib_dir, "libpigment.dylib")
+        return os.path.join(lib_dir, "libpigment.so")
+    return archive_path(config, lib_dir, base)
+
+def copy_shared_runtime(config: powermake.Config, lib_dir: str, bin_dir: str):
+    if not shared_build or not config.target_is_windows():
+        return
+    src = os.path.join(lib_dir, "pigment.dll")
+    if not os.path.exists(src):
+        return
+    powermake.utils.makedirs(bin_dir)
+    shutil.copy2(src, os.path.join(bin_dir, "pigment.dll"))
+
 def on_build(config: powermake.Config):
 
     config.add_flags("-Wsecurity", "-pedantic")
@@ -217,23 +287,32 @@ def on_build(config: powermake.Config):
     # config.remove_flags("-fanalyzer") # uncomment for way faster compilation
 
     if is_msvc(config):
-        config.add_c_flags("/std:c17", "/experimental:c11atomics", "/Zc:preprocessor",
-                           "/W4", "/wd4820", "/wd4201", "/wd4100", "/wd4996", "/wd5045", "/wd4324", "/wd4061", "/wd4191")
+        config.add_c_flags("/std:c17", "/W4", "/wd4820", "/wd4201", "/wd4100", "/wd4996", "/wd5045", "/wd4324", "/wd4061", "/wd4191")
         config.remove_flags("/Wall")
-        if not config.debug:
-            config.add_c_flags("/GL")
-            config.add_ld_flags("/LTCG")
+        if config.c_compiler.type == "clang-cl":
+            config.add_c_flags("-Wno-unused-command-line-argument")
+        else:
+            config.add_c_flags("/experimental:c11atomics", "/Zc:preprocessor")
+            if not config.debug:
+                config.add_c_flags("/GL")
+                config.add_ld_flags("/LTCG")
+                config.add_shared_linker_flags("/LTCG")
     else:
         config.add_c_flags("-std=c17")
         if not config.debug:
             config.add_c_flags("-flto=auto")
 
+    if config.target_is_mingw():
+        config.shared_linker.shared_lib_extension = ".dll"
+
     if config.target_is_macos():
+        config.shared_linker.shared_lib_extension = ".dylib"
         config.add_includedirs("/opt/homebrew/include")
         config.add_ld_flags("-L/opt/homebrew/lib")
 
     build_pigment(config)
     build_sdl_integration(config)
+    build_gltf_tool(config)
     build_shaderc_tool(config)
 
     needs_sdl = any(getattr(args_parsed, example) for example in dir_list) or any(getattr(args_parsed, test) for test in test_list)
@@ -247,6 +326,7 @@ def on_build(config: powermake.Config):
                 build_test(config, test)
 
 parser = powermake.ArgumentParser()
+parser.add_argument("--shared", help="build pigment as a shared library instead of a static archive", action="store_true")
 
 examples_dir = "./examples"
 tests_dir    = "./tests"
@@ -261,5 +341,6 @@ for test in test_list:
     parser.add_argument(f"--{test}", help=f"build {test} test", action="store_true")
 
 args_parsed = parser.parse_args()
+shared_build = bool(getattr(args_parsed, "shared", False))
 
 powermake.run("pigment", build_callback=on_build, args_parsed=args_parsed)

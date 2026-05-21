@@ -94,7 +94,7 @@ struct PRenderPassDesc {
  * @param pigment Pigment instance.
  * @param renderer The renderer whose next frame slot to wait on.
  */
-void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
  * @brief Begin a new frame and return the command buffer ready for recording.
@@ -108,7 +108,7 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
  *
  * @return The frame command buffer ready for recording, or NULL if the swapchain is being recreated.
  */
-PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
  * @brief End recording on the current frame's command buffer.
@@ -116,7 +116,7 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
  * @param pigment Pigment instance.
  * @param renderer The renderer whose current frame command buffer to close.
  */
-void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
  * @brief Return the current frame slot index of the renderer.
@@ -125,7 +125,7 @@ void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer);
  *
  * @return The current frame slot index in [0, max_frames_in_flight).
  */
-uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
+PIGMENT_API uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
 
 /**
  * @brief Return the number of frames the renderer keeps in flight.
@@ -134,7 +134,7 @@ uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
  *
  * @return The configured maximum number of frames in flight.
  */
-uint32_t pigment_max_frames_in_flight(Pigment* pigment);
+PIGMENT_API uint32_t pigment_max_frames_in_flight(Pigment* pigment);
 
 /**
  * @brief Return the current frame's command buffer (same one returned by pigment_begin_frame).
@@ -143,7 +143,7 @@ uint32_t pigment_max_frames_in_flight(Pigment* pigment);
  *
  * @return The current frame's command buffer, or NULL if no frame in progress.
  */
-PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
+PIGMENT_API PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
 
 /**
  * @brief Begin a render pass targeting the swapchain image.
@@ -151,14 +151,14 @@ PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
  * @param pigment Pigment instance.
  * @param renderer The renderer whose swapchain image to render to.
  */
-void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
  * @brief End the swapchain render pass.
  *
  * @param renderer The renderer whose swapchain pass to close.
  */
-void pigment_end_swapchain_pass(PWindowRenderer* renderer);
+PIGMENT_API void pigment_end_swapchain_pass(PWindowRenderer* renderer);
 
 /**
  * @brief Submit the current frame's command buffer to the GPU on the chosen queue. NULL queue
@@ -173,7 +173,7 @@ void pigment_end_swapchain_pass(PWindowRenderer* renderer);
  *
  * @return PSubmitHandle tracking the GPU completion of this frame's submit.
  */
-PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue);
+PIGMENT_API PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue);
 
 /**
  * @brief Present the swapchain image and cycle to the next slot.
@@ -181,14 +181,14 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
  * @param pigment Pigment instance.
  * @param renderer The renderer to present.
  */
-void pigment_present(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_present(Pigment* pigment, PWindowRenderer* renderer);
 
-void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
-void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
+PIGMENT_API void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
+PIGMENT_API void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 
-void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data);
-void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
-void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
+PIGMENT_API void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data);
+PIGMENT_API void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
+PIGMENT_API void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
 
 /**
  * Indirect draws. The draw parameters are read from a GPU buffer of PDrawIndirectCommand / PDrawIndexedIndirectCommand.
@@ -197,22 +197,22 @@ void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* in
  * firstInstance != 0 in any command requires P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE.
  * The _count variants require P_FEATURE_DRAW_INDIRECT_COUNT.
  */
-void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
-void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
-void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
-void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
+PIGMENT_API void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
+PIGMENT_API void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
+PIGMENT_API void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
+PIGMENT_API void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
 
-void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
-void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);
-void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, PBool enable);
-void pigment_cmd_set_stencil_op(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, PStencilOp fail_op, PStencilOp pass_op, PStencilOp depth_fail_op, PCompareOp compare_op);
-void pigment_cmd_set_stencil_compare_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
-void pigment_cmd_set_stencil_write_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
-void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t reference);
-void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PViewport* viewports, uint32_t count);
-void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count);
-void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope);
-void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max);
+PIGMENT_API void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
+PIGMENT_API void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);
+PIGMENT_API void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, PBool enable);
+PIGMENT_API void pigment_cmd_set_stencil_op(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, PStencilOp fail_op, PStencilOp pass_op, PStencilOp depth_fail_op, PCompareOp compare_op);
+PIGMENT_API void pigment_cmd_set_stencil_compare_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
+PIGMENT_API void pigment_cmd_set_stencil_write_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);
+PIGMENT_API void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t reference);
+PIGMENT_API void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PViewport* viewports, uint32_t count);
+PIGMENT_API void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count);
+PIGMENT_API void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope);
+PIGMENT_API void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max);
 
 #ifdef __cplusplus
 }

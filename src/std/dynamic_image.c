@@ -20,9 +20,6 @@
 
 #include "pigment/pigment.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
-
 struct PDynamicImage {
     PImage* image;
     PBuffer** stagings;

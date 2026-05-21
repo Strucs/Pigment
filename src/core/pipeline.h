@@ -157,8 +157,8 @@ typedef struct PLayoutDesc {
     const char* name;
 } PLayoutDesc;
 
-PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc);
-void pigment_destroy_layout(Pigment* pigment, PLayout* layout);
+PIGMENT_API PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc);
+PIGMENT_API void pigment_destroy_layout(Pigment* pigment, PLayout* layout);
 
 /**
  * @brief Create a pipeline cache used to accelerate pigment_create_*_pipelines calls.
@@ -171,7 +171,7 @@ void pigment_destroy_layout(Pigment* pigment, PLayout* layout);
  *
  * @return PIGMENT_SUCCESS, PIGMENT_ERROR_OUT_OF_MEMORY, or PIGMENT_ERROR_VULKAN.
  */
-PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data, uint64_t size, PPipelineCache** out);
+PIGMENT_API PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data, uint64_t size, PPipelineCache** out);
 
 /**
  * @brief Destroy a pipeline cache.
@@ -179,7 +179,7 @@ PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data
  * @param pigment Pigment instance.
  * @param cache Cache to destroy.
  */
-void pigment_destroy_pipeline_cache(Pigment* pigment, PPipelineCache* cache);
+PIGMENT_API void pigment_destroy_pipeline_cache(Pigment* pigment, PPipelineCache* cache);
 
 /**
  * @brief Serialize the cache contents to bytes for persistence on disk.
@@ -195,14 +195,14 @@ void pigment_destroy_pipeline_cache(Pigment* pigment, PPipelineCache* cache);
  *
  * @return PIGMENT_SUCCESS or PIGMENT_ERROR_VULKAN.
  */
-PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache, void* out_data, uint64_t* out_size);
+PIGMENT_API PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache, void* out_data, uint64_t* out_size);
 
-PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache, const PPipelineDesc* descs, uint32_t count, PPipeline** out);
-PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache, const PComputePipelineDesc* descs, uint32_t count, PPipeline** out);
+PIGMENT_API PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache, const PPipelineDesc* descs, uint32_t count, PPipeline** out);
+PIGMENT_API PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache, const PComputePipelineDesc* descs, uint32_t count, PPipeline** out);
 
-void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
+PIGMENT_API void pigment_destroy_pipeline(Pigment* pigment, PPipeline* pipeline);
 
-void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline);
+PIGMENT_API void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline);
 
 #ifdef __cplusplus
 }

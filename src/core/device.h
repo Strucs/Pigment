@@ -42,7 +42,7 @@ typedef struct PDeviceLimits {
  *
  * @return Allocatable bytes, or UINT64_MAX when the budget cannot be measured.
  */
-uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags);
+PIGMENT_API uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags);
 
 /**
  * @brief Query the hardware limits of the selected device.
@@ -51,7 +51,7 @@ uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags);
  *
  * @return The device limits, every field zero when `pigment` is NULL.
  */
-PDeviceLimits pigment_device_limits(Pigment* pigment);
+PIGMENT_API PDeviceLimits pigment_device_limits(Pigment* pigment);
 
 #ifdef __cplusplus
 }

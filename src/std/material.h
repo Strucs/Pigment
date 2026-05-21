@@ -48,14 +48,14 @@ typedef struct PIGMENT_ALIGN(16) PMaterialDesc {
     int32_t occlusion_sampler;
 } PMaterialDesc;
 
-PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size);
-void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials);
+PIGMENT_API PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size);
+PIGMENT_API void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials);
 
-uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, const PMaterialDesc* desc);
-void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32_t id, const PMaterialDesc* desc);
-void pigment_std_material_destroy(Pigment* pigment, PMaterials* materials, uint32_t id);
+PIGMENT_API uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, const PMaterialDesc* desc);
+PIGMENT_API void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32_t id, const PMaterialDesc* desc);
+PIGMENT_API void pigment_std_material_destroy(Pigment* pigment, PMaterials* materials, uint32_t id);
 
-uint64_t pigment_std_material_address(PMaterials* materials);
+PIGMENT_API uint64_t pigment_std_material_address(PMaterials* materials);
 
 #ifdef __cplusplus
 }

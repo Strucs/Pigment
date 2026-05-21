@@ -115,8 +115,8 @@ typedef struct PVkDefaultAllocatorCreateInfo {
     VkDeviceSize block_size;
 } PVkDefaultAllocatorCreateInfo;
 
-PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info);
-void pigment_vk_destroy_allocator(PVkAllocator* allocator);
+PIGMENT_API PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info);
+PIGMENT_API void pigment_vk_destroy_allocator(PVkAllocator* allocator);
 
 /**
  * @brief Build a VkAllocationCallbacks from a PAllocator. Use to plug a
@@ -129,34 +129,34 @@ void pigment_vk_destroy_allocator(PVkAllocator* allocator);
  * @param allocator The Pigment CPU allocator to bridge.
  * @param out The output VkAllocationCallbacks struct to populate.
  */
-void pigment_vk_build_allocation_callbacks(const PAllocator* allocator, VkAllocationCallbacks* out);
+PIGMENT_API void pigment_vk_build_allocation_callbacks(const PAllocator* allocator, VkAllocationCallbacks* out);
 
-VkInstance pigment_vk_instance(Pigment* pigment);
-VkDevice pigment_vk_device(Pigment* pigment);
-VkPhysicalDevice pigment_vk_physical_device(Pigment* pigment);
-VkQueue pigment_vk_queue(PDeviceQueue* queue);
+PIGMENT_API VkInstance pigment_vk_instance(Pigment* pigment);
+PIGMENT_API VkDevice pigment_vk_device(Pigment* pigment);
+PIGMENT_API VkPhysicalDevice pigment_vk_physical_device(Pigment* pigment);
+PIGMENT_API VkQueue pigment_vk_queue(PDeviceQueue* queue);
 
-VkBuffer pigment_vk_buffer(PBuffer* buffer);
-VkDeviceAddress pigment_vk_buffer_address(PBuffer* buffer);
+PIGMENT_API VkBuffer pigment_vk_buffer(PBuffer* buffer);
+PIGMENT_API VkDeviceAddress pigment_vk_buffer_address(PBuffer* buffer);
 
-VkImage pigment_vk_image(PImage* image);
-VkImageView pigment_vk_image_view(PImageView* view);
-VkSampler pigment_vk_sampler(PSampler* sampler);
+PIGMENT_API VkImage pigment_vk_image(PImage* image);
+PIGMENT_API VkImageView pigment_vk_image_view(PImageView* view);
+PIGMENT_API VkSampler pigment_vk_sampler(PSampler* sampler);
 
-VkPipeline pigment_vk_pipeline(PPipeline* pipeline);
-VkPipelineLayout pigment_vk_pipeline_layout(PLayout* layout);
-VkPipelineCache pigment_vk_pipeline_cache(PPipelineCache* cache);
+PIGMENT_API VkPipeline pigment_vk_pipeline(PPipeline* pipeline);
+PIGMENT_API VkPipelineLayout pigment_vk_pipeline_layout(PLayout* layout);
+PIGMENT_API VkPipelineCache pigment_vk_pipeline_cache(PPipelineCache* cache);
 
-VkSurfaceKHR pigment_vk_surface(PWindowRenderer* renderer);
-VkSwapchainKHR pigment_vk_swapchain(PWindowRenderer* renderer);
-VkQueue pigment_vk_present_queue(PWindowRenderer* renderer);
+PIGMENT_API VkSurfaceKHR pigment_vk_surface(PWindowRenderer* renderer);
+PIGMENT_API VkSwapchainKHR pigment_vk_swapchain(PWindowRenderer* renderer);
+PIGMENT_API VkQueue pigment_vk_present_queue(PWindowRenderer* renderer);
 
-VkDescriptorSet pigment_vk_descriptor_set(PDescriptorSet* set);
-VkDescriptorSetLayout pigment_vk_descriptor_set_layout(PDescriptorSetLayout* layout);
-VkDescriptorPool pigment_vk_descriptor_pool(PDescriptorPool* pool);
+PIGMENT_API VkDescriptorSet pigment_vk_descriptor_set(PDescriptorSet* set);
+PIGMENT_API VkDescriptorSetLayout pigment_vk_descriptor_set_layout(PDescriptorSetLayout* layout);
+PIGMENT_API VkDescriptorPool pigment_vk_descriptor_pool(PDescriptorPool* pool);
 
-VkCommandBuffer pigment_vk_command_buffer(PCommandBuffer* cmd);
-VkCommandPool pigment_vk_command_pool(PCommandPool* pool);
+PIGMENT_API VkCommandBuffer pigment_vk_command_buffer(PCommandBuffer* cmd);
+PIGMENT_API VkCommandPool pigment_vk_command_pool(PCommandPool* pool);
 
 /**
  * @brief Same as pigment_defer_destroy, but gated on a custom VkFence.
@@ -166,7 +166,7 @@ VkCommandPool pigment_vk_command_pool(PCommandPool* pool);
  * @param resource The resource to destroy. Passed as the second argument to destroy_fn.
  * @param fence The fence whose signaling will release the destroy.
  */
-void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence);
+PIGMENT_API void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence);
 
 static inline void pigment_vk_append_pnext(void* head, void* tail)
 {

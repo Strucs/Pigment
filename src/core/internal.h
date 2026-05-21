@@ -19,8 +19,7 @@
 #ifndef PIGMENT_INTERNAL_H
 #define PIGMENT_INTERNAL_H
 
-#include "internal_alloc.h"
-#include "log_internal.h"
+#include "alloc.h"
 #include "structs.h"
 
 #include <string.h>
@@ -263,5 +262,9 @@ PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
 void defer_destroy_renderer(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const PResourceTracker* tracker, VkFence present_fence);
+
+// log.c
+PResult pigment_log_init(Pigment* pigment);
+void pigment_log_destroy(Pigment* pigment);
 
 #endif

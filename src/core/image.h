@@ -170,7 +170,7 @@ typedef struct PFormatInfo {
  *
  * @return Block width, height and byte size for the format.
  */
-PFormatInfo pigment_format_info(PFormat format);
+PIGMENT_API PFormatInfo pigment_format_info(PFormat format);
 
 /**
  * @brief Returns the byte size of one mip level of an image.
@@ -183,7 +183,7 @@ PFormatInfo pigment_format_info(PFormat format);
  *
  * @return Size in bytes, or 0 for a format without a defined block layout.
  */
-uint64_t pigment_format_image_size(PFormat format, uint32_t width, uint32_t height);
+PIGMENT_API uint64_t pigment_format_image_size(PFormat format, uint32_t width, uint32_t height);
 
 /**
  * @brief Asks the driver what a format can be used for on the current device.
@@ -198,26 +198,26 @@ uint64_t pigment_format_image_size(PFormat format, uint32_t width, uint32_t heig
  *
  * @return Bitmask of supported PFormatFeature bits, or 0 if the format is unsupported.
  */
-PFormatFeature pigment_format_features(Pigment* pigment, PFormat format);
+PIGMENT_API PFormatFeature pigment_format_features(Pigment* pigment, PFormat format);
 
-void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PImage* dst, PImageLayout dst_layout, const PBufferImageCopy* regions, uint32_t region_count);
-void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PBuffer* dst, const PBufferImageCopy* regions, uint32_t region_count);
-void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageCopy* regions, uint32_t region_count);
-void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageBlit* regions, uint32_t region_count, PFilteringMode filter);
+PIGMENT_API void pigment_cmd_copy_buffer_to_image(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PImage* dst, PImageLayout dst_layout, const PBufferImageCopy* regions, uint32_t region_count);
+PIGMENT_API void pigment_cmd_copy_image_to_buffer(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PBuffer* dst, const PBufferImageCopy* regions, uint32_t region_count);
+PIGMENT_API void pigment_cmd_copy_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageCopy* regions, uint32_t region_count);
+PIGMENT_API void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, PImageLayout src_layout, PImage* dst, PImageLayout dst_layout, const PImageBlit* regions, uint32_t region_count, PFilteringMode filter);
 
-void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage* image, uint32_t base_layer, uint32_t layer_count, PImageLayout final_layout);
+PIGMENT_API void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage* image, uint32_t base_layer, uint32_t layer_count, PImageLayout final_layout);
 
-PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc);
-void pigment_destroy_image(Pigment* pigment, PImage* image);
-void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
+PIGMENT_API PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc);
+PIGMENT_API void pigment_destroy_image(Pigment* pigment, PImage* image);
+PIGMENT_API void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
 
-uint32_t pigment_image_width(PImage* image);
-uint32_t pigment_image_height(PImage* image);
+PIGMENT_API uint32_t pigment_image_width(PImage* image);
+PIGMENT_API uint32_t pigment_image_height(PImage* image);
 
-void* pigment_image_mapped(PImage* image);
-uint64_t pigment_image_row_pitch(PImage* image);
-void pigment_image_flush(Pigment* pigment, PImage* image);
-void pigment_image_invalidate(Pigment* pigment, PImage* image);
+PIGMENT_API void* pigment_image_mapped(PImage* image);
+PIGMENT_API uint64_t pigment_image_row_pitch(PImage* image);
+PIGMENT_API void pigment_image_flush(Pigment* pigment, PImage* image);
+PIGMENT_API void pigment_image_invalidate(Pigment* pigment, PImage* image);
 
 /**
  * @brief Blocks until the GPU has finished every submitted command that used the image.
@@ -225,15 +225,15 @@ void pigment_image_invalidate(Pigment* pigment, PImage* image);
  * @param pigment Pigment instance.
  * @param image Image to wait on.
  */
-void pigment_image_wait(Pigment* pigment, PImage* image);
+PIGMENT_API void pigment_image_wait(Pigment* pigment, PImage* image);
 
 /**
  * Require P_FEATURE_HOST_IMAGE_COPY, on an image created with P_IMAGE_USAGE_HOST_TRANSFER.
  */
 
-void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
-void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
-void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition* transitions, uint32_t count);
+PIGMENT_API void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
+PIGMENT_API void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count);
+PIGMENT_API void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition* transitions, uint32_t count);
 
 #ifdef __cplusplus
 }

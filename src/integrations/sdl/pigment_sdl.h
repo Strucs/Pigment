@@ -28,17 +28,16 @@ extern "C" {
 
 #include <SDL3/SDL.h>
 
-PWindowHandles pigment_sdl_get_window_handles(SDL_Window* window);
+PIGMENT_API PWindowHandles pigment_sdl_get_window_handles(SDL_Window* window);
 
-void pigment_sdl_log_callback(
+PIGMENT_API void pigment_sdl_log_callback(
     PigmentLogSeverity severity,
     PigmentLogType type,
     const PigmentLogRecord* record,
     void* user_data
 );
 
-IOCallbacks pigment_sdl_default_file_io(void);
-
+PIGMENT_API IOCallbacks pigment_sdl_default_file_io(void);
 
 #ifdef __cplusplus
 }

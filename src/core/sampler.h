@@ -43,8 +43,8 @@ struct PSamplerDesc {
     const char* name;
 };
 
-PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc);
-void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler);
+PIGMENT_API PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc);
+PIGMENT_API void pigment_destroy_sampler(Pigment* pigment, PSampler* sampler);
 
 #ifdef __cplusplus
 }

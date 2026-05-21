@@ -18,8 +18,7 @@
 
 #include "transfert.h"
 
-#include "internal_alloc.h"
-#include "log_internal.h"
+#include "pigment/alloc.h"
 
 PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
 {

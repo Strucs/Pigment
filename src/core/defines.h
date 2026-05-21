@@ -21,15 +21,9 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
+#include "attributes.h"
 
-#if defined(__GNUC__) || defined(__clang__)
-    #define PIGMENT_ALIGN(n) __attribute__((aligned(n)))
-#elif defined(_MSC_VER)
-    #define PIGMENT_ALIGN(n) __declspec(align(n))
-#else
-    #define PIGMENT_ALIGN(n)
-#endif
+#include <stdint.h>
 
 typedef unsigned char PBool;
 #define P_TRUE 1
@@ -500,7 +494,7 @@ typedef struct PAllocator {
     void (*internal_free_notify)(void* user_data, uint64_t size, PInternalAllocationType type, PAllocScope scope);
 } PAllocator;
 
-extern const PAllocator pigment_default_allocator;
+PIGMENT_API extern const PAllocator pigment_default_allocator;
 
 typedef struct PigmentConfig {
     uint32_t max_frames_in_flight;

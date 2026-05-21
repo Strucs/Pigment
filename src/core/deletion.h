@@ -37,7 +37,7 @@ typedef void (*PDestroyFn)(Pigment*, void*);
  * @param destroy_fn The function to call to destroy the resource.
  * @param resource The resource to destroy. Passed as the second argument to destroy_fn.
  */
-void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource);
+PIGMENT_API void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource);
 
 /**
  * @brief Defer a destroy with a precise wait target read from a resource tracker.
@@ -52,7 +52,7 @@ void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resour
  * @param resource The resource to destroy.
  * @param tracker Tracker embedded in the resource (or any compatible struct).
  */
-void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker);
+PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker);
 
 /**
  * @brief Run pending destroys whose GPU work has completed.
@@ -63,7 +63,7 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
  *
  * @param pigment Pigment instance.
  */
-void pigment_drain_pending(Pigment* pigment);
+PIGMENT_API void pigment_drain_pending(Pigment* pigment);
 
 #ifdef __cplusplus
 }

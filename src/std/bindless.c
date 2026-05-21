@@ -19,11 +19,7 @@
 #include "transfert.h"
 #include "std_internal.h"
 
-#include "pigment/commands.h"
 #include "pigment/pigment.h"
-
-#include "internal_alloc.h"
-#include "log_internal.h"
 
 #include <string.h>
 

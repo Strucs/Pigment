@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "alloc.h"
+
 #include "internal.h"
 
 void* p_alloc_impl(Pigment* pigment, uint64_t size, uint64_t alignment, PAllocScope scope)

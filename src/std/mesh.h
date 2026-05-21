@@ -33,10 +33,10 @@ typedef struct PMeshBuffers {
     PIndexType index_type;
 } PMeshBuffers;
 
-PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count);
-void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
+PIGMENT_API PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count);
+PIGMENT_API void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
 
-uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
+PIGMENT_API uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
 
 #ifdef __cplusplus
 }
