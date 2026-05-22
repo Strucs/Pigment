@@ -115,7 +115,7 @@ PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer)
     return renderer->command_buffers[renderer->swapchain->current_frame];
 }
 
-void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer)
+void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, const PSwapchainPassDesc* desc)
 {
     if(pigment == NULL || renderer == NULL)
     {
@@ -176,8 +176,15 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer)
 
     pigment_cmd_image_barriers(pigment, cmd, &depth_barrier, 1);
 
+    float default_alpha = transparent ? 0.0f : 1.0f;
+
     VkClearColorValue clear_color_value = {
-        {0.0f, 0.0f, 0.0f, transparent ? 0.0f : 1.0f},
+        {
+         desc ? desc->clear_color[0] : 0.0f,
+         desc ? desc->clear_color[1] : 0.0f,
+         desc ? desc->clear_color[2] : 0.0f,
+         desc ? desc->clear_color[3] : default_alpha,
+         },
     };
 
     VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};

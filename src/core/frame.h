@@ -77,6 +77,10 @@ typedef struct PAttachmentRef {
     PImageLayout final_layout;
 } PAttachmentRef;
 
+typedef struct PSwapchainPassDesc {
+    float clear_color[4];
+} PSwapchainPassDesc;
+
 struct PRenderPassDesc {
     PAttachmentRef* color_attachments;
     uint32_t color_count;
@@ -150,8 +154,9 @@ PIGMENT_API PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer
  *
  * @param pigment Pigment instance.
  * @param renderer The renderer whose swapchain image to render to.
+ * @param desc Optional pass parameters. NULL uses defaults (black clear color, alpha 0 if transparent).
  */
-PIGMENT_API void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, const PSwapchainPassDesc* desc);
 
 /**
  * @brief End the swapchain render pass.

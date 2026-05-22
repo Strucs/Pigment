@@ -110,8 +110,12 @@ void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t curre
     {
         return;
     }
-    PCameraData* slot = (PCameraData*) pigment_buffer_mapped(camera->buffer) + current_frame;
-    *slot             = camera->data;
+    PCameraData* mapped = (PCameraData*) pigment_buffer_mapped(camera->buffer);
+    if(mapped == NULL)
+    {
+        return;
+    }
+    mapped[current_frame] = camera->data;
     pigment_buffer_flush(pigment, camera->buffer, (uint64_t) current_frame * sizeof(PCameraData), sizeof(PCameraData));
 
     camera->last_uploaded_frame = current_frame;

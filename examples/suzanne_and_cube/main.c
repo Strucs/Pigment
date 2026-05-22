@@ -302,7 +302,7 @@ int main(void)
             continue;
         }
 
-        pigment_begin_swapchain_pass(pigment, renderer);
+        pigment_begin_swapchain_pass(pigment, renderer, NULL);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
         pigment_draw(pigment, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls, draw_count);

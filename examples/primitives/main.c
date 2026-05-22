@@ -484,7 +484,7 @@ int main(void)
 
         pigment_end_render_pass(pigment, cmd, &hud_pass);
 
-        pigment_begin_swapchain_pass(pigment, renderer);
+        pigment_begin_swapchain_pass(pigment, renderer, NULL);
 
         pigment_bind_pipeline(pigment, cmd, crt_pipeline);
         pigment_std_draw_crt(pigment, renderer, bindless, crt_pipeline, rt_slot, 1, t);
