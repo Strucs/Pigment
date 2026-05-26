@@ -38,9 +38,6 @@ def on_build(config: powermake.Config):
         if not config.debug:
             config.add_c_flags("-flto=auto")
 
-    if config.target_is_mingw():
-        config.shared_linker.shared_lib_extension = ".dll"
-
     if config.target_is_macos():
         config.shared_linker.shared_lib_extension = ".dylib"
         config.add_includedirs("/opt/homebrew/include")

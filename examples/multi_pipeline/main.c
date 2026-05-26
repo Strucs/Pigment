@@ -42,7 +42,7 @@ int main(void)
         return 1;
     }
 
-    window = SDL_CreateWindow("Suzanne and Cube (opaque + additive)", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    window = SDL_CreateWindow("Suzanne and Cube (opaque + additive)", 1280, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if(window == NULL)
     {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());

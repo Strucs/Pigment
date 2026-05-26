@@ -74,18 +74,32 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
     if(vk_init != NULL && vk_init->allocator != NULL)
     {
-        pigment->gpu_allocator      = vk_init->allocator;
-        pigment->owns_gpu_allocator = P_FALSE;
+        pigment->gpu_allocator = vk_init->allocator;
     }
     else
     {
-        pigment->gpu_allocator      = pigment_vk_create_default_allocator(pigment, NULL);
-        pigment->owns_gpu_allocator = P_TRUE;
+        pigment->gpu_allocator = pigment_vk_create_default_allocator(pigment, NULL);
     }
 
     if(pigment->gpu_allocator == NULL)
     {
         goto ERROR;
+    }
+
+    if(pigment->gpu_allocator->init != NULL)
+    {
+        VkResult init_result = pigment->gpu_allocator->init(
+            pigment->gpu_allocator->user_data,
+            pigment->instance->vulkan_instance,
+            pigment->device->physical_device,
+            pigment->device->logical_device
+        );
+
+        if(init_result != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Custom PVkAllocator init failed (result=%d)", init_result);
+            goto ERROR;
+        }
     }
 
     pigment->swapchain_callbacks = create_swapchain_callback_list(pigment);
@@ -120,10 +134,7 @@ void destroy_pigment(Pigment* pigment)
     destroy_deletion_queue(pigment, pigment->deletions);
 
     destroy_swapchain_callback_list(pigment, pigment->swapchain_callbacks);
-    if(pigment->owns_gpu_allocator)
-    {
-        pigment_vk_destroy_allocator(pigment->gpu_allocator);
-    }
+    pigment_vk_destroy_allocator(pigment->gpu_allocator);
     destroy_device(pigment);
     destroy_instance(pigment);
 

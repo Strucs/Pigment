@@ -101,24 +101,33 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
         return;
     }
 
-    PDeletionNode* node = atomic_exchange_explicit(&queue->head, NULL, memory_order_acquire);
+    pigment->deletions = NULL;
 
-    PDeletionNode* fifo = NULL;
-    while(node != NULL)
+    for(;;)
     {
-        PDeletionNode* next = node->next;
-        node->next          = fifo;
-        fifo                = node;
-        node                = next;
-    }
-    node = fifo;
+        PDeletionNode* node = atomic_exchange_explicit(&queue->head, NULL, memory_order_acquire);
+        if(node == NULL)
+        {
+            break;
+        }
 
-    while(node != NULL)
-    {
-        PDeletionNode* next = node->next;
-        node->entry.destroy_fn(pigment, node->entry.resource);
-        P_FREE(pigment, node->entry.targets);
-        node = next;
+        PDeletionNode* fifo = NULL;
+        while(node != NULL)
+        {
+            PDeletionNode* next = node->next;
+            node->next          = fifo;
+            fifo                = node;
+            node                = next;
+        }
+        node = fifo;
+
+        while(node != NULL)
+        {
+            PDeletionNode* next = node->next;
+            node->entry.destroy_fn(pigment, node->entry.resource);
+            P_FREE(pigment, node->entry.targets);
+            node = next;
+        }
     }
 
     PDeletionChunk* chunk = atomic_load_explicit(&queue->chunks, memory_order_relaxed);

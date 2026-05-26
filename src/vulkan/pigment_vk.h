@@ -86,14 +86,15 @@ typedef struct PVkInitInfo {
     const VkPhysicalDeviceVulkan13Features* opt_features_13;
 
     /**
-     * NULL = Pigment uses its default allocator. Caller owns the allocator
-     * and is responsible for destroying it after destroy_pigment.
+     * NULL = Pigment uses its default allocator.
      */
     PVkAllocator* allocator;
 } PVkInitInfo;
 
 struct PVkAllocator {
     void* user_data;
+
+    VkResult (*init)(void* user_data, VkInstance instance, VkPhysicalDevice physical_device, VkDevice device);
 
     VkResult (*create_buffer)(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation);
     void (*destroy_buffer)(void* user_data, VkBuffer buffer, PVkAllocation* allocation);

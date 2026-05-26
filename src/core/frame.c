@@ -127,6 +127,7 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
     PSwapchain* swapchain      = renderer->swapchain;
     PBool transparent          = renderer->desc.transparent;
     PBool multisample          = (swapchain->color_multisample != NULL);
+    PBool use_depth            = !(desc != NULL && desc->no_depth);
 
     VkImageMemoryBarrier2 color_barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -164,17 +165,20 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
         pigment_cmd_image_barriers(pigment, cmd, &color_multisample_barrier, 1);
     }
 
-    PImageBarrier depth_barrier = {
-        .image       = swapchain->depth,
-        .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
-        .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
-        .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-        .dst         = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-        .mip_count   = 1,
-        .layer_count = 1,
-    };
+    if(use_depth)
+    {
+        PImageBarrier depth_barrier = {
+            .image       = swapchain->depth,
+            .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
+            .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
+            .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .dst         = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+            .mip_count   = 1,
+            .layer_count = 1,
+        };
 
-    pigment_cmd_image_barriers(pigment, cmd, &depth_barrier, 1);
+        pigment_cmd_image_barriers(pigment, cmd, &depth_barrier, 1);
+    }
 
     float default_alpha = transparent ? 0.0f : 1.0f;
 
@@ -186,8 +190,6 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
          desc ? desc->clear_color[3] : default_alpha,
          },
     };
-
-    VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
 
     VkImageView color_view = swapchain->image_views[image_index];
     if(multisample)
@@ -213,25 +215,33 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
         .resolveImageLayout = multisample ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
-    PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth, &(PImageViewDesc) {0});
-    if(depth_view == NULL)
+    VkRenderingAttachmentInfo depth_attachment   = {0};
+    VkRenderingAttachmentInfo stencil_attachment = {0};
+    PBool has_stencil                            = VK_FALSE;
+
+    if(use_depth)
     {
-        PLOG_ERROR(pigment, "Failed to get depth view");
-        return;
+        PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth, &(PImageViewDesc) {0});
+        if(depth_view == NULL)
+        {
+            PLOG_ERROR(pigment, "Failed to get depth view");
+            return;
+        }
+
+        VkClearDepthStencilValue clear_depth_stencil_value = {pigment->config.depth_clear_value, 0};
+
+        depth_attachment = (VkRenderingAttachmentInfo) {
+            .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+            .imageView   = depth_view->view,
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .clearValue  = {.depthStencil = clear_depth_stencil_value},
+        };
+
+        has_stencil        = (swapchain->depth->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+        stencil_attachment = depth_attachment;
     }
-
-    VkRenderingAttachmentInfo depth_attachment = {
-        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView   = depth_view->view,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue  = {.depthStencil = clear_depth_stencil_value},
-    };
-
-    PBool has_stencil = (swapchain->depth->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
-
-    VkRenderingAttachmentInfo stencil_attachment = depth_attachment;
 
     VkRenderingInfoKHR rendering_info = {
         .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
@@ -239,8 +249,8 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
         .layerCount           = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments    = &color_attachment,
-        .pDepthAttachment     = &depth_attachment,
-        .pStencilAttachment   = has_stencil ? &stencil_attachment : NULL,
+        .pDepthAttachment     = use_depth ? &depth_attachment : NULL,
+        .pStencilAttachment   = (use_depth && has_stencil) ? &stencil_attachment : NULL,
     };
 
     vkCmdBeginRendering(cmd->buffer, &rendering_info);

@@ -79,6 +79,7 @@ typedef struct PAttachmentRef {
 
 typedef struct PSwapchainPassDesc {
     float clear_color[4];
+    PBool no_depth;    // skip the depth/stencil attachment
 } PSwapchainPassDesc;
 
 struct PRenderPassDesc {

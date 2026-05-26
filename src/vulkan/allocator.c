@@ -76,6 +76,7 @@ static PVkAllocation* create_allocation(Pigment* pigment, VkDeviceMemory memory,
 static PVkAllocation* allocate_pooled(DefaultAllocator* alloc, VkDeviceSize size, VkDeviceSize alignment, uint32_t memory_type_index);
 static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize size, uint32_t memory_type_index);
 static void release_allocation(DefaultAllocator* alloc, PVkAllocation* allocation);
+static VkResult default_init(void* user_data, VkInstance instance, VkPhysicalDevice physical_device, VkDevice device);
 static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation);
 static void default_destroy_buffer(void* user_data, VkBuffer buffer, PVkAllocation* allocation);
 static VkResult default_create_image(void* user_data, const VkImageCreateInfo* image_info, const PVkAllocationCreateInfo* alloc_info, VkImage* out_image, PVkAllocation** out_allocation);
@@ -89,7 +90,7 @@ static void default_destroy(void* user_data);
 
 PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDefaultAllocatorCreateInfo* info)
 {
-    if(pigment == NULL || pigment->device == NULL)
+    if(pigment == NULL)
     {
         return NULL;
     }
@@ -100,24 +101,14 @@ PVkAllocator* pigment_vk_create_default_allocator(Pigment* pigment, const PVkDef
         return NULL;
     }
 
-    alloc->pigment = pigment;
-    alloc->device  = pigment->device->logical_device;
-    vkGetPhysicalDeviceMemoryProperties(pigment->device->physical_device, &alloc->memory_properties);
-
-    VkPhysicalDeviceProperties device_properties;
-    vkGetPhysicalDeviceProperties(pigment->device->physical_device, &device_properties);
-    alloc->non_coherent_atom_size = device_properties.limits.nonCoherentAtomSize;
-    if(alloc->non_coherent_atom_size == 0)
-    {
-        alloc->non_coherent_atom_size = 1;
-    }
-
+    alloc->pigment             = pigment;
     alloc->block_size          = (info != NULL && info->block_size != 0) ? info->block_size : DEFAULT_BLOCK_SIZE;
     alloc->dedicated_threshold = alloc->block_size / DEDICATED_THRESHOLD_DIVISOR;
 
     (void) pigment_rwlock_init(&alloc->lock);
 
     alloc->vtable.user_data        = alloc;
+    alloc->vtable.init             = default_init;
     alloc->vtable.create_buffer    = default_create_buffer;
     alloc->vtable.destroy_buffer   = default_destroy_buffer;
     alloc->vtable.create_image     = default_create_image;
@@ -480,6 +471,26 @@ static void release_allocation(DefaultAllocator* allocator, PVkAllocation* alloc
     }
 
     P_FREE(allocator->pigment, allocation);
+}
+
+static VkResult default_init(void* user_data, VkInstance instance, VkPhysicalDevice physical_device, VkDevice device)
+{
+    (void) instance;
+
+    DefaultAllocator* alloc = (DefaultAllocator*) user_data;
+
+    alloc->device = device;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &alloc->memory_properties);
+
+    VkPhysicalDeviceProperties device_properties;
+    vkGetPhysicalDeviceProperties(physical_device, &device_properties);
+    alloc->non_coherent_atom_size = device_properties.limits.nonCoherentAtomSize;
+    if(alloc->non_coherent_atom_size == 0)
+    {
+        alloc->non_coherent_atom_size = 1;
+    }
+
+    return VK_SUCCESS;
 }
 
 static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo* buffer_info, const PVkAllocationCreateInfo* alloc_info, VkBuffer* out_buffer, PVkAllocation** out_allocation)
