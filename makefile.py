@@ -55,23 +55,24 @@ def on_build(config: powermake.Config):
         build_package.build_all_apple(config)
         return
 
-    build_lib.build_pigment(config, shared_build)
+    pigment_artifact = build_lib.build_pigment(config, shared_build)
     build_package.build_framework_package(config, shared_build)
-    build_lib.build_sdl_integration(config)
-    build_lib.build_gltf_tool(config)
+    sdl_artifact = build_lib.build_sdl_integration(config)
+    gltf_artifact = build_lib.build_gltf_tool(config)
     build_lib.build_shaderc_tool(config)
 
-    needs_sdl = any(getattr(args_parsed, example) for example in dir_list) or any(
+    needs_sdl = any(getattr(args_parsed, example) for example in example_list) or any(
         getattr(args_parsed, test) for test in test_list
     )
     if needs_sdl:
         config.add_shared_libs("SDL3")
-        for example in dir_list:
+        archives = [a for a in (sdl_artifact, gltf_artifact, pigment_artifact) if a]
+        for example in example_list:
             if getattr(args_parsed, example):
-                build_examples.build_example(config, example, shared_build)
+                build_examples.build_example(config, example, shared_build, archives)
         for test in test_list:
             if getattr(args_parsed, test):
-                build_examples.build_test(config, test, shared_build)
+                build_examples.build_test(config, test, shared_build, archives)
 
 
 parser = powermake.ArgumentParser()
@@ -89,18 +90,22 @@ parser.add_argument(
 examples_dir = "./examples"
 tests_dir = "./tests"
 
-dir_list = [
-    f
-    for f in os.listdir(examples_dir)
-    if not os.path.isfile(os.path.join(examples_dir, f))
-]
+example_list = (
+    [
+        f
+        for f in os.listdir(examples_dir)
+        if not os.path.isfile(os.path.join(examples_dir, f))
+    ]
+    if os.path.isdir(examples_dir)
+    else []
+)
 test_list = (
     [f for f in os.listdir(tests_dir) if not os.path.isfile(os.path.join(tests_dir, f))]
     if os.path.isdir(tests_dir)
     else []
 )
 
-for example in dir_list:
+for example in example_list:
     parser.add_argument(
         f"--{example}", help=f"build {example} example", action="store_true"
     )

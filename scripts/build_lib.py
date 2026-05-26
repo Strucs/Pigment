@@ -5,7 +5,7 @@ import powermake
 from scripts import build_common
 
 
-def build_pigment(config: powermake.Config, shared: bool):
+def build_pigment(config: powermake.Config, shared: bool) -> str:
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
 
@@ -68,21 +68,22 @@ def build_pigment(config: powermake.Config, shared: bool):
         elif p_config.target_is_linux():
             p_config.add_shared_linker_flags("-Wl,-soname,libpigment.so")
 
+        shared_artifact = powermake.link_shared_lib(
+            p_config, list(objects) + list(ext_objects)
+        )
+
         if p_config.target_is_mingw():
-            implib = os.path.join(p_config.lib_build_directory, "libpigment.dll.a")
-            p_config.add_shared_linker_flags(f"-Wl,--out-implib,{implib}")
-        lib_name = "pigment" if p_config.target_is_windows() else None
-        powermake.link_shared_lib(
-            p_config, list(objects) + list(ext_objects), lib_name=lib_name
-        )
-    elif build_common.is_msvc(p_config):
-        powermake.archive_files(
-            p_config,
-            list(objects) + list(ext_objects),
-            archive_name=p_config.target_name,
-        )
+            artifact = os.path.join(p_config.lib_build_directory, "libpigment.dll.a")
+        elif p_config.target_is_windows():
+            artifact = os.path.splitext(shared_artifact)[0] + ".lib"
+        else:
+            artifact = shared_artifact
+
+        if p_config.target_is_windows():
+            bin_dir = os.path.join(os.path.dirname(p_config.lib_build_directory), "bin")
+            build_common.copy_shared_runtime(p_config, shared_artifact, bin_dir)
     else:
-        powermake.archive_files(p_config, list(objects) + list(ext_objects))
+        artifact = powermake.archive_files(p_config, list(objects) + list(ext_objects))
 
     config.remove_includedirs(
         include_dir,
@@ -93,11 +94,13 @@ def build_pigment(config: powermake.Config, shared: bool):
         *build_common.EXTERNAL_INCLUDE_DIRS,
     )
 
+    return artifact
 
-def build_sdl_integration(config: powermake.Config):
+
+def build_sdl_integration(config: powermake.Config) -> str | None:
     sdl_files = list(powermake.get_files("./src/integrations/sdl/**/*.c"))
     if not sdl_files:
-        return
+        return None
 
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     sdl_config = config.copy()
@@ -108,16 +111,13 @@ def build_sdl_integration(config: powermake.Config):
 
     objects = powermake.compile_files(sdl_config, sdl_files)
 
-    if build_common.is_msvc(sdl_config):
-        powermake.archive_files(config, objects, archive_name=sdl_config.target_name)
-    else:
-        powermake.archive_files(sdl_config, objects)
+    return powermake.archive_files(sdl_config, objects)
 
 
-def build_gltf_tool(config: powermake.Config):
+def build_gltf_tool(config: powermake.Config) -> str | None:
     gltf_files = list(powermake.get_files("./src/tools/gltf/**/*.c"))
     if not gltf_files:
-        return
+        return None
 
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     gltf_config = config.copy()
@@ -142,20 +142,13 @@ def build_gltf_tool(config: powermake.Config):
     ext_objects = powermake.compile_files(ext_config, external_files)
     objects = powermake.compile_files(gltf_config, gltf_files)
 
-    if build_common.is_msvc(gltf_config):
-        powermake.archive_files(
-            gltf_config,
-            list(objects) + list(ext_objects),
-            archive_name=gltf_config.target_name,
-        )
-    else:
-        powermake.archive_files(gltf_config, list(objects) + list(ext_objects))
+    return powermake.archive_files(gltf_config, list(objects) + list(ext_objects))
 
 
-def build_shaderc_tool(config: powermake.Config):
+def build_shaderc_tool(config: powermake.Config) -> str | None:
     shaderc_files = list(powermake.get_files("./src/tools/shaderc/**/*.c"))
     if not shaderc_files:
-        return
+        return None
 
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
     shaderc_config = config.copy()
@@ -165,9 +158,4 @@ def build_shaderc_tool(config: powermake.Config):
 
     objects = powermake.compile_files(shaderc_config, shaderc_files)
 
-    if build_common.is_msvc(shaderc_config):
-        powermake.archive_files(
-            shaderc_config, objects, archive_name=shaderc_config.target_name
-        )
-    else:
-        powermake.archive_files(shaderc_config, objects)
+    return powermake.archive_files(shaderc_config, objects)

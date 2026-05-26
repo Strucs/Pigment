@@ -116,38 +116,8 @@ def is_msvc(config: powermake.Config) -> bool:
     )
 
 
-def archive_path(config: powermake.Config, lib_dir: str, base: str) -> str:
-    prefix = "lib"
-    ext = "a"
-
-    if is_msvc(config):
-        prefix = ""
-        ext = "lib"
-
-    return os.path.join(lib_dir, f"{prefix}{base}.{ext}")
-
-
-def link_target_path(
-    config: powermake.Config, lib_dir: str, base: str, shared: bool
-) -> str:
-    if shared and base == "pigment":
-        if is_msvc(config):
-            return os.path.join(lib_dir, "pigment.lib")
-        if config.target_is_mingw():
-            return os.path.join(lib_dir, "libpigment.dll.a")
-        if config.target_is_macos():
-            return os.path.join(lib_dir, "libpigment.dylib")
-        return os.path.join(lib_dir, "libpigment.so")
-    return archive_path(config, lib_dir, base)
-
-
-def copy_shared_runtime(
-    config: powermake.Config, lib_dir: str, bin_dir: str, shared: bool
-):
-    if not shared or not config.target_is_windows():
-        return
-    src = os.path.join(lib_dir, "pigment.dll")
-    if not os.path.exists(src):
+def copy_shared_runtime(config: powermake.Config, dll_path: str, bin_dir: str):
+    if not config.target_is_windows() or not os.path.exists(dll_path):
         return
     powermake.utils.makedirs(bin_dir)
-    shutil.copy2(src, os.path.join(bin_dir, "pigment.dll"))
+    shutil.copy2(dll_path, os.path.join(bin_dir, os.path.basename(dll_path)))
