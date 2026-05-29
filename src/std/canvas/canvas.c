@@ -27,10 +27,33 @@ typedef struct PStdCanvasPushConstants {
     float color[4];
 } PStdCanvasPushConstants;
 
-struct PStdCanvas {
+typedef struct PStdCanvasBlendSlot {
+    PBlendMode mode;
     PPipeline* pipeline;
+} PStdCanvasBlendSlot;
+
+struct PStdCanvas {
     PLayout* layout;
+    PStdCanvasBlendSlot* slots;
+    uint32_t slot_count;
+    PPipeline* active_pipeline;
 };
+
+static PPipeline* find_pipeline_for_mode(const PStdCanvas* canvas, PBlendMode mode)
+{
+    if(canvas == NULL)
+    {
+        return NULL;
+    }
+    for(uint32_t i = 0; i < canvas->slot_count; i++)
+    {
+        if(canvas->slots[i].mode == mode)
+        {
+            return canvas->slots[i].pipeline;
+        }
+    }
+    return NULL;
+}
 
 static void pixel_to_ndc(uint32_t screen_w, uint32_t screen_h, int32_t x_px, int32_t y_px, int32_t w_px, int32_t h_px, float* out_pos_x, float* out_pos_y, float* out_size_x, float* out_size_y)
 {
@@ -40,18 +63,33 @@ static void pixel_to_ndc(uint32_t screen_w, uint32_t screen_h, int32_t x_px, int
     *out_size_y = (float) h_px / (float) screen_h * 2.0f;
 }
 
-PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PSampleCount samples)
+PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* config)
 {
-    if(pigment == NULL)
+    if(pigment == NULL || config == NULL)
     {
         return NULL;
     }
+
+    static const PBlendMode default_blend_modes[] = {P_BLEND_MODE_ALPHA};
+    const PBlendMode* blend_modes                 = config->blend_modes;
+    uint32_t blend_mode_count                     = config->blend_mode_count;
+    if(blend_modes == NULL || blend_mode_count == 0)
+    {
+        blend_modes      = default_blend_modes;
+        blend_mode_count = 1;
+    }
+
+    PSampleCount samples = (config->samples == 0) ? P_SAMPLE_COUNT_1 : config->samples;
 
     PStdCanvas* canvas = P_NEW_FOR_OBJECT(pigment, canvas);
     if(canvas == NULL)
     {
         return NULL;
     }
+    canvas->layout          = NULL;
+    canvas->slots           = NULL;
+    canvas->slot_count      = 0;
+    canvas->active_pipeline = NULL;
 
     PLayoutDesc layout_desc = {
         .set_layouts      = NULL,
@@ -67,24 +105,43 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PS
         goto FREE;
     }
 
-    PPipelineDesc pipeline_desc = {
-        .layout               = canvas->layout,
-        .vertex_shader        = (const uint32_t*) ndc_vert_spv,
-        .vertex_shader_size   = (uint32_t) sizeof(ndc_vert_spv),
-        .fragment_shader      = (const uint32_t*) ndc_frag_spv,
-        .fragment_shader_size = (uint32_t) sizeof(ndc_frag_spv),
-        .color_formats        = &color_format,
-        .color_format_count   = 1,
-        .depth_format         = P_FORMAT_UNDEFINED,
-        .polygon_mode         = P_POLYGON_MODE_FILL,
-        .topology             = P_TOPOLOGY_TRIANGLE_LIST,
-        .sample_count         = samples,
-        .name                 = "std_canvas_pipeline",
-    };
-
-    if(pigment_create_graphic_pipelines(pigment, NULL, &pipeline_desc, 1, &canvas->pipeline) != PIGMENT_SUCCESS)
+    canvas->slots = P_NEW_ARRAY_FOR_OBJECT(pigment, canvas->slots, blend_mode_count);
+    if(canvas->slots == NULL)
     {
         goto FREE;
+    }
+
+    PFormat color_format = config->color_format;
+    for(uint32_t i = 0; i < blend_mode_count; i++)
+    {
+        PBlendMode mode = blend_modes[i];
+
+        PPipelineDesc pipeline_desc = {
+            .layout               = canvas->layout,
+            .vertex_shader        = (const uint32_t*) ndc_vert_spv,
+            .vertex_shader_size   = (uint32_t) sizeof(ndc_vert_spv),
+            .fragment_shader      = (const uint32_t*) ndc_frag_spv,
+            .fragment_shader_size = (uint32_t) sizeof(ndc_frag_spv),
+            .color_formats        = &color_format,
+            .color_format_count   = 1,
+            .blend_modes          = &mode,
+            .blend_mode_count     = 1,
+            .depth_format         = P_FORMAT_UNDEFINED,
+            .polygon_mode         = P_POLYGON_MODE_FILL,
+            .topology             = P_TOPOLOGY_TRIANGLE_LIST,
+            .sample_count         = samples,
+            .name                 = "std_canvas_pipeline",
+        };
+
+        PPipeline* pipeline = NULL;
+        if(pigment_create_graphic_pipelines(pigment, NULL, &pipeline_desc, 1, &pipeline) != PIGMENT_SUCCESS)
+        {
+            goto FREE;
+        }
+
+        canvas->slots[i].mode     = mode;
+        canvas->slots[i].pipeline = pipeline;
+        canvas->slot_count        = i + 1;
     }
 
     return canvas;
@@ -100,9 +157,16 @@ void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas)
     {
         return;
     }
-    if(canvas->pipeline != NULL)
+    if(canvas->slots != NULL)
     {
-        pigment_destroy_pipeline(pigment, canvas->pipeline);
+        for(uint32_t i = 0; i < canvas->slot_count; i++)
+        {
+            if(canvas->slots[i].pipeline != NULL)
+            {
+                pigment_destroy_pipeline(pigment, canvas->slots[i].pipeline);
+            }
+        }
+        P_FREE(pigment, canvas->slots);
     }
     if(canvas->layout != NULL)
     {
@@ -111,25 +175,32 @@ void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas)
     P_FREE(pigment, canvas);
 }
 
-PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas)
+PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas, PBlendMode blend_mode)
 {
-    return (canvas != NULL) ? canvas->pipeline : NULL;
+    return find_pipeline_for_mode(canvas, blend_mode);
 }
 
-void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd)
+void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PBlendMode blend_mode)
 {
     if(pigment == NULL || canvas == NULL || cmd == NULL)
     {
         return;
     }
 
-    pigment_bind_pipeline(pigment, cmd, canvas->pipeline);
+    PPipeline* pipeline = find_pipeline_for_mode(canvas, blend_mode);
+    if(pipeline == NULL)
+    {
+        return;
+    }
+    canvas->active_pipeline = pipeline;
+
+    pigment_bind_pipeline(pigment, cmd, pipeline);
     pigment_cmd_set_depth(pigment, cmd, P_FALSE, P_FALSE, P_COMPARE_OP_ALWAYS);
 }
 
 void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, const float color[4])
 {
-    if(pigment == NULL || canvas == NULL || cmd == NULL || color == NULL)
+    if(pigment == NULL || canvas == NULL || cmd == NULL || color == NULL || canvas->active_pipeline == NULL)
     {
         return;
     }
@@ -140,7 +211,7 @@ void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandB
         .color = {color[0], color[1], color[2], color[3]},
     };
 
-    pigment_cmd_push_constants(pigment, cmd, canvas->pipeline, 0, sizeof(push), &push);
+    pigment_cmd_push_constants(pigment, cmd, canvas->active_pipeline, 0, sizeof(push), &push);
     pigment_cmd_draw(pigment, cmd, 6, 1, 0, 0);
 }
 

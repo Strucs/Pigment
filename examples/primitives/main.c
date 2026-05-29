@@ -171,7 +171,7 @@ int main(void)
     }
 
     PVec3 camera_position = {0.0f, 1.5f, 6.0f};
-    camera               = pigment_std_create_camera(pigment);
+    camera                = pigment_std_create_camera(pigment);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");
@@ -269,10 +269,10 @@ int main(void)
     }
 
     PComputePipelineDesc wave_desc = {
-        .layout           = wave_layout,
+        .layout              = wave_layout,
         .compute_shader      = (const uint32_t*) wave_comp_spv,
         .compute_shader_size = (uint32_t) sizeof(wave_comp_spv),
-        .name             = "wave_compute",
+        .name                = "wave_compute",
     };
     if(pigment_create_compute_pipelines(pigment, NULL, &wave_desc, 1, &wave_pipeline) != PIGMENT_SUCCESS)
     {
@@ -299,7 +299,11 @@ int main(void)
         goto FREE;
     }
 
-    canvas = pigment_std_create_canvas(pigment, color_format, rt_samples);
+    PStdCanvasConfig canvas_config = {
+        .color_format = color_format,
+        .samples      = rt_samples,
+    };
+    canvas = pigment_std_create_canvas(pigment, &canvas_config);
     if(canvas == NULL)
     {
         fprintf(stderr, "Failed to create canvas!\n");
@@ -477,7 +481,7 @@ int main(void)
         };
         pigment_begin_render_pass(pigment, cmd, &hud_pass);
 
-        pigment_std_canvas_begin(pigment, canvas, cmd);
+        pigment_std_canvas_begin(pigment, canvas, cmd, P_BLEND_MODE_ALPHA);
         float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
         pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);

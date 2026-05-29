@@ -40,18 +40,27 @@ typedef enum PStdCanvasAnchor {
 } PStdCanvasAnchor;
 
 /**
- * Creates a 2D drawing context for simple shapes like rectangles. It internally manages a pipeline and descriptor sets for this purpose.
+ * @brief Configuration for creating a 2D canvas.
+ */
+typedef struct PStdCanvasConfig {
+    PFormat color_format;             // Format of the color attachment of the target. Required.
+    PSampleCount samples;             // Sample count of the target. 0 defaults to P_SAMPLE_COUNT_1.
+    const PBlendMode* blend_modes;    // Blend modes to support. NULL defaults to a single P_BLEND_MODE_ALPHA pipeline.
+    uint32_t blend_mode_count;        // Number of entries in blend_modes. Ignored when blend_modes is NULL.
+} PStdCanvasConfig;
+
+/**
+ * @brief Creates a 2D drawing context for simple shapes like rectangles. It internally manages one pipeline per declared blend mode.
  *
  * @param pigment Pigment instance.
- * @param color_format Format of the color attachment in the render target where the 2D shapes will be drawn. Must be renderable and filterable.
- * @param samples Sample count of the render target where the 2D shapes will be drawn. Must be compatible with the device and color_format.
+ * @param config Canvas configuration (color format, samples, supported blend modes).
  *
  * @return A new PStdCanvas context, or NULL on failure.
  */
-PIGMENT_API PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat color_format, PSampleCount samples);
+PIGMENT_API PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* config);
 
 /**
- * Destroys a canvas context and frees its resources. Does not free the Pigment instance.
+ * @brief Destroys a canvas context and frees its resources. Does not free the Pigment instance.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context to destroy.
@@ -59,22 +68,26 @@ PIGMENT_API PStdCanvas* pigment_std_create_canvas(Pigment* pigment, PFormat colo
 PIGMENT_API void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas);
 
 /**
- * Get the pipeline used internally by the canvas context. Useful for setting render states or push constant ranges.
+ * @brief Get the pipeline used internally by the canvas context for a given blend mode.
+ *
+ * Useful for setting render states or push constant ranges.
  *
  * @param canvas Canvas context.
+ * @param blend_mode Blend mode whose pipeline should be returned. Must be one of the modes declared at creation.
  *
- * @return Internal pipeline used for 2D rendering.
+ * @return Internal pipeline used for 2D rendering with the requested blend mode, or NULL if not declared.
  */
-PIGMENT_API PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas);
+PIGMENT_API PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas, PBlendMode blend_mode);
 
 /**
- * Bind the canvas pipeline and disable depth test/write. Call once at the start of your 2D pass.
+ * @brief Binds the canvas pipeline for the requested blend mode and disables depth test/write.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
  * @param cmd Command buffer to record into.
+ * @param blend_mode Which blend mode to use for the upcoming draws. Must be one declared at creation.
  */
-PIGMENT_API void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd);
+PIGMENT_API void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PBlendMode blend_mode);
 
 /**
  * @brief Draws a filled rectangle in NDC space.
