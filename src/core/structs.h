@@ -228,6 +228,10 @@ struct PPipelineBuild {
     VkSpecializationInfo vertex_spec_info;
     VkSpecializationMapEntry* fragment_spec_entries;
     VkSpecializationInfo fragment_spec_info;
+    VkVertexInputBindingDescription* vk_vertex_bindings;
+    uint32_t vk_vertex_binding_count;
+    VkVertexInputAttributeDescription* vk_vertex_attributes;
+    uint32_t vk_vertex_attribute_count;
     VkPipelineVertexInputStateCreateInfo vertex_input;
     VkPipelineInputAssemblyStateCreateInfo input_assembly;
     VkPipelineViewportStateCreateInfo viewport;

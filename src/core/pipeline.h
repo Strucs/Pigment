@@ -87,6 +87,24 @@ typedef struct PSpecializationInfo {
     uint64_t data_size;
 } PSpecializationInfo;
 
+typedef enum PVertexInputRate {
+    P_VERTEX_INPUT_RATE_VERTEX   = 0,
+    P_VERTEX_INPUT_RATE_INSTANCE = 1,
+} PVertexInputRate;
+
+typedef struct PVertexBindingDesc {
+    uint32_t binding;
+    uint32_t stride;
+    PVertexInputRate input_rate;
+} PVertexBindingDesc;
+
+typedef struct PVertexAttributeDesc {
+    uint32_t location;
+    uint32_t binding;
+    PFormat format;
+    uint32_t offset;
+} PVertexAttributeDesc;
+
 typedef struct PPipelineDesc {
     PLayout* layout;
 
@@ -131,6 +149,15 @@ typedef struct PPipelineDesc {
      * 0 = single-view (default). e.g. 0b111111 = 6 views simultaneously (cubemap shadow).
      */
     uint32_t view_mask;
+
+    /**
+     * Classic vertex input declaration.
+     */
+
+    const PVertexBindingDesc* vertex_bindings;
+    uint32_t vertex_binding_count;
+    const PVertexAttributeDesc* vertex_attributes;
+    uint32_t vertex_attribute_count;
 
     const char* name;
 } PPipelineDesc;

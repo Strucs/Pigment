@@ -1014,6 +1014,39 @@ void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_cou
     vkCmdDraw(cmd->buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
+void pigment_cmd_bind_vertex_buffers(Pigment* pigment, PCommandBuffer* cmd, uint32_t first_binding, uint32_t buffer_count, PBuffer** buffers, const uint64_t* offsets)
+{
+    if(pigment == NULL || cmd == NULL || buffers == NULL || buffer_count == 0)
+    {
+        return;
+    }
+
+    P_STACK_OR_HEAP(VkBuffer, vk_buffers, buffer_count);
+    P_STACK_OR_HEAP(VkDeviceSize, vk_offsets, buffer_count);
+    if(vk_buffers == NULL || vk_offsets == NULL)
+    {
+        goto FREE;
+    }
+
+    for(uint32_t i = 0; i < buffer_count; i++)
+    {
+        if(buffers[i] == NULL)
+        {
+            goto FREE;
+        }
+
+        pigment_cmd_use_buffer(pigment, cmd, buffers[i]);
+        vk_buffers[i] = buffers[i]->buffer;
+        vk_offsets[i] = (offsets != NULL) ? (VkDeviceSize) offsets[i] : 0;
+    }
+
+    vkCmdBindVertexBuffers(cmd->buffer, first_binding, buffer_count, vk_buffers, vk_offsets);
+
+FREE:
+    P_STACK_OR_HEAP_FREE(pigment, vk_buffers);
+    P_STACK_OR_HEAP_FREE(pigment, vk_offsets);
+}
+
 void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance)
 {
     if(pigment == NULL || cmd == NULL || index_buffer == NULL)

@@ -25,7 +25,7 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
 static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
 static PResult configure_shader_stage_create_info(Pigment* pigment, VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point, const PSpecializationInfo* specialization, VkSpecializationMapEntry** out_vk_entries, VkSpecializationInfo* out_vk_spec_info, VkPipelineShaderStageCreateInfo* out_stage);
-static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void);
+static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(const VkVertexInputBindingDescription* bindings, uint32_t binding_count, const VkVertexInputAttributeDescription* attributes, uint32_t attribute_count);
 static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology);
 static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void);
 static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode);
@@ -106,7 +106,44 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         }
     }
 
-    build->vertex_input   = configure_vertex_input_state_create_info();
+    if(desc->vertex_binding_count > 0 && desc->vertex_bindings != NULL)
+    {
+        build->vk_vertex_bindings = P_NEW_ARRAY_FOR_OBJECT(pigment, build->vk_vertex_bindings, desc->vertex_binding_count);
+        if(build->vk_vertex_bindings == NULL)
+        {
+            goto ERROR;
+        }
+        for(uint32_t i = 0; i < desc->vertex_binding_count; i++)
+        {
+            build->vk_vertex_bindings[i] = (VkVertexInputBindingDescription) {
+                .binding   = desc->vertex_bindings[i].binding,
+                .stride    = desc->vertex_bindings[i].stride,
+                .inputRate = (desc->vertex_bindings[i].input_rate == P_VERTEX_INPUT_RATE_INSTANCE) ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX,
+            };
+        }
+        build->vk_vertex_binding_count = desc->vertex_binding_count;
+    }
+
+    if(desc->vertex_attribute_count > 0 && desc->vertex_attributes != NULL)
+    {
+        build->vk_vertex_attributes = P_NEW_ARRAY_FOR_OBJECT(pigment, build->vk_vertex_attributes, desc->vertex_attribute_count);
+        if(build->vk_vertex_attributes == NULL)
+        {
+            goto ERROR;
+        }
+        for(uint32_t i = 0; i < desc->vertex_attribute_count; i++)
+        {
+            build->vk_vertex_attributes[i] = (VkVertexInputAttributeDescription) {
+                .location = desc->vertex_attributes[i].location,
+                .binding  = desc->vertex_attributes[i].binding,
+                .format   = (VkFormat) desc->vertex_attributes[i].format,
+                .offset   = desc->vertex_attributes[i].offset,
+            };
+        }
+        build->vk_vertex_attribute_count = desc->vertex_attribute_count;
+    }
+
+    build->vertex_input   = configure_vertex_input_state_create_info(build->vk_vertex_bindings, build->vk_vertex_binding_count, build->vk_vertex_attributes, build->vk_vertex_attribute_count);
     build->input_assembly = configure_input_assembly_state_create_info(desc->topology);
     build->viewport       = configure_viewport_state_create_info();
     build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode);
@@ -197,6 +234,8 @@ static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
     P_FREE(pigment, build->dynamic_state_list);
     P_FREE(pigment, build->vertex_spec_entries);
     P_FREE(pigment, build->fragment_spec_entries);
+    P_FREE(pigment, build->vk_vertex_bindings);
+    P_FREE(pigment, build->vk_vertex_attributes);
     P_FREE(pigment, build);
 }
 
@@ -578,10 +617,14 @@ static PResult configure_shader_stage_create_info(Pigment* pigment, VkShaderModu
     return PIGMENT_SUCCESS;
 }
 
-static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(void)
+static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(const VkVertexInputBindingDescription* bindings, uint32_t binding_count, const VkVertexInputAttributeDescription* attributes, uint32_t attribute_count)
 {
     VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount   = binding_count,
+        .pVertexBindingDescriptions      = bindings,
+        .vertexAttributeDescriptionCount = attribute_count,
+        .pVertexAttributeDescriptions    = attributes,
     };
 
     return vertex_input_state_create_info;

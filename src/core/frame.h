@@ -193,6 +193,19 @@ PIGMENT_API void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd
 PIGMENT_API void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 
 PIGMENT_API void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t offset, uint32_t size, const void* data);
+
+/**
+ * @brief Bind one or more vertex buffers for classic vertex input.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to record into.
+ * @param first_binding First binding slot (matches PVertexBindingDesc.binding).
+ * @param buffer_count Number of buffers (and offsets) to bind.
+ * @param buffers Array of `buffer_count` non-NULL PBuffer pointers.
+ * @param offsets Per-buffer byte offsets. NULL = all zero.
+ */
+PIGMENT_API void pigment_cmd_bind_vertex_buffers(Pigment* pigment, PCommandBuffer* cmd, uint32_t first_binding, uint32_t buffer_count, PBuffer** buffers, const uint64_t* offsets);
+
 PIGMENT_API void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 PIGMENT_API void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
 
