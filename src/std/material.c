@@ -177,3 +177,12 @@ uint64_t pigment_std_material_address(PMaterials* materials)
     }
     return (uint64_t) pigment_buffer_address(materials->buffer);
 }
+
+void pigment_std_materials_use(Pigment* pigment, PCommandBuffer* cmd, PMaterials* materials)
+{
+    if(pigment == NULL || cmd == NULL || materials == NULL || materials->buffer == NULL)
+    {
+        return;
+    }
+    pigment_cmd_use_buffer(pigment, cmd, materials->buffer);
+}

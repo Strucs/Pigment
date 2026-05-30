@@ -57,6 +57,15 @@ PIGMENT_API void pigment_std_material_destroy(Pigment* pigment, PMaterials* mate
 
 PIGMENT_API uint64_t pigment_std_material_address(PMaterials* materials);
 
+/**
+ * @brief Stamp the materials' underlying buffer as used by `cmd`.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer.
+ * @param materials Materials to stamp.
+ */
+PIGMENT_API void pigment_std_materials_use(Pigment* pigment, PCommandBuffer* cmd, PMaterials* materials);
+
 #ifdef __cplusplus
 }
 #endif

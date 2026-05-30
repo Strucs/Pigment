@@ -131,3 +131,12 @@ uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_fram
     uint64_t base = pigment_buffer_address(camera->buffer);
     return base + (uint64_t) current_frame * sizeof(PCameraData);
 }
+
+void pigment_std_camera_use(Pigment* pigment, PCommandBuffer* cmd, PCamera* camera)
+{
+    if(pigment == NULL || cmd == NULL || camera == NULL || camera->buffer == NULL)
+    {
+        return;
+    }
+    pigment_cmd_use_buffer(pigment, cmd, camera->buffer);
+}

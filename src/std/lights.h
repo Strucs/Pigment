@@ -61,6 +61,15 @@ PIGMENT_API void pigment_std_light_destroy(Pigment* pigment, PLights* lights, ui
 
 PIGMENT_API uint64_t pigment_std_light_address(PLights* lights);
 
+/**
+ * @brief Stamp the lights' underlying buffer as used by `cmd`.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer.
+ * @param lights Lights to stamp.
+ */
+PIGMENT_API void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* lights);
+
 PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
 
 #ifdef __cplusplus

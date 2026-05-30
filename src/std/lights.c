@@ -221,6 +221,15 @@ uint64_t pigment_std_light_address(PLights* lights)
     return (uint64_t) pigment_buffer_address(lights->buffer);
 }
 
+void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* lights)
+{
+    if(pigment == NULL || cmd == NULL || lights == NULL || lights->buffer == NULL)
+    {
+        return;
+    }
+    pigment_cmd_use_buffer(pigment, cmd, lights->buffer);
+}
+
 void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
 {
     if(pigment == NULL || renderer == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
@@ -231,10 +240,14 @@ void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, 
     PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
     uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
+    pigment_std_lights_use(pigment, cmd, lights);
+    pigment_std_mesh_use(pigment, cmd, sphere_mesh);
+
     uint64_t camera_slot_address = 0;
     if(camera != NULL)
     {
         pigment_std_camera_upload(pigment, camera, current_frame);
+        pigment_std_camera_use(pigment, cmd, camera);
         camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, current_frame);
     }
 

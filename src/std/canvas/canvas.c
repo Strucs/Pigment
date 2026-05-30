@@ -18,55 +18,59 @@
 
 #include "pigment/pigment.h"
 
+#include "pigment/std/draw.h"
+
 #include "ndc_vert_spv.h"
 #include "ndc_frag_spv.h"
 
-typedef struct PStdCanvasPushConstants {
-    float pos[2];
-    float size[2];
+#define DEFAULT_MAX_INSTANCES 4096U
+#define FULL_UV ((const float[4]) {0.0f, 0.0f, 1.0f, 1.0f})
+
+typedef struct PIGMENT_ALIGN(16) PStdCanvasInstance {
+    float transform[4][4];
     float color[4];
+    float uv_rect[4];
+    int32_t image_idx;
+    int32_t sampler_idx;
+} PStdCanvasInstance;
+
+typedef struct PStdCanvasPushConstants {
+    uint64_t instance_buffer_address;
 } PStdCanvasPushConstants;
 
 typedef struct PStdCanvasBlendSlot {
     PBlendMode mode;
     PPipeline* pipeline;
+    PInstanceRing* ring;
 } PStdCanvasBlendSlot;
 
 struct PStdCanvas {
     PLayout* layout;
+    PStdBindless* bindless;
     PStdCanvasBlendSlot* slots;
     uint32_t slot_count;
-    PPipeline* active_pipeline;
+
+    PStdCanvasBlendSlot* active_slot;
+    uint32_t target_w;
+    uint32_t target_h;
 };
 
-static PPipeline* find_pipeline_for_mode(const PStdCanvas* canvas, PBlendMode mode)
-{
-    if(canvas == NULL)
-    {
-        return NULL;
-    }
-    for(uint32_t i = 0; i < canvas->slot_count; i++)
-    {
-        if(canvas->slots[i].mode == mode)
-        {
-            return canvas->slots[i].pipeline;
-        }
-    }
-    return NULL;
-}
-
-static void pixel_to_ndc(uint32_t screen_w, uint32_t screen_h, int32_t x_px, int32_t y_px, int32_t w_px, int32_t h_px, float* out_pos_x, float* out_pos_y, float* out_size_x, float* out_size_y)
-{
-    *out_pos_x  = (float) x_px / (float) screen_w * 2.0f - 1.0f;
-    *out_pos_y  = (float) y_px / (float) screen_h * 2.0f - 1.0f;
-    *out_size_x = (float) w_px / (float) screen_w * 2.0f;
-    *out_size_y = (float) h_px / (float) screen_h * 2.0f;
-}
+static PStdCanvasBlendSlot* find_slot_for_mode(PStdCanvas* canvas, PBlendMode mode);
+static void pixel_to_ndc(uint32_t screen_w, uint32_t screen_h, int32_t x_px, int32_t y_px, int32_t w_px, int32_t h_px, float* out_pos_x, float* out_pos_y, float* out_size_x, float* out_size_y);
+static void anchor_to_pixel(const PStdCanvas* canvas, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, int32_t* out_x, int32_t* out_y);
+static void uv_rect_from_region(int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, uint32_t tex_w, uint32_t tex_h, float out_uv[4]);
+static void push_quad(Pigment* pigment, PStdCanvas* canvas, float x, float y, float w, float h, const float color[4], int32_t image_idx, int32_t sampler_idx, const float uv_rect[4]);
 
 PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* config)
 {
     if(pigment == NULL || config == NULL)
     {
+        return NULL;
+    }
+
+    if(config->bindless == NULL)
+    {
+        PLOG_ERROR(pigment, "PStdCanvasConfig.bindless is required (the fragment shader samples the bindless image table).");
         return NULL;
     }
 
@@ -79,21 +83,25 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
         blend_mode_count = 1;
     }
 
-    PSampleCount samples = (config->samples == 0) ? P_SAMPLE_COUNT_1 : config->samples;
+    PSampleCount samples   = (config->samples == 0) ? P_SAMPLE_COUNT_1 : config->samples;
+    uint32_t max_instances = (config->max_instances_per_frame == 0) ? DEFAULT_MAX_INSTANCES : config->max_instances_per_frame;
 
     PStdCanvas* canvas = P_NEW_FOR_OBJECT(pigment, canvas);
     if(canvas == NULL)
     {
         return NULL;
     }
-    canvas->layout          = NULL;
-    canvas->slots           = NULL;
-    canvas->slot_count      = 0;
-    canvas->active_pipeline = NULL;
+    canvas->layout      = NULL;
+    canvas->bindless    = config->bindless;
+    canvas->slots       = NULL;
+    canvas->slot_count  = 0;
+    canvas->active_slot = NULL;
+
+    PDescriptorSetLayout* bindless_layout = pigment_std_bindless_layout(config->bindless);
 
     PLayoutDesc layout_desc = {
-        .set_layouts      = NULL,
-        .set_layout_count = 0,
+        .set_layouts      = &bindless_layout,
+        .set_layout_count = 1,
         .push_size        = sizeof(PStdCanvasPushConstants),
         .push_stages      = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
         .name             = "std_canvas_layout",
@@ -139,8 +147,16 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
             goto FREE;
         }
 
+        PInstanceRing* ring = pigment_std_create_instance_ring(pigment, sizeof(PStdCanvasInstance), max_instances);
+        if(ring == NULL)
+        {
+            pigment_destroy_pipeline(pigment, pipeline);
+            goto FREE;
+        }
+
         canvas->slots[i].mode     = mode;
         canvas->slots[i].pipeline = pipeline;
+        canvas->slots[i].ring     = ring;
         canvas->slot_count        = i + 1;
     }
 
@@ -161,6 +177,10 @@ void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas)
     {
         for(uint32_t i = 0; i < canvas->slot_count; i++)
         {
+            if(canvas->slots[i].ring != NULL)
+            {
+                pigment_std_destroy_instance_ring(pigment, canvas->slots[i].ring);
+            }
             if(canvas->slots[i].pipeline != NULL)
             {
                 pigment_destroy_pipeline(pigment, canvas->slots[i].pipeline);
@@ -177,79 +197,201 @@ void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas)
 
 PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas, PBlendMode blend_mode)
 {
-    return find_pipeline_for_mode(canvas, blend_mode);
+    PStdCanvasBlendSlot* slot = find_slot_for_mode(canvas, blend_mode);
+    return (slot != NULL) ? slot->pipeline : NULL;
 }
 
-void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PBlendMode blend_mode)
+void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, uint32_t frame_index, uint32_t target_w, uint32_t target_h, PBlendMode blend_mode)
 {
     if(pigment == NULL || canvas == NULL || cmd == NULL)
     {
         return;
     }
 
-    PPipeline* pipeline = find_pipeline_for_mode(canvas, blend_mode);
-    if(pipeline == NULL)
+    PStdCanvasBlendSlot* slot = find_slot_for_mode(canvas, blend_mode);
+    if(slot == NULL)
     {
         return;
     }
-    canvas->active_pipeline = pipeline;
 
-    pigment_bind_pipeline(pigment, cmd, pipeline);
+    pigment_std_instance_ring_sync_frame(slot->ring, frame_index);
+    pigment_std_instance_ring_use(pigment, cmd, slot->ring);
+
+    canvas->active_slot = slot;
+    canvas->target_w    = target_w;
+    canvas->target_h    = target_h;
+
+    pigment_bind_pipeline(pigment, cmd, slot->pipeline);
+
+    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, canvas->bindless, cmd, frame_index);
+    pigment_cmd_bind_descriptor_sets(pigment, cmd, slot->pipeline, 0, &bindless_set, 1, NULL, 0);
+
     pigment_cmd_set_depth(pigment, cmd, P_FALSE, P_FALSE, P_COMPARE_OP_ALWAYS);
+}
+
+void pigment_std_canvas_end(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd)
+{
+    if(pigment == NULL || canvas == NULL || cmd == NULL || canvas->active_slot == NULL)
+    {
+        return;
+    }
+
+    PStdCanvasBlendSlot* slot = canvas->active_slot;
+    uint32_t instance_count   = pigment_std_instance_ring_cursor(slot->ring);
+    if(instance_count == 0)
+    {
+        canvas->active_slot = NULL;
+        return;
+    }
+
+    pigment_std_instance_ring_flush_range(pigment, slot->ring, 0, instance_count);
+
+    PStdCanvasPushConstants push = {
+        .instance_buffer_address = pigment_std_instance_ring_frame_address(slot->ring),
+    };
+
+    pigment_cmd_push_constants(pigment, cmd, slot->pipeline, 0, sizeof(push), &push);
+    pigment_cmd_draw(pigment, cmd, 6, instance_count, 0, 0);
+
+    canvas->active_slot = NULL;
 }
 
 void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, const float color[4])
 {
-    if(pigment == NULL || canvas == NULL || cmd == NULL || color == NULL || canvas->active_pipeline == NULL)
-    {
-        return;
-    }
-
-    PStdCanvasPushConstants push = {
-        .pos   = {x, y},
-        .size  = {w, h},
-        .color = {color[0], color[1], color[2], color[3]},
-    };
-
-    pigment_cmd_push_constants(pigment, cmd, canvas->active_pipeline, 0, sizeof(push), &push);
-    pigment_cmd_draw(pigment, cmd, 6, 1, 0, 0);
+    (void) cmd;
+    push_quad(pigment, canvas, x, y, w, h, color, -1, -1, FULL_UV);
 }
 
-void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4])
+void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4])
 {
-    if(renderer == NULL)
-    {
-        return;
-    }
-    uint32_t screen_w = 0, screen_h = 0;
-    pigment_get_swapchain_size(renderer, &screen_w, &screen_h);
-    if(screen_w == 0 || screen_h == 0)
+    if(canvas == NULL || canvas->target_w == 0 || canvas->target_h == 0)
     {
         return;
     }
 
     float ndc_x = 0.0f, ndc_y = 0.0f, ndc_w = 0.0f, ndc_h = 0.0f;
-    pixel_to_ndc(screen_w, screen_h, x, y, w, h, &ndc_x, &ndc_y, &ndc_w, &ndc_h);
+    pixel_to_ndc(canvas->target_w, canvas->target_h, x, y, w, h, &ndc_x, &ndc_y, &ndc_w, &ndc_h);
     pigment_std_canvas_rect_ndc(pigment, canvas, cmd, ndc_x, ndc_y, ndc_w, ndc_h, color);
 }
 
-void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4])
+void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4])
 {
-    if(renderer == NULL)
-    {
-        return;
-    }
-    uint32_t screen_w = 0, screen_h = 0;
-    pigment_get_swapchain_size(renderer, &screen_w, &screen_h);
-    if(screen_w == 0 || screen_h == 0)
+    if(canvas == NULL || canvas->target_w == 0 || canvas->target_h == 0)
     {
         return;
     }
 
-    int32_t base_x = 0;
-    int32_t base_y = 0;
-    int32_t sw     = (int32_t) screen_w;
-    int32_t sh     = (int32_t) screen_h;
+    int32_t base_x = 0, base_y = 0;
+    anchor_to_pixel(canvas, anchor, offset_x, offset_y, w, h, &base_x, &base_y);
+    pigment_std_canvas_rect_pixel(pigment, canvas, cmd, base_x, base_y, w, h, color);
+}
+
+void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, const float color[4])
+{
+    (void) cmd;
+    push_quad(pigment, canvas, x, y, w, h, color, (int32_t) image_idx, (int32_t) sampler_idx, FULL_UV);
+}
+
+void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4])
+{
+    if(canvas == NULL || canvas->target_w == 0 || canvas->target_h == 0)
+    {
+        return;
+    }
+
+    float ndc_x = 0.0f, ndc_y = 0.0f, ndc_w = 0.0f, ndc_h = 0.0f;
+    pixel_to_ndc(canvas->target_w, canvas->target_h, x, y, w, h, &ndc_x, &ndc_y, &ndc_w, &ndc_h);
+    pigment_std_canvas_image_ndc(pigment, canvas, cmd, ndc_x, ndc_y, ndc_w, ndc_h, image_idx, sampler_idx, color);
+}
+
+void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4])
+{
+    if(canvas == NULL || canvas->target_w == 0 || canvas->target_h == 0)
+    {
+        return;
+    }
+
+    int32_t base_x = 0, base_y = 0;
+    anchor_to_pixel(canvas, anchor, offset_x, offset_y, w, h, &base_x, &base_y);
+    pigment_std_canvas_image_pixel(pigment, canvas, cmd, base_x, base_y, w, h, image_idx, sampler_idx, color);
+}
+
+void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4])
+{
+    (void) cmd;
+    if(canvas == NULL)
+    {
+        return;
+    }
+
+    PImage* image  = pigment_std_bindless_image(canvas->bindless, image_idx);
+    uint32_t tex_w = (image != NULL) ? pigment_image_width(image) : 0;
+    uint32_t tex_h = (image != NULL) ? pigment_image_height(image) : 0;
+    if(tex_w == 0 || tex_h == 0)
+    {
+        return;
+    }
+
+    float uv_rect[4];
+    uv_rect_from_region(src_x, src_y, src_w, src_h, tex_w, tex_h, uv_rect);
+    push_quad(pigment, canvas, x, y, w, h, color, (int32_t) image_idx, (int32_t) sampler_idx, uv_rect);
+}
+
+void pigment_std_canvas_image_region_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4])
+{
+    if(canvas == NULL || canvas->target_w == 0 || canvas->target_h == 0)
+    {
+        return;
+    }
+
+    float ndc_x = 0.0f, ndc_y = 0.0f, ndc_w = 0.0f, ndc_h = 0.0f;
+    pixel_to_ndc(canvas->target_w, canvas->target_h, x, y, w, h, &ndc_x, &ndc_y, &ndc_w, &ndc_h);
+    pigment_std_canvas_image_region_ndc(pigment, canvas, cmd, ndc_x, ndc_y, ndc_w, ndc_h, image_idx, sampler_idx, src_x, src_y, src_w, src_h, color);
+}
+
+void pigment_std_canvas_image_region_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4])
+{
+    if(canvas == NULL || canvas->target_w == 0 || canvas->target_h == 0)
+    {
+        return;
+    }
+
+    int32_t base_x = 0, base_y = 0;
+    anchor_to_pixel(canvas, anchor, offset_x, offset_y, w, h, &base_x, &base_y);
+    pigment_std_canvas_image_region_pixel(pigment, canvas, cmd, base_x, base_y, w, h, image_idx, sampler_idx, src_x, src_y, src_w, src_h, color);
+}
+
+static PStdCanvasBlendSlot* find_slot_for_mode(PStdCanvas* canvas, PBlendMode mode)
+{
+    if(canvas == NULL)
+    {
+        return NULL;
+    }
+    for(uint32_t i = 0; i < canvas->slot_count; i++)
+    {
+        if(canvas->slots[i].mode == mode)
+        {
+            return &canvas->slots[i];
+        }
+    }
+    return NULL;
+}
+
+static void pixel_to_ndc(uint32_t screen_w, uint32_t screen_h, int32_t x_px, int32_t y_px, int32_t w_px, int32_t h_px, float* out_pos_x, float* out_pos_y, float* out_size_x, float* out_size_y)
+{
+    *out_pos_x  = (float) x_px / (float) screen_w * 2.0f - 1.0f;
+    *out_pos_y  = (float) y_px / (float) screen_h * 2.0f - 1.0f;
+    *out_size_x = (float) w_px / (float) screen_w * 2.0f;
+    *out_size_y = (float) h_px / (float) screen_h * 2.0f;
+}
+
+static void anchor_to_pixel(const PStdCanvas* canvas, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, int32_t* out_x, int32_t* out_y)
+{
+    int32_t sw = (int32_t) canvas->target_w;
+    int32_t sh = (int32_t) canvas->target_h;
+
+    int32_t base_x = offset_x;
+    int32_t base_y = offset_y;
 
     switch(anchor)
     {
@@ -291,5 +433,61 @@ void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PComma
             break;
     }
 
-    pigment_std_canvas_rect_pixel(pigment, canvas, cmd, renderer, base_x, base_y, w, h, color);
+    *out_x = base_x;
+    *out_y = base_y;
+}
+
+static void uv_rect_from_region(int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, uint32_t tex_w, uint32_t tex_h, float out_uv[4])
+{
+    out_uv[0] = (float) src_x / (float) tex_w;
+    out_uv[1] = (float) src_y / (float) tex_h;
+    out_uv[2] = (float) (src_x + src_w) / (float) tex_w;
+    out_uv[3] = (float) (src_y + src_h) / (float) tex_h;
+}
+
+static void push_quad(Pigment* pigment, PStdCanvas* canvas, float x, float y, float w, float h, const float color[4], int32_t image_idx, int32_t sampler_idx, const float uv_rect[4])
+{
+    if(pigment == NULL || canvas == NULL || color == NULL || canvas->active_slot == NULL)
+    {
+        return;
+    }
+
+    PStdCanvasInstance* inst = (PStdCanvasInstance*) pigment_std_instance_ring_alloc(pigment, canvas->active_slot->ring, 1);
+    if(inst == NULL)
+    {
+        return;
+    }
+
+    inst->transform[0][0] = w;
+    inst->transform[0][1] = 0;
+    inst->transform[0][2] = 0;
+    inst->transform[0][3] = 0;
+
+    inst->transform[1][0] = 0;
+    inst->transform[1][1] = h;
+    inst->transform[1][2] = 0;
+    inst->transform[1][3] = 0;
+
+    inst->transform[2][0] = 0;
+    inst->transform[2][1] = 0;
+    inst->transform[2][2] = 1;
+    inst->transform[2][3] = 0;
+
+    inst->transform[3][0] = x;
+    inst->transform[3][1] = y;
+    inst->transform[3][2] = 0;
+    inst->transform[3][3] = 1;
+
+    inst->color[0] = color[0];
+    inst->color[1] = color[1];
+    inst->color[2] = color[2];
+    inst->color[3] = color[3];
+
+    inst->uv_rect[0] = uv_rect[0];
+    inst->uv_rect[1] = uv_rect[1];
+    inst->uv_rect[2] = uv_rect[2];
+    inst->uv_rect[3] = uv_rect[3];
+
+    inst->image_idx   = image_idx;
+    inst->sampler_idx = sampler_idx;
 }

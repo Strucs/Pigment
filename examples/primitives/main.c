@@ -8,7 +8,13 @@
 #include "../common/fps_camera.h"
 #include "wave_comp_spv.h"
 
+#include <stb_image.h>
+
 #define SPHERE_INSTANCE_COUNT 100
+
+#define CAPTAIN_SPRITE "examples/primitives/GoldAndConquestSprites/soldiers.png"
+#define CAPTAIN_CELL 32
+#define SPRITE_SAMPLER 0
 
 typedef struct WavePushConstants {
     uint64_t heights_address;
@@ -39,6 +45,7 @@ int main(void)
     PRenderTarget* rt                                     = NULL;
     uint32_t cubemap_slot                                 = 0;
     uint32_t rt_slot                                      = 0;
+    uint32_t captain_slot                                 = 0;
     PMeshBuffers* gpu_cube                                = NULL;
     PMeshBuffers* gpu_sphere                              = NULL;
     PMeshBuffers* gpu_plane                               = NULL;
@@ -123,7 +130,7 @@ int main(void)
         goto FREE;
     }
 
-    ring = pigment_std_create_instance_ring(pigment, 4096);
+    ring = pigment_std_create_instance_ring(pigment, sizeof(PInstanceData), 4096);
     if(ring == NULL)
     {
         fprintf(stderr, "Failed to create instance ring!\n");
@@ -235,6 +242,23 @@ int main(void)
 
     rt_slot = pigment_std_register_render_target(pigment, bindless, rt);
 
+    int sprite_w = 0, sprite_h = 0, sprite_channels = 0;
+    unsigned char* sprite_pixels = stbi_load(CAPTAIN_SPRITE, &sprite_w, &sprite_h, &sprite_channels, STBI_rgb_alpha);
+    if(sprite_pixels == NULL)
+    {
+        fprintf(stderr, "Failed to load sprite '%s': %s\n", CAPTAIN_SPRITE, stbi_failure_reason());
+        goto FREE;
+    }
+
+    captain_slot = pigment_std_add_image(pigment, bindless, sprite_pixels, (uint32_t) sprite_w, (uint32_t) sprite_h, P_FORMAT_R8G8B8A8_UNORM);
+
+    stbi_image_free(sprite_pixels);
+    if(captain_slot == UINT32_MAX)
+    {
+        fprintf(stderr, "Failed to register sprite into bindless!\n");
+        goto FREE;
+    }
+
     PPipelineDesc desc = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, rt_samples);
     if(pigment_create_graphic_pipelines(pigment, NULL, &desc, 1, &pipeline) != PIGMENT_SUCCESS)
     {
@@ -302,6 +326,7 @@ int main(void)
     PStdCanvasConfig canvas_config = {
         .color_format = color_format,
         .samples      = rt_samples,
+        .bindless     = bindless,
     };
     canvas = pigment_std_create_canvas(pigment, &canvas_config);
     if(canvas == NULL)
@@ -481,10 +506,25 @@ int main(void)
         };
         pigment_begin_render_pass(pigment, cmd, &hud_pass);
 
-        pigment_std_canvas_begin(pigment, canvas, cmd, P_BLEND_MODE_ALPHA);
+        uint32_t hud_w = 0, hud_h = 0;
+        pigment_get_swapchain_size(renderer, &hud_w, &hud_h);
+        pigment_std_canvas_begin(pigment, canvas, cmd, pigment_renderer_current_frame(renderer), hud_w, hud_h, P_BLEND_MODE_ALPHA);
         float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
-        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, renderer, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
+        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
+        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
+
+        float scale_factor        = 0.08f;
+        int32_t captain_h         = (int32_t) (hud_h * scale_factor);
+        int32_t captain_w         = captain_h;
+        const int32_t captain_pad = 16;
+
+        float no_filter[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
+        float team_filter[4] = {0.85f, 0.1f, 0.1f, 1.0f};
+
+        pigment_std_canvas_image_region_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_TOP_RIGHT, captain_pad, captain_pad, captain_w, captain_h, captain_slot, SPRITE_SAMPLER, 128, 0, CAPTAIN_CELL, CAPTAIN_CELL, no_filter);
+        pigment_std_canvas_image_region_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_TOP_RIGHT, captain_pad, captain_pad, captain_w, captain_h, captain_slot, SPRITE_SAMPLER, 160, 0, CAPTAIN_CELL, CAPTAIN_CELL, team_filter);
+
+        pigment_std_canvas_end(pigment, canvas, cmd);
 
         pigment_end_render_pass(pigment, cmd, &hud_pass);
 

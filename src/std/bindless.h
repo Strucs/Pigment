@@ -88,13 +88,29 @@ PIGMENT_API uint32_t pigment_std_register_render_target_depth(Pigment* pigment, 
 PIGMENT_API PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
 
 /**
- * Return the bindless descriptor set for the current frame and stamp all registered resources
- * (images, cubemaps, render targets, samplers) as in-use on the given command buffer.
- * It allows the user to delete resources without causing use-after-free on the GPU on runtime.
+ * @brief Get the image associated with the given bindless image slot.
+ *
+ * @param bindless Bindless context.
+ * @param image_slot Image slot returned by pigment_std_add_image / register_image.
+ *
+ * @return Image associated with the given slot, or NULL if the slot is invalid or unoccupied.
+ */
+PIGMENT_API PImage* pigment_std_bindless_image(PStdBindless* bindless, uint32_t image_slot);
+
+/**
+ * @brief Get the bindless descriptor set for the current frame and stamp all registered resources as in-use on the given command buffer.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param cmd Command buffer to record resource usage into. Can be NULL if the caller only needs the descriptor set and will handle resource lifetime manually.
+ * @param current_frame Current frame in flight index.
+ *
+ * @return Descriptor set for the current frame, NULL otherwise.
  */
 PIGMENT_API PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame);
 
 #ifdef __cplusplus
 }
 #endif
+
 #endif

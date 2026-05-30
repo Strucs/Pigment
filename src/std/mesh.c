@@ -18,6 +18,8 @@
 
 #include "transfert.h"
 
+#include "pigment/pigment.h"
+
 #include "pigment/alloc.h"
 
 PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, const void* vertices, size_t vertices_size, const uint32_t* indices, uint32_t index_count)
@@ -89,4 +91,13 @@ uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh)
         return 0;
     }
     return (uint64_t) pigment_buffer_address(mesh->vertex_buffer);
+}
+
+void pigment_std_mesh_use(Pigment* pigment, PCommandBuffer* cmd, PMeshBuffers* mesh)
+{
+    if(pigment == NULL || cmd == NULL || mesh == NULL || mesh->vertex_buffer == NULL)
+    {
+        return;
+    }
+    pigment_cmd_use_buffer(pigment, cmd, mesh->vertex_buffer);
 }

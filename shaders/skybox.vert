@@ -7,7 +7,7 @@ layout(push_constant) uniform constants {
     uint sampler_id;
 } push;
 
-layout(location = 0) out vec3 view_dir;
+layout(location = 0) out vec3 viewDir;
 
 void main()
 {
@@ -19,7 +19,7 @@ void main()
     view_pos /= view_pos.w;
 
     mat3 view_rot = mat3(push.camera_buffer.view);
-    view_dir = transpose(view_rot) * view_pos.xyz;
+    viewDir = transpose(view_rot) * view_pos.xyz;
 
     gl_Position = vec4(ndc, 0.0, 1.0);
 }

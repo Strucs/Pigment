@@ -11,14 +11,14 @@ layout(push_constant) uniform constants {
 } push;
 
 layout(binding = 0) uniform sampler _sampler[];
-layout(binding = 2) uniform texture2D _render_targets[];
+layout(binding = 2) uniform texture2D _render_target[];
 
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 outColor;
 
 vec3 sample_scene(vec2 coord)
 {
-    return texture(sampler2D(_render_targets[push.texture_id], _sampler[push.sampler_id]), coord).rgb;
+    return texture(sampler2D(_render_target[push.texture_id], _sampler[push.sampler_id]), coord).rgb;
 }
 
 float hash(vec2 coord)

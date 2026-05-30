@@ -36,6 +36,15 @@ PIGMENT_API void pigment_std_camera_set_projection(PCamera* camera, PMat4 projec
 PIGMENT_API uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
 PIGMENT_API void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);
 
+/**
+ * @brief Stamp the camera's underlying buffer as used by `cmd`.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer.
+ * @param camera Camera to stamp.
+ */
+PIGMENT_API void pigment_std_camera_use(Pigment* pigment, PCommandBuffer* cmd, PCamera* camera);
+
 #ifdef __cplusplus
 }
 #endif

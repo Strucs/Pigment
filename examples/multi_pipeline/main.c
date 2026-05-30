@@ -105,7 +105,7 @@ int main(void)
         goto FREE;
     }
 
-    ring = pigment_std_create_instance_ring(pigment, 4096);
+    ring = pigment_std_create_instance_ring(pigment, sizeof(PInstanceData), 4096);
     if(ring == NULL)
     {
         fprintf(stderr, "Failed to create instance ring!\n");
@@ -135,7 +135,7 @@ int main(void)
     pigment_std_light_create(pigment, lights, &sun);
 
     PVec3 camera_position = {1.5f, 0.0f, 5.0f};
-    camera               = pigment_std_create_camera(pigment);
+    camera                = pigment_std_create_camera(pigment);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");

@@ -11,10 +11,10 @@ layout(push_constant) uniform constants {
 layout(binding = 0) uniform sampler _sampler[];
 layout(binding = 1) uniform textureCube _cubemap[];
 
-layout(location = 0) in vec3 view_dir;
+layout(location = 0) in vec3 viewDir;
 layout(location = 0) out vec4 outColor;
 
 void main()
 {
-    outColor = texture(samplerCube(_cubemap[push.cubemap_id], _sampler[push.sampler_id]), normalize(view_dir));
+    outColor = texture(samplerCube(_cubemap[push.cubemap_id], _sampler[push.sampler_id]), normalize(viewDir));
 }

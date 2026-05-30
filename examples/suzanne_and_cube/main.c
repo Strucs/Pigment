@@ -108,7 +108,7 @@ int main(void)
         goto FREE;
     }
 
-    ring = pigment_std_create_instance_ring(pigment, 4096);
+    ring = pigment_std_create_instance_ring(pigment, sizeof(PInstanceData), 4096);
     if(ring == NULL)
     {
         fprintf(stderr, "Failed to create instance ring!\n");

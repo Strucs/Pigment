@@ -561,6 +561,15 @@ PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless)
     return (bindless != NULL) ? bindless->layout : NULL;
 }
 
+PImage* pigment_std_bindless_image(PStdBindless* bindless, uint32_t image_slot)
+{
+    if(bindless == NULL || image_slot >= bindless->images.count)
+    {
+        return NULL;
+    }
+    return bindless->images.images[image_slot];
+}
+
 PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame)
 {
     if(bindless == NULL)

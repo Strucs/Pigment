@@ -335,6 +335,11 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_ERROR;
     }
 
+    // create_swapchain() zero-inits the current_frame, so pass the old value
+    // so the frame-in-flight index stays consistent across a recreate (e.g.
+    // the instance ring cursor would be desynchronized otherwise).
+    new_swapchain->current_frame = old_swapchain->current_frame;
+
     renderer->swapchain = new_swapchain;
     destroy_swapchain(pigment, old_swapchain);
     return PIGMENT_SUCCESS;
