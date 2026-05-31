@@ -144,6 +144,24 @@ PIGMENT_API VkImage pigment_vk_image(PImage* image);
 PIGMENT_API VkImageView pigment_vk_image_view(PImageView* view);
 PIGMENT_API VkSampler pigment_vk_sampler(PSampler* sampler);
 
+/**
+ * @brief Wrap an external VkImage in a PImage so it can be used with the regular image API.
+ *
+ * The caller can free the returned PImage with pigment_destroy_image but it won't destroy
+ * the underlying VkImage, which is owned by the caller. The caller must ensure the VkImage
+ * outlives the PImage wrapper.
+ *
+ * @param pigment Pigment instance.
+ * @param image The VkImage to wrap.
+ * @param format The image's VkFormat.
+ * @param usage The usage flags the VkImage was created with.
+ * @param width Image width in pixels.
+ * @param height Image height in pixels.
+ *
+ * @return A PImage wrapper, or NULL on failure.
+ */
+PIGMENT_API PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height);
+
 PIGMENT_API VkPipeline pigment_vk_pipeline(PPipeline* pipeline);
 PIGMENT_API VkPipelineLayout pigment_vk_pipeline_layout(PLayout* layout);
 PIGMENT_API VkPipelineCache pigment_vk_pipeline_cache(PPipelineCache* cache);

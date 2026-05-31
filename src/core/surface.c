@@ -26,8 +26,8 @@
 #include "internal.h"
 
 static void destroy_renderer_immediate(Pigment* pigment, void* resource);
-static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);
-static void destroy_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain);
+static PResult create_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapchain, VkImageUsageFlags usage);
+static void destroy_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapchain);
 static const VkFormat* preferred_formats_for_color_space(VkColorSpaceKHR color_space, uint32_t* out_count);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred);
 static VkPresentModeKHR choose_surface_present_mode(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
@@ -702,12 +702,14 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         .surface = surface->surface
     };
 
-    create_info.minImageCount    = image_count;
-    create_info.imageFormat      = surface_format.format;
-    create_info.imageColorSpace  = surface_format.colorSpace;
-    create_info.imageExtent      = extent;
-    create_info.imageArrayLayers = 1;
-    create_info.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    create_info.minImageCount      = image_count;
+    create_info.imageFormat        = surface_format.format;
+    create_info.imageColorSpace    = surface_format.colorSpace;
+    create_info.imageExtent        = extent;
+    create_info.imageArrayLayers   = 1;
+    VkImageUsageFlags wanted_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    create_info.imageUsage         = wanted_usage & support_details->capabilities.supportedUsageFlags;
+    create_info.imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     uint32_t shared_families[2] = {graphics_family_index, present_family_index};
     if(present_family_index != graphics_family_index)
@@ -764,7 +766,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     swapchain->present_queue        = present_queue;
     swapchain->present_family_index = present_family_index;
 
-    if(create_swapchain_image_views(pigment, swapchain) != PIGMENT_SUCCESS)
+    if(create_swapchain_image_wrappers(pigment, swapchain, create_info.imageUsage) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -798,8 +800,9 @@ static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
         PDevice* device = pigment->device;
         destroy_swapchain_color_multisample(pigment, swapchain);
         destroy_swapchain_depth(pigment, swapchain);
-        destroy_swapchain_image_views(pigment, swapchain);
+        destroy_swapchain_image_wrappers(pigment, swapchain);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
+        P_FREE(pigment, swapchain->images);
         P_FREE(pigment, swapchain);
     }
 }
@@ -914,35 +917,44 @@ static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount r
     return fallback;
 }
 
-static PResult create_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain)
+static PResult create_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapchain, VkImageUsageFlags usage)
 {
-    swapchain->image_views = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->image_views, swapchain->image_count);
-    if(swapchain->image_views == NULL)
+    swapchain->image_wrappers = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->image_wrappers, swapchain->image_count);
+    if(swapchain->image_wrappers == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
-    for(size_t i = 0; i < swapchain->image_count; i++)
+    for(uint32_t i = 0; i < swapchain->image_count; i++)
     {
-        swapchain->image_views[i] = create_image_view(pigment, swapchain->images[i], VK_IMAGE_VIEW_TYPE_2D, swapchain->image_format, VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1);
+        swapchain->image_wrappers[i] = pigment_vk_wrap_image(pigment, swapchain->images[i], swapchain->image_format, usage, swapchain->extent.width, swapchain->extent.height);
+        if(swapchain->image_wrappers[i] == NULL)
+        {
+            return PIGMENT_ERROR_OUT_OF_MEMORY;
+        }
     }
 
     return PIGMENT_SUCCESS;
 }
 
-static void destroy_swapchain_image_views(Pigment* pigment, PSwapchain* swapchain)
+static void destroy_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapchain)
 {
-    if(swapchain == NULL || swapchain->image_views == NULL)
+    if(swapchain == NULL || swapchain->image_wrappers == NULL)
     {
         return;
     }
-    for(size_t i = 0; i < swapchain->image_count; i++)
+
+    for(uint32_t i = 0; i < swapchain->image_count; i++)
     {
-        vkDestroyImageView(pigment->device->logical_device, swapchain->image_views[i], &pigment->vk_alloc);
+        if(swapchain->image_wrappers[i] != NULL)
+        {
+            pigment_destroy_image(pigment, swapchain->image_wrappers[i]);
+        }
     }
 
-    P_FREE(pigment, swapchain->image_views);
-    P_FREE(pigment, swapchain->images);
+    P_FREE(pigment, swapchain->image_wrappers);
+
+    swapchain->image_wrappers = NULL;
 }
 
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer)

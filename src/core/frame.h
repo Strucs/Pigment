@@ -189,6 +189,18 @@ PIGMENT_API PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRe
  */
 PIGMENT_API void pigment_present(Pigment* pigment, PWindowRenderer* renderer);
 
+/**
+ * @brief Get the current acquired swapchain image as a PImage, for use with the standard image API.
+ *
+ * Only valid between pigment_begin_frame and pigment_present, and do not combine with
+ * pigment_begin_swapchain_pass in the same frame.
+ *
+ * @param renderer The renderer to query.
+ *
+ * @return The current swapchain image as a PImage.
+ */
+PIGMENT_API PImage* pigment_swapchain_image(PWindowRenderer* renderer);
+
 PIGMENT_API void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 PIGMENT_API void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 

@@ -544,6 +544,43 @@ void pigment_destroy_image(Pigment* pigment, PImage* image)
     pigment_defer_destroy_tracked(pigment, destroy_image_immediate, image, &image->tracker);
 }
 
+PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height)
+{
+    if(pigment == NULL || vk_image == VK_NULL_HANDLE)
+    {
+        return NULL;
+    }
+
+    PImage* image = P_NEW_FOR_OBJECT(pigment, image);
+    if(image == NULL)
+    {
+        return NULL;
+    }
+
+    if(pigment_resource_tracker_init(pigment, &image->tracker) != PIGMENT_SUCCESS)
+    {
+        P_FREE(pigment, image);
+        return NULL;
+    }
+
+    image->image            = vk_image;
+    image->image_allocation = NULL;
+    image->wrapped          = P_TRUE;
+    image->width            = width;
+    image->height           = height;
+    image->depth            = 1;
+    image->mip_levels       = 1;
+    image->array_layers     = 1;
+    image->vk_format        = format;
+    image->vk_usage         = usage;
+    image->vk_image_type    = VK_IMAGE_TYPE_2D;
+    image->vk_samples       = VK_SAMPLE_COUNT_1_BIT;
+    image->aspect           = VK_IMAGE_ASPECT_COLOR_BIT;
+    image->name             = "external_image";
+
+    return image;
+}
+
 static void destroy_image_immediate(Pigment* pigment, void* resource)
 {
     PImage* image = (PImage*) resource;
@@ -625,6 +662,47 @@ uint32_t pigment_image_width(PImage* image)
 uint32_t pigment_image_height(PImage* image)
 {
     return (image != NULL) ? image->height : 0;
+}
+
+PImageUsage pigment_image_usage(PImage* image)
+{
+    if(image == NULL)
+    {
+        return 0;
+    }
+
+    VkImageUsageFlags vk = image->vk_usage;
+    PImageUsage out      = 0;
+    if(vk & VK_IMAGE_USAGE_SAMPLED_BIT)
+    {
+        out |= P_IMAGE_USAGE_SAMPLED;
+    }
+    if(vk & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+    {
+        out |= P_IMAGE_USAGE_RENDER_COLOR;
+    }
+    if(vk & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    {
+        out |= P_IMAGE_USAGE_RENDER_DEPTH;
+    }
+    if(vk & VK_IMAGE_USAGE_STORAGE_BIT)
+    {
+        out |= P_IMAGE_USAGE_STORAGE;
+    }
+    if(vk & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+    {
+        out |= P_IMAGE_USAGE_TRANSFER_SRC;
+    }
+    if(vk & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+    {
+        out |= P_IMAGE_USAGE_TRANSFER_DST;
+    }
+    if(vk & VK_IMAGE_USAGE_HOST_TRANSFER_BIT)
+    {
+        out |= P_IMAGE_USAGE_HOST_TRANSFER;
+    }
+
+    return out;
 }
 
 void* pigment_image_mapped(PImage* image)
@@ -1142,6 +1220,12 @@ static void free_resources(Pigment* pigment, PImage* image)
     PVkAllocator* alloc = pigment->gpu_allocator;
 
     image_destroy_view_cache(pigment, image);
+
+    if(image->wrapped)
+    {
+        image->image = VK_NULL_HANDLE;
+        return;
+    }
 
     if(image->image != VK_NULL_HANDLE)
     {

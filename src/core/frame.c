@@ -191,7 +191,15 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
          },
     };
 
-    VkImageView color_view = swapchain->image_views[image_index];
+    PImageView* swapchain_view = image_get_or_create_view(pigment, swapchain->image_wrappers[image_index], &(PImageViewDesc) {0});
+    if(swapchain_view == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to get swapchain image view");
+        return;
+    }
+
+    VkImageView color_view = swapchain_view->view;
+
     if(multisample)
     {
         PImageView* msaa_view = image_get_or_create_view(pigment, swapchain->color_multisample, &(PImageViewDesc) {0});
@@ -211,7 +219,7 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
         .storeOp            = multisample ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE,
         .clearValue         = {.color = clear_color_value},
         .resolveMode        = multisample ? VK_RESOLVE_MODE_AVERAGE_BIT : VK_RESOLVE_MODE_NONE,
-        .resolveImageView   = multisample ? swapchain->image_views[image_index] : VK_NULL_HANDLE,
+        .resolveImageView   = multisample ? swapchain_view->view : VK_NULL_HANDLE,
         .resolveImageLayout = multisample ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
     };
 
@@ -306,6 +314,16 @@ void pigment_end_swapchain_pass(PWindowRenderer* renderer)
     };
 
     vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+PImage* pigment_swapchain_image(PWindowRenderer* renderer)
+{
+    if(renderer == NULL || renderer->swapchain == NULL || renderer->swapchain->image_wrappers == NULL)
+    {
+        return NULL;
+    }
+
+    return renderer->swapchain->image_wrappers[renderer->current_image_index];
 }
 
 void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc)

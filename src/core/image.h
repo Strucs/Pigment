@@ -214,6 +214,15 @@ PIGMENT_API void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t 
 PIGMENT_API uint32_t pigment_image_width(PImage* image);
 PIGMENT_API uint32_t pigment_image_height(PImage* image);
 
+/**
+ * @brief Returns the usage flags the image was actually created with.
+ *
+ * @param image Image to query.
+ *
+ * @return Bitmask of PImageUsage flags, or 0 if image is NULL.
+ */
+PIGMENT_API PImageUsage pigment_image_usage(PImage* image);
+
 PIGMENT_API void* pigment_image_mapped(PImage* image);
 PIGMENT_API uint64_t pigment_image_row_pitch(PImage* image);
 PIGMENT_API void pigment_image_flush(Pigment* pigment, PImage* image);

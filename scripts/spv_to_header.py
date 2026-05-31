@@ -1,12 +1,15 @@
 import os
 import sys
 
+
 def symbol_name(spv_path: str) -> str:
     base = os.path.splitext(os.path.basename(spv_path))[0]
     return f"{base}_spv"
 
+
 def header_path(spv_path: str, header_dir: str) -> str:
     return os.path.join(header_dir, symbol_name(spv_path) + ".h")
+
 
 def generate(spv_path: str, header_dir: str) -> str:
     dst = header_path(spv_path, header_dir)
@@ -37,9 +40,10 @@ def generate(spv_path: str, header_dir: str) -> str:
                 f.write(" ")
         f.write("\n};\n\n")
         f.write(f"enum {{ {name}_size = {len(data)} }};\n\n")
-        f.write(f"#endif\n")
+        f.write("#endif\n")
 
     return dst
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

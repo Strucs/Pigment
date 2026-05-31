@@ -188,7 +188,7 @@ struct SwapChainSupportDetails {
 struct PSwapchain {
     VkSwapchainKHR swapchain;
     VkImage* images;
-    VkImageView* image_views;
+    PImage** image_wrappers;
     uint32_t image_count;
     VkFormat image_format;
     VkColorSpaceKHR color_space;
@@ -319,6 +319,7 @@ typedef struct PImageViewCache {
 struct PImage {
     VkImage image;
     PVkAllocation* image_allocation;
+    PBool wrapped;
 
     uint32_t width;
     uint32_t height;
