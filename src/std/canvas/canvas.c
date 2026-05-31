@@ -127,9 +127,9 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
         PPipelineDesc pipeline_desc = {
             .layout               = canvas->layout,
             .vertex_shader        = (const uint32_t*) ndc_vert_spv,
-            .vertex_shader_size   = (uint32_t) sizeof(ndc_vert_spv),
+            .vertex_shader_size   = (uint32_t) ndc_vert_spv_size,
             .fragment_shader      = (const uint32_t*) ndc_frag_spv,
-            .fragment_shader_size = (uint32_t) sizeof(ndc_frag_spv),
+            .fragment_shader_size = (uint32_t) ndc_frag_spv_size,
             .color_formats        = &color_format,
             .color_format_count   = 1,
             .blend_modes          = &mode,
@@ -393,48 +393,54 @@ static void anchor_to_pixel(const PStdCanvas* canvas, PStdCanvasAnchor anchor, i
     int32_t base_x = offset_x;
     int32_t base_y = offset_y;
 
+    // Horizontal alignment.
     switch(anchor)
     {
         case P_STD_CANVAS_ANCHOR_TOP_LEFT:
+        case P_STD_CANVAS_ANCHOR_MIDDLE_LEFT:
+        case P_STD_CANVAS_ANCHOR_BOTTOM_LEFT:
             base_x = offset_x;
-            base_y = offset_y;
             break;
         case P_STD_CANVAS_ANCHOR_TOP_CENTER:
+        case P_STD_CANVAS_ANCHOR_CENTER:
+        case P_STD_CANVAS_ANCHOR_BOTTOM_CENTER:
             base_x = sw / 2 - w / 2 + offset_x;
-            base_y = offset_y;
             break;
         case P_STD_CANVAS_ANCHOR_TOP_RIGHT:
+        case P_STD_CANVAS_ANCHOR_MIDDLE_RIGHT:
+        case P_STD_CANVAS_ANCHOR_BOTTOM_RIGHT:
             base_x = sw - w - offset_x;
+            break;
+    }
+
+    // Vertical alignment.
+    switch(anchor)
+    {
+        case P_STD_CANVAS_ANCHOR_TOP_LEFT:
+        case P_STD_CANVAS_ANCHOR_TOP_CENTER:
+        case P_STD_CANVAS_ANCHOR_TOP_RIGHT:
             base_y = offset_y;
             break;
         case P_STD_CANVAS_ANCHOR_MIDDLE_LEFT:
-            base_x = offset_x;
-            base_y = sh / 2 - h / 2 + offset_y;
-            break;
         case P_STD_CANVAS_ANCHOR_CENTER:
-            base_x = sw / 2 - w / 2 + offset_x;
-            base_y = sh / 2 - h / 2 + offset_y;
-            break;
         case P_STD_CANVAS_ANCHOR_MIDDLE_RIGHT:
-            base_x = sw - w - offset_x;
             base_y = sh / 2 - h / 2 + offset_y;
             break;
         case P_STD_CANVAS_ANCHOR_BOTTOM_LEFT:
-            base_x = offset_x;
-            base_y = sh - h - offset_y;
-            break;
         case P_STD_CANVAS_ANCHOR_BOTTOM_CENTER:
-            base_x = sw / 2 - w / 2 + offset_x;
-            base_y = sh - h - offset_y;
-            break;
         case P_STD_CANVAS_ANCHOR_BOTTOM_RIGHT:
-            base_x = sw - w - offset_x;
             base_y = sh - h - offset_y;
             break;
     }
 
-    *out_x = base_x;
-    *out_y = base_y;
+    if(out_x != NULL)
+    {
+        *out_x = base_x;
+    }
+    if(out_y != NULL)
+    {
+        *out_y = base_y;
+    }
 }
 
 static void uv_rect_from_region(int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, uint32_t tex_w, uint32_t tex_h, float out_uv[4])

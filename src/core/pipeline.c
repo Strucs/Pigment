@@ -758,6 +758,24 @@ static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_stat
             color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
             color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
             break;
+        case P_BLEND_MODE_MULTIPLY:
+            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
+            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
+            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
+            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
+            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            break;
+        case P_BLEND_MODE_SCREEN:
+            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
+            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
+            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            break;
     }
 
     return color_blend_attachment_state_create_info;

@@ -72,6 +72,8 @@ typedef enum PBlendMode {
     P_BLEND_MODE_ALPHA               = 1,
     P_BLEND_MODE_PREMULTIPLIED_ALPHA = 2,
     P_BLEND_MODE_ADDITIVE            = 3,
+    P_BLEND_MODE_MULTIPLY            = 4,
+    P_BLEND_MODE_SCREEN              = 5,
 } PBlendMode;
 
 typedef struct PSpecializationEntry {
