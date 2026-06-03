@@ -69,6 +69,11 @@ struct PStdBindless {
     PStdPipelineLayouts* pipeline_layouts;
 };
 
+typedef struct PPendingSlotFree {
+    PImageList* list;
+    uint32_t slot;
+} PPendingSlotFree;
+
 #define PIGMENT_BINDLESS_BINDING_SAMPLERS 0
 #define PIGMENT_BINDLESS_BINDING_CUBEMAPS 1
 #define PIGMENT_BINDLESS_BINDING_RENDER_TARGETS 2
@@ -76,7 +81,9 @@ struct PStdBindless {
 
 static PResult image_list_append(Pigment* pigment, PImageList* image_list, PImage* image);
 static uint32_t image_list_put(Pigment* pigment, PImageList* image_list, PImage* image);
-static void image_list_free_slot(Pigment* pigment, PImageList* image_list, uint32_t slot);
+static void image_list_release_slot(Pigment* pigment, PImageList* image_list, uint32_t slot);
+static void release_image_slot_deferred(Pigment* pigment, void* resource);
+static void release_slot_deferred(Pigment* pigment, PImageList* image_list, uint32_t slot);
 static uint32_t batch_append_images(Pigment* pigment, PImageList* list, PImage** images, uint32_t count);
 static PImage* add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format);
 static PResult add_default_image(Pigment* pigment, PStdBindless* bindless);
@@ -372,7 +379,10 @@ void pigment_std_unregister_image(Pigment* pigment, PStdBindless* bindless, uint
     }
 
     pigment_destroy_image(pigment, bindless->images.images[slot]);
-    image_list_free_slot(pigment, &bindless->images, slot);
+
+    // Clear the slot immediatately to prevent pigment_std_bindless_set to stamp the image.
+    bindless->images.images[slot] = NULL;
+    release_slot_deferred(pigment, &bindless->images, slot);
 }
 
 uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count)
@@ -509,7 +519,9 @@ void pigment_std_unregister_cubemap(Pigment* pigment, PStdBindless* bindless, ui
     }
 
     pigment_destroy_image(pigment, bindless->cubemaps.images[slot]);
-    image_list_free_slot(pigment, &bindless->cubemaps, slot);
+
+    bindless->cubemaps.images[slot] = NULL;
+    release_slot_deferred(pigment, &bindless->cubemaps, slot);
 }
 
 uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt, uint32_t* out_slots, uint32_t out_capacity)
@@ -596,7 +608,8 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
 ERROR:
     for(uint32_t i = 0; i < assigned; i++)
     {
-        image_list_free_slot(pigment, &bindless->render_targets, entry.slots[i]);
+        bindless->render_targets.images[entry.slots[i]] = NULL;
+        image_list_release_slot(pigment, &bindless->render_targets, entry.slots[i]);
     }
     P_FREE(pigment, entry.slots);
 
@@ -623,7 +636,8 @@ void pigment_std_unregister_render_target(Pigment* pigment, PStdBindless* bindle
         uint32_t slot_count = tracked->color_count + (tracked->has_depth ? 1 : 0);
         for(uint32_t s = 0; s < slot_count; s++)
         {
-            image_list_free_slot(pigment, &bindless->render_targets, tracked->slots[s]);
+            bindless->render_targets.images[tracked->slots[s]] = NULL;
+            release_slot_deferred(pigment, &bindless->render_targets, tracked->slots[s]);
         }
         P_FREE(pigment, tracked->slots);
 
@@ -730,13 +744,32 @@ static uint32_t image_list_put(Pigment* pigment, PImageList* image_list, PImage*
     return slot;
 }
 
-static void image_list_free_slot(Pigment* pigment, PImageList* image_list, uint32_t slot)
+static void image_list_release_slot(Pigment* pigment, PImageList* image_list, uint32_t slot)
 {
-    image_list->images[slot] = NULL;
     if(P_ARRAY_RESERVE_OBJECT(pigment, image_list->free_slots, image_list->free_count, image_list->free_capacity, 1, PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY) == PIGMENT_SUCCESS)
     {
         image_list->free_slots[image_list->free_count++] = slot;
     }
+}
+
+static void release_image_slot_deferred(Pigment* pigment, void* resource)
+{
+    PPendingSlotFree* pending = (PPendingSlotFree*) resource;
+    image_list_release_slot(pigment, pending->list, pending->slot);
+    P_FREE(pigment, pending);
+}
+
+static void release_slot_deferred(Pigment* pigment, PImageList* image_list, uint32_t slot)
+{
+    PPendingSlotFree* pending = P_NEW_FOR_OBJECT(pigment, pending);
+    if(pending == NULL)
+    {
+        image_list_release_slot(pigment, image_list, slot);
+        return;
+    }
+    pending->list = image_list;
+    pending->slot = slot;
+    pigment_defer_destroy(pigment, release_image_slot_deferred, pending);
 }
 
 static PResult sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, uint32_t max_samplers)
