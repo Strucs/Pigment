@@ -241,7 +241,8 @@ int main(void)
     }
 
     uint32_t rt_slots[2];
-    if(pigment_std_register_render_target(pigment, bindless, rt, rt_slots, 2) == 0)
+    uint32_t rt_slot_count = 2;
+    if(pigment_std_register_render_target(pigment, bindless, rt, rt_slots, &rt_slot_count) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to register render target!\n");
         goto FREE;

@@ -524,11 +524,11 @@ void pigment_std_unregister_cubemap(Pigment* pigment, PStdBindless* bindless, ui
     release_slot_deferred(pigment, &bindless->cubemaps, slot);
 }
 
-uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt, uint32_t* out_slots, uint32_t out_capacity)
+PResult pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt, uint32_t* slots, uint32_t* slot_count)
 {
-    if(pigment == NULL || bindless == NULL || rt == NULL || out_slots == NULL)
+    if(pigment == NULL || bindless == NULL || rt == NULL || slot_count == NULL)
     {
-        return 0;
+        return PIGMENT_ERROR;
     }
 
     uint32_t color_count  = pigment_std_render_target_color_count(rt);
@@ -539,16 +539,22 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
     }
     uint32_t total = color_count + (depth_sampled != NULL ? 1 : 0);
 
+    if(slots == NULL)
+    {
+        *slot_count = total;
+        return PIGMENT_SUCCESS;
+    }
+
     if(total == 0)
     {
         PLOG_WARN(pigment, "Cannot register render target: missing color or depth attachments.");
-        return 0;
+        return PIGMENT_ERROR;
     }
 
-    if(out_capacity < total)
+    if(*slot_count < total)
     {
-        PLOG_WARN(pigment, "Cannot register render target: out_slots capacity %u is below the %u slots required.", out_capacity, total);
-        return 0;
+        PLOG_WARN(pigment, "Cannot register render target: slots capacity %u is below the %u slots required.", *slot_count, total);
+        return PIGMENT_ERROR;
     }
 
     PTrackedRT entry = {
@@ -561,9 +567,10 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
     entry.slots = P_NEW_ARRAY_FOR_OBJECT(pigment, entry.slots, total);
     if(entry.slots == NULL)
     {
-        return 0;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
+    PResult result    = PIGMENT_ERROR;
     uint32_t assigned = 0;
     for(uint32_t i = 0; i < color_count; i++)
     {
@@ -576,6 +583,7 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
         uint32_t slot = image_list_put(pigment, &bindless->render_targets, sampled);
         if(slot == UINT32_MAX)
         {
+            result = PIGMENT_ERROR_OUT_OF_MEMORY;
             goto ERROR;
         }
         entry.slots[assigned++] = slot;
@@ -587,6 +595,7 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
         uint32_t slot = image_list_put(pigment, &bindless->render_targets, depth_sampled);
         if(slot == UINT32_MAX)
         {
+            result = PIGMENT_ERROR_OUT_OF_MEMORY;
             goto ERROR;
         }
         entry.slots[assigned++] = slot;
@@ -595,15 +604,17 @@ uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bind
 
     if(tracked_rt_list_append(pigment, &bindless->tracked_rts, entry) != PIGMENT_SUCCESS)
     {
+        result = PIGMENT_ERROR_OUT_OF_MEMORY;
         goto ERROR;
     }
 
     for(uint32_t i = 0; i < assigned; i++)
     {
-        out_slots[i] = entry.slots[i];
+        slots[i] = entry.slots[i];
     }
+    *slot_count = assigned;
 
-    return assigned;
+    return PIGMENT_SUCCESS;
 
 ERROR:
     for(uint32_t i = 0; i < assigned; i++)
@@ -613,7 +624,7 @@ ERROR:
     }
     P_FREE(pigment, entry.slots);
 
-    return 0;
+    return result;
 }
 
 void pigment_std_unregister_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt)
