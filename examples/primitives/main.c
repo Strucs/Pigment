@@ -95,9 +95,9 @@ int main(void)
     }
 
     PCommandPoolDesc pool_desc = {
-        .queue_flags = P_QUEUE_GRAPHICS_BIT,
-        .flags       = P_COMMAND_POOL_FLAG_RESET_BUFFER,
-        .name        = "primitives_pool",
+        .queue_family = pigment_queue_family(pigment_get_queue(pigment, P_QUEUE_GRAPHICS_BIT)),
+        .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
+        .name         = "primitives_pool",
     };
     pool = pigment_create_command_pool(pigment, &pool_desc);
     if(pool == NULL)

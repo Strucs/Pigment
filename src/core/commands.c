@@ -23,7 +23,6 @@
 static void destroy_command_pool_immediate(Pigment* pigment, void* resource);
 static void destroy_command_buffers_immediate(Pigment* pigment, void* resource);
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
-static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
 static PResult cmd_track_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
 static PResult pool_append_buffer(Pigment* pigment, PCommandPool* pool, PCommandBuffer* cmd);
@@ -51,11 +50,7 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
     VkCommandPool pool          = NULL;
     uint32_t queue_family_index = UINT32_MAX;
 
-    queue_family_index = resolve_queue_family_index(pigment, desc->queue_flags);
-    if(queue_family_index == UINT32_MAX)
-    {
-        goto ERROR;
-    }
+    queue_family_index = desc->queue_family;
 
     pool = create_vk_command_pool(pigment, queue_family_index, pigment_flags_to_vk(desc->flags));
     if(pool == NULL)
@@ -70,7 +65,6 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
     }
 
     command_pool->pool               = pool;
-    command_pool->queue_flags        = desc->queue_flags;
     command_pool->queue_family_index = queue_family_index;
     command_pool->flags              = desc->flags;
 
@@ -691,18 +685,6 @@ static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_fam
     }
 
     return command_pool;
-}
-
-static uint32_t resolve_queue_family_index(Pigment* pigment, PQueueFlags flags)
-{
-    PDeviceQueue* found = device_find_queue(pigment->device, flags);
-    if(found == NULL)
-    {
-        PLOG_ERROR(pigment, "resolve_queue_family_index: no queue family on the picked GPU has flags %d.", (unsigned) flags);
-        return UINT32_MAX;
-    }
-
-    return found->family_index;
 }
 
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags)

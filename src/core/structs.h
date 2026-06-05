@@ -253,7 +253,6 @@ struct PPipelineBuild {
 
 struct PCommandPool {
     VkCommandPool pool;
-    PQueueFlags queue_flags;
     uint32_t queue_family_index;
     PCommandPoolFlags flags;
     PCommandBuffer** buffers;

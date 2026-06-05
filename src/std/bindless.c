@@ -171,9 +171,9 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
     }
 
     PCommandPoolDesc upload_pool_desc = {
-        .queue_flags = P_QUEUE_GRAPHICS_BIT,
-        .flags       = P_COMMAND_POOL_FLAG_TRANSIENT,
-        .name        = "pigment_std_bindless_upload_pool",
+        .queue_family = pigment_queue_family(pigment_get_queue(pigment, P_QUEUE_GRAPHICS_BIT)),
+        .flags        = P_COMMAND_POOL_FLAG_TRANSIENT,
+        .name         = "pigment_std_bindless_upload_pool",
     };
     bindless->upload_pool = pigment_create_command_pool(pigment, &upload_pool_desc);
     if(bindless->upload_pool == NULL)

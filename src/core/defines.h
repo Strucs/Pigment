@@ -128,7 +128,7 @@ typedef enum PCommandBufferUsage {
 } PCommandBufferUsage;
 
 typedef struct PCommandPoolDesc {
-    PQueueFlags queue_flags;
+    uint32_t queue_family;
     PCommandPoolFlags flags;
     const char* name;
 } PCommandPoolDesc;
