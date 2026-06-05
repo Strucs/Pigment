@@ -36,7 +36,7 @@ typedef struct PDynamicImageDesc {
 } PDynamicImageDesc;
 
 /**
- * @brief Creates a single-mip 2D image meant to be rewritten from the CPU every frame.
+ * @brief Create a single-mip 2D image meant to be rewritten from the CPU every frame.
  *
  * @param pigment Pigment instance.
  * @param desc Image description.
@@ -46,7 +46,7 @@ typedef struct PDynamicImageDesc {
 PIGMENT_API PDynamicImage* pigment_std_create_dynamic_image(Pigment* pigment, const PDynamicImageDesc* desc);
 
 /**
- * @brief Destroys a dynamic image and its staging ring.
+ * @brief Destroy a dynamic image and its staging ring.
  *
  * @param pigment Pigment instance.
  * @param dynamic_image Dynamic image to destroy.
@@ -67,7 +67,7 @@ PIGMENT_API void pigment_std_destroy_dynamic_image(Pigment* pigment, PDynamicIma
 PIGMENT_API PResult pigment_std_update_dynamic_image(Pigment* pigment, PCommandBuffer* cmd, PDynamicImage* dynamic_image, const void* pixels, uint64_t size);
 
 /**
- * @brief Returns the underlying image, sampleable after the first update.
+ * @brief Return the underlying image, sampleable after the first update.
  *
  * @param dynamic_image Dynamic image.
  *

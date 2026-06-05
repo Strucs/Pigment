@@ -75,7 +75,7 @@ PIGMENT_API void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_
 PIGMENT_API void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
 
 /**
- * @brief Blocks until the GPU has finished every submitted command that used the buffer.
+ * @brief Block until the GPU has finished every submitted command that used the buffer.
  *
  * @param pigment Pigment instance.
  * @param buffer Buffer to wait on.

@@ -80,6 +80,7 @@ typedef struct PDescriptorPoolDesc {
 typedef struct PDescriptorImageInfo {
     PSampler* sampler;
     PImage* image;
+    PImageView* view;                 // view != NULL -> overrides the auto view derived from image
     PImageDescriptorLayout layout;    // 0 = auto (SHADER_READ_ONLY for sampled, GENERAL for storage)
 } PDescriptorImageInfo;
 

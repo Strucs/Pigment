@@ -47,7 +47,7 @@ PIGMENT_API PDeviceQueue* pigment_get_queue(Pigment* pigment, PQueueFlags requir
 PIGMENT_API uint32_t pigment_get_queue_count(Pigment* pigment);
 
 /**
- * @brief Returns the queue at `index` in the internal device queue list.
+ * @brief Return the queue at `index` in the internal device queue list.
  *
  * @param pigment Pigment instance.
  * @param index Queue index, must be less than pigment_get_queue_count.
@@ -72,7 +72,7 @@ PIGMENT_API PDeviceQueue* pigment_get_queue_at(Pigment* pigment, uint32_t index)
 PIGMENT_API uint32_t pigment_request_queue_count(Pigment* pigment, uint32_t request_index);
 
 /**
- * @brief Returns the `index`-th queue obtained by the request at `request_index`.
+ * @brief Return the `index`-th queue obtained by the request at `request_index`.
  *
  * @param pigment Pigment instance.
  * @param request_index Index into PigmentConfig.queue_requests.

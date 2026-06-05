@@ -159,7 +159,7 @@ PIGMENT_API void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
 PIGMENT_API PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count, PSubmitHandle* handles_out);
 
 /**
- * @brief Returns P_TRUE if the GPU has completed all work tracked by this handle.
+ * @brief Return P_TRUE if the GPU has completed all work tracked by this handle.
  *
  * @param pigment Pigment instance.
  * @param handle Submit handle returned by pigment_queue_submit.

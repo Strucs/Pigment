@@ -240,7 +240,13 @@ int main(void)
         goto FREE;
     }
 
-    rt_slot = pigment_std_register_render_target(pigment, bindless, rt);
+    uint32_t rt_slots[2];
+    if(pigment_std_register_render_target(pigment, bindless, rt, rt_slots, 2) == 0)
+    {
+        fprintf(stderr, "Failed to register render target!\n");
+        goto FREE;
+    }
+    rt_slot = rt_slots[0];
 
     int sprite_w = 0, sprite_h = 0, sprite_channels = 0;
     unsigned char* sprite_pixels = stbi_load(CAPTAIN_SPRITE, &sprite_w, &sprite_h, &sprite_channels, STBI_rgb_alpha);

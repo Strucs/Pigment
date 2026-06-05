@@ -294,17 +294,6 @@ struct PDescriptorSet {
     PResourceTracker tracker;
 };
 
-typedef struct PImageViewDesc {
-    PFormat format;              // 0 (P_FORMAT_UNDEFINED) = inherit image->vk_format
-    PImageAspect aspect;         // 0 (P_IMAGE_ASPECT_INHERIT) = inherit image->aspect
-    PImageViewType view_type;    // 0 (P_IMAGE_VIEW_TYPE_AUTO) = derive from layer_count and image create flags
-    uint32_t base_layer;
-    uint32_t layer_count;    // 0 = remaining
-    uint32_t base_mip;
-    uint32_t mip_count;    // 0 = remaining
-    const char* name;
-} PImageViewDesc;
-
 struct PImageView {
     PImageViewDesc desc;
     VkImageView view;

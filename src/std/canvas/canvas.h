@@ -53,7 +53,7 @@ typedef struct PStdCanvasConfig {
 } PStdCanvasConfig;
 
 /**
- * @brief Creates a 2D drawing context for simple shapes like rectangles. It internally manages one pipeline per declared blend mode.
+ * @brief Create a 2D drawing context for simple shapes like rectangles. It internally manages one pipeline per declared blend mode.
  *
  * @param pigment Pigment instance.
  * @param config Canvas configuration (color format, samples, supported blend modes).
@@ -63,7 +63,7 @@ typedef struct PStdCanvasConfig {
 PIGMENT_API PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* config);
 
 /**
- * @brief Destroys a canvas context and frees its resources. Does not free the Pigment instance.
+ * @brief Destroy a canvas context and free its resources. Does not free the Pigment instance.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context to destroy.
@@ -107,7 +107,7 @@ PIGMENT_API void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, 
 PIGMENT_API void pigment_std_canvas_end(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd);
 
 /**
- * @brief Draws a filled rectangle in NDC space.
+ * @brief Draw a filled rectangle in NDC space.
  *
  * - x, y: top-left corner. Both axes go from -1 (top/left) to +1 (bottom/right).
  *
@@ -127,7 +127,7 @@ PIGMENT_API void pigment_std_canvas_end(Pigment* pigment, PStdCanvas* canvas, PC
 PIGMENT_API void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, const float color[4]);
 
 /**
- * @brief Draws a filled rectangle in pixel coordinates (top-left origin, Y down).
+ * @brief Draw a filled rectangle in pixel coordinates (top-left origin, Y down).
  *
  * Pixel coordinates are relative to the target dimensions passed to `begin`.
  *
@@ -143,7 +143,7 @@ PIGMENT_API void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canva
 PIGMENT_API void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4]);
 
 /**
- * @brief Draws a filled rectangle anchored to one of 9 screen positions, offset in pixels.
+ * @brief Draw a filled rectangle anchored to one of 9 screen positions, offset in pixels.
  *
  * Positioning is relative to the target dimensions passed to `begin`.
  *
@@ -160,7 +160,7 @@ PIGMENT_API void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* can
 PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4]);
 
 /**
- * @brief Draws a textured rectangle in NDC space.
+ * @brief Draw a textured rectangle in NDC space.
  *
  * - x, y: top-left corner. Both axes go from -1 (top/left) to +1 (bottom/right).
  *
@@ -182,7 +182,7 @@ PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* ca
 PIGMENT_API void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
 
 /**
- * @brief Draws a textured rectangle in pixel coordinates, sampling a bindless image.
+ * @brief Draw a textured rectangle in pixel coordinates, sampling a bindless image.
  *
  * Pixel coordinates are relative to the target dimensions passed to `begin`.
  *
@@ -200,7 +200,7 @@ PIGMENT_API void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canv
 PIGMENT_API void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
 
 /**
- * @brief Draws a textured rectangle anchored to one of 9 screen positions, offset in pixels.
+ * @brief Draw a textured rectangle anchored to one of 9 screen positions, offset in pixels.
  *
  * Positioning is relative to the target dimensions passed to `begin`.
  *
@@ -219,7 +219,7 @@ PIGMENT_API void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* ca
 PIGMENT_API void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
 
 /**
- * @brief Draws a textured rectangle from a sub-region of an image in NDC space.
+ * @brief Draw a textured rectangle from a sub-region of an image in NDC space.
  *
  * - x, y: top-left corner. Both axes go from -1 (top/left) to +1 (bottom/right).
  *
@@ -245,7 +245,7 @@ PIGMENT_API void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* c
 PIGMENT_API void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
 
 /**
- * @brief Draws a textured rectangle from a sub-region of an image in pixel coordinates.
+ * @brief Draw a textured rectangle from a sub-region of an image in pixel coordinates.
  *
  * Pixel coordinates are relative to the target dimensions passed to `begin`.
  *
@@ -267,7 +267,7 @@ PIGMENT_API void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanva
 PIGMENT_API void pigment_std_canvas_image_region_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
 
 /**
- * @brief Draws a textured rectangle from a sub-region of an image anchored to one of 9 screen positions, offset in pixels.
+ * @brief Draw a textured rectangle from a sub-region of an image anchored to one of 9 screen positions, offset in pixels.
  *
  * Positioning is relative to the target dimensions passed to `begin`.
  *

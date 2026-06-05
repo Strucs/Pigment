@@ -473,6 +473,17 @@ typedef enum PImageViewType {
     P_IMAGE_VIEW_TYPE_3D         = 5,
 } PImageViewType;
 
+typedef struct PImageViewDesc {
+    PFormat format;              // 0 (P_FORMAT_UNDEFINED) = inherit the image format
+    PImageAspect aspect;         // 0 (P_IMAGE_ASPECT_INHERIT) = inherit the image aspect
+    PImageViewType view_type;    // 0 (P_IMAGE_VIEW_TYPE_AUTO) = derive from layer_count and image type
+    uint32_t base_layer;
+    uint32_t layer_count;    // 0 = remaining
+    uint32_t base_mip;
+    uint32_t mip_count;    // 0 = remaining
+    const char* name;
+} PImageViewDesc;
+
 typedef enum PAllocScope {
     P_ALLOC_SCOPE_COMMAND  = 0,    // temporary within a function
     P_ALLOC_SCOPE_OBJECT   = 1,    // lifetime of a single RHI object

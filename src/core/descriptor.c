@@ -17,6 +17,7 @@
 #include "descriptor.h"
 
 #include "deletion.h"
+#include "image.h"
 
 #include "internal.h"
 
@@ -490,7 +491,11 @@ void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes
                         image_infos[i][j].sampler        = (info->sampler != NULL) ? info->sampler->sampler : VK_NULL_HANDLE;
 
                         VkImageView vk_view = VK_NULL_HANDLE;
-                        if(info->image != NULL)
+                        if(info->view != NULL)
+                        {
+                            vk_view = info->view->view;
+                        }
+                        else if(info->image != NULL)
                         {
                             PImageView* view = image_get_or_create_view(pigment, info->image, &(PImageViewDesc) {0});
                             if(view != NULL)

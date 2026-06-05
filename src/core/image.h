@@ -160,7 +160,7 @@ typedef struct PFormatInfo {
 } PFormatInfo;
 
 /**
- * @brief Returns the block layout of a format.
+ * @brief Return the block layout of a format.
  *
  * Uncompressed formats report a 1x1 block whose size is the texel size. Block-compressed
  * formats (BC, ETC2, ASTC) report their real block dimensions. Unknown or depth/stencil
@@ -173,7 +173,7 @@ typedef struct PFormatInfo {
 PIGMENT_API PFormatInfo pigment_format_info(PFormat format);
 
 /**
- * @brief Returns the byte size of one mip level of an image.
+ * @brief Return the byte size of one mip level of an image.
  *
  * The extent is rounded up to whole blocks, so the size is correct for block-compressed formats.
  *
@@ -186,7 +186,7 @@ PIGMENT_API PFormatInfo pigment_format_info(PFormat format);
 PIGMENT_API uint64_t pigment_format_image_size(PFormat format, uint32_t width, uint32_t height);
 
 /**
- * @brief Asks the driver what a format can be used for on the current device.
+ * @brief Ask the driver what a format can be used for on the current device.
  *
  * Reports which operations an image of this format supports: sampling, linear filtering,
  * storage, color or depth attachment, blit and transfer. The answer covers normally created
@@ -211,11 +211,22 @@ PIGMENT_API PImage* pigment_create_image(Pigment* pigment, const PImageDesc* des
 PIGMENT_API void pigment_destroy_image(Pigment* pigment, PImage* image);
 PIGMENT_API void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
 
+/**
+ * @brief Get or create a cached view of an image from a description.
+ * 
+ * @param pigment Pigment instance.
+ * @param image Image to view.
+ * @param desc View description, zeroed fields inherit from the image.
+ *
+ * @return Cached view, or NULL on failure.
+ */
+PIGMENT_API PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
+
 PIGMENT_API uint32_t pigment_image_width(PImage* image);
 PIGMENT_API uint32_t pigment_image_height(PImage* image);
 
 /**
- * @brief Returns the usage flags the image was actually created with.
+ * @brief Return the usage flags the image was actually created with.
  *
  * @param image Image to query.
  *
@@ -229,7 +240,7 @@ PIGMENT_API void pigment_image_flush(Pigment* pigment, PImage* image);
 PIGMENT_API void pigment_image_invalidate(Pigment* pigment, PImage* image);
 
 /**
- * @brief Blocks until the GPU has finished every submitted command that used the image.
+ * @brief Block until the GPU has finished every submitted command that used the image.
  *
  * @param pigment Pigment instance.
  * @param image Image to wait on.

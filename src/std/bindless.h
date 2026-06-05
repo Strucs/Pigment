@@ -44,7 +44,7 @@ PIGMENT_API uint32_t pigment_std_add_image(Pigment* pigment, PStdBindless* bindl
 PIGMENT_API uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, const unsigned char** pixels, const uint32_t* widths, const uint32_t* heights, const PFormat* formats, uint32_t count);
 
 /**
- * @brief Registers an already-created image into the bindless image array.
+ * @brief Register an already-created image into the bindless image array.
  *
  * The bindless takes ownership and destroys it with pigment_std_destroy_bindless,
  * so the caller must not destroy it afterwards.
@@ -58,7 +58,7 @@ PIGMENT_API uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless*
 PIGMENT_API uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image);
 
 /**
- * @brief Unregisters an image and frees its bindless slot for reuse.
+ * @brief Unregister an image and free its bindless slot for reuse.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
@@ -72,18 +72,37 @@ PIGMENT_API uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bin
 PIGMENT_API uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
 /**
- * @brief Registers a render target's color (or depth) images into the bindless.
+ * @brief Unregister a cubemap and free its bindless slot for reuse.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param slot Cubemap slot returned by pigment_std_add_cubemap.
+ */
+PIGMENT_API void pigment_std_unregister_cubemap(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
+    
+/**
+ * @brief Register a render target's color and depth images into the bindless.
  *
  * Unlike `pigment_std_register_image`, bindless does not take ownership.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
  * @param rt Render target to register.
+ * @param out_slots Out buffer receiving the assigned slots.
+ * @param out_capacity Capacity of out_slots, must be at least color_count plus one when a depth is present.
  *
- * @return First image slot, or UINT32_MAX on failure.
+ * @return Number of slots written to out_slots, or 0 on failure.
  */
-PIGMENT_API uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
-PIGMENT_API uint32_t pigment_std_register_render_target_depth(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
+PIGMENT_API uint32_t pigment_std_register_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt, uint32_t* out_slots, uint32_t out_capacity);
+
+/**
+ * @brief Unregister a render target and return all its slots to the free list.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param rt Render target to unregister.
+ */
+PIGMENT_API void pigment_std_unregister_render_target(Pigment* pigment, PStdBindless* bindless, PRenderTarget* rt);
 
 PIGMENT_API PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bindless);
 
