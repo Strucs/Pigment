@@ -176,10 +176,12 @@ PIGMENT_API void pigment_end_swapchain_pass(PWindowRenderer* renderer);
  * @param pigment Pigment instance.
  * @param renderer The renderer whose current frame to submit.
  * @param queue Queue to submit on. NULL = first graphics queue.
+ * @param waits Prior submits this frame must wait on before executing. NULL if only waiting on the image available semaphore.
+ * @param wait_count Number of waits.
  *
  * @return PSubmitHandle tracking the GPU completion of this frame's submit.
  */
-PIGMENT_API PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue);
+PIGMENT_API PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count);
 
 /**
  * @brief Present the swapchain image and cycle to the next slot.

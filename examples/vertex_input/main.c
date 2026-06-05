@@ -213,7 +213,7 @@ int main(void)
 
         pigment_end_swapchain_pass(renderer);
         pigment_end_recording_frame(pigment, renderer);
-        pigment_queue_submit_frame(pigment, renderer, NULL);
+        pigment_queue_submit_frame(pigment, renderer, NULL, NULL, 0);
         pigment_present(pigment, renderer);
     }
 

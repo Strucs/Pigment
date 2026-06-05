@@ -38,7 +38,7 @@ typedef struct PSubmit {
      * @brief List of prior submits this batch should wait on before executing.
      *        Only necesarry for cross-queue synchronization.
      */
-    const PSubmitHandle* waits;
+    const PSubmitWait* waits;
     uint32_t wait_count;
 } PSubmit;
 

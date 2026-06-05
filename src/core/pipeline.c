@@ -29,7 +29,7 @@ static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_
 static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology);
 static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void);
 static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode);
-static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count, PBool sample_shading_enable, float min_sample_shading);
+static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count, PBool sample_shading_enable, float min_sample_shading, PBool alpha_to_coverage);
 static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(void);
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
 static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
@@ -147,7 +147,7 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
     build->input_assembly = configure_input_assembly_state_create_info(desc->topology);
     build->viewport       = configure_viewport_state_create_info();
     build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode);
-    build->multisample    = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1, desc->sample_shading_enable, desc->min_sample_shading);
+    build->multisample    = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1, desc->sample_shading_enable, desc->min_sample_shading, desc->alpha_to_coverage);
     build->depth_stencil  = configure_depth_stencil_state_create_info();
     build->color_blend    = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count);
 
@@ -667,7 +667,7 @@ static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_
     return rasterizer_state_create_info;
 }
 
-static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count, PBool sample_shading_enable, float min_sample_shading)
+static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count, PBool sample_shading_enable, float min_sample_shading, PBool alpha_to_coverage)
 {
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     switch(sample_count)
@@ -696,10 +696,11 @@ static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create
     }
 
     VkPipelineMultisampleStateCreateInfo multisampling_state_create_info = {
-        .sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = samples,
-        .sampleShadingEnable  = sample_shading_enable ? VK_TRUE : VK_FALSE,
-        .minSampleShading     = sample_shading_enable ? min_sample_shading : 0.0f,
+        .sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples  = samples,
+        .sampleShadingEnable   = sample_shading_enable ? VK_TRUE : VK_FALSE,
+        .minSampleShading      = sample_shading_enable ? min_sample_shading : 0.0f,
+        .alphaToCoverageEnable = alpha_to_coverage ? VK_TRUE : VK_FALSE,
     };
 
     return multisampling_state_create_info;

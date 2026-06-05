@@ -466,12 +466,13 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
 
         for(uint32_t j = 0; j < submits[i].wait_count; j++)
         {
-            const PSubmitHandle* wait = &submits[i].waits[j];
-            waits[wait_offset + j]    = (VkSemaphoreSubmitInfo) {
+            const PSubmitWait* wait = &submits[i].waits[j];
+            PPipelineStage stage    = (wait->stage != P_PIPELINE_STAGE_NONE) ? wait->stage : P_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            waits[wait_offset + j]  = (VkSemaphoreSubmitInfo) {
                 .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .semaphore = (wait->queue != NULL) ? wait->queue->timeline : VK_NULL_HANDLE,
-                .value     = wait->value,
-                .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .semaphore = (wait->handle.queue != NULL) ? wait->handle.queue->timeline : VK_NULL_HANDLE,
+                .value     = wait->handle.value,
+                .stageMask = pipeline_stage_to_vk(stage),
             };
         }
 

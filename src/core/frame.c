@@ -749,11 +749,16 @@ void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer)
     }
 }
 
-PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue)
+PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count)
 {
     if(pigment == NULL || renderer == NULL)
     {
         return (PSubmitHandle) {0};
+    }
+
+    if(waits == NULL)
+    {
+        wait_count = 0;
     }
 
     if(queue == NULL)
@@ -777,11 +782,30 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
 
     stamp_uses_submit(&frame_cmd, 1, queue->slot, handle.value);
 
-    VkSemaphoreSubmitInfo wait_info = {
+    uint32_t total_wait_count = 1 + wait_count;
+    P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, wait_infos, total_wait_count);
+    if(wait_infos == NULL)
+    {
+        PLOG_ERROR(pigment, "Failed to allocate frame submit wait list.");
+        return (PSubmitHandle) {0};
+    }
+
+    wait_infos[0] = (VkSemaphoreSubmitInfo) {
         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
         .semaphore = renderer->sync->image_available_semaphores[current_frame],
         .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     };
+
+    for(uint32_t i = 0; i < wait_count; i++)
+    {
+        PPipelineStage stage = (waits[i].stage != P_PIPELINE_STAGE_NONE) ? waits[i].stage : P_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        wait_infos[1 + i]    = (VkSemaphoreSubmitInfo) {
+            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = (waits[i].handle.queue != NULL) ? waits[i].handle.queue->timeline : VK_NULL_HANDLE,
+            .value     = waits[i].handle.value,
+            .stageMask = pipeline_stage_to_vk(stage),
+        };
+    }
 
     VkSemaphoreSubmitInfo signal_infos[2] = {
         {
@@ -804,8 +828,8 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
 
     VkSubmitInfo2 submit_info = {
         .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .waitSemaphoreInfoCount   = 1,
-        .pWaitSemaphoreInfos      = &wait_info,
+        .waitSemaphoreInfoCount   = total_wait_count,
+        .pWaitSemaphoreInfos      = wait_infos,
         .commandBufferInfoCount   = 1,
         .pCommandBufferInfos      = &cmd_info,
         .signalSemaphoreInfoCount = 2,
@@ -818,6 +842,7 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
         PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return (PSubmitHandle) {0};
     }
+    P_STACK_OR_HEAP_FREE(pigment, wait_infos);
 
     return handle;
 }

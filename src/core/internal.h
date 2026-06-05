@@ -24,6 +24,8 @@
 
 #include <string.h>
 
+VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);
+
 static inline PBool name_in_list(const char* const* list, uint32_t count, const char* name)
 {
     for(uint32_t i = 0; i < count; i++)

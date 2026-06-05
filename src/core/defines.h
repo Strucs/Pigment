@@ -405,6 +405,11 @@ typedef enum PPipelineStage {
     P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1 << 12,
 } PPipelineStage;
 
+typedef struct PSubmitWait {
+    PSubmitHandle handle;
+    PPipelineStage stage;    // stage at which the wait occurs. If NONE, treated as ALL_COMMANDS.
+} PSubmitWait;
+
 typedef enum PPipelineBindPoint {
     P_PIPELINE_BIND_POINT_GRAPHICS = 0,
     P_PIPELINE_BIND_POINT_COMPUTE  = 1,

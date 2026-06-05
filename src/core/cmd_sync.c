@@ -20,7 +20,6 @@
 
 #include "internal.h"
 
-static VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);
 static VkAccessFlags2 memory_access_to_vk(PMemoryAccess access);
 static VkDependencyFlags dep_flags_to_vk(PDependencyFlags flags);
 
@@ -162,7 +161,7 @@ void pigment_cmd_memory_barriers(Pigment* pigment, PCommandBuffer* cmd, const PM
     P_STACK_OR_HEAP_FREE(pigment, vk_barriers);
 }
 
-static VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages)
+VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages)
 {
     VkPipelineStageFlags2 out = 0;
     if(stages & P_PIPELINE_STAGE_DRAW_INDIRECT_BIT)

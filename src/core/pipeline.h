@@ -145,6 +145,7 @@ typedef struct PPipelineDesc {
 
     PBool sample_shading_enable;
     float min_sample_shading;
+    PBool alpha_to_coverage;
 
     /**
      * Multiview view mask. Must match the view_mask of the render pass this pipeline is bound in.
