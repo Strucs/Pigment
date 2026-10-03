@@ -3,7 +3,7 @@ import subprocess
 
 import powermake
 
-from scripts import framework, build_lib
+from scripts import build_lib, framework
 
 ARCH = "arm64"
 

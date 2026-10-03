@@ -50,7 +50,9 @@ def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
         sources_mtime = max(os.path.getmtime(p) for p in [src] + deps)
         if dst_mtime >= sources_mtime:
             return False
-    result = subprocess.run(["glslc", src, "-o", dst], capture_output=True, text=True)
+    result = subprocess.run(
+        ["glslc", src, "-o", dst], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
         print(result.stdout)
         print(result.stderr)
@@ -121,3 +123,41 @@ def copy_shared_runtime(config: powermake.Config, dll_path: str, bin_dir: str):
         return
     powermake.utils.makedirs(bin_dir)
     shutil.copy2(dll_path, os.path.join(bin_dir, os.path.basename(dll_path)))
+
+
+def configure_build(config: powermake.Config):
+    config.add_flags("-Wsecurity", "-pedantic")
+    config.remove_flags("-Wconversion", "-Wsign-conversion")
+    # config.remove_flags("-fanalyzer") # uncomment for way faster compilation
+
+    if is_msvc(config):
+        config.add_c_flags(
+            "/std:c17",
+            "/W4",
+            "/wd4820",
+            "/wd4201",
+            "/wd4100",
+            "/wd4996",
+            "/wd5045",
+            "/wd4324",
+            "/wd4061",
+            "/wd4191",
+        )
+        config.remove_flags("/Wall")
+        if config.c_compiler.type == "clang-cl":
+            config.add_c_flags("-Wno-unused-command-line-argument")
+        else:
+            config.add_c_flags("/experimental:c11atomics", "/Zc:preprocessor")
+            if not config.debug:
+                config.add_c_flags("/GL")
+                config.add_ld_flags("/LTCG")
+                config.add_shared_linker_flags("/LTCG")
+    else:
+        config.add_c_flags("-std=c17")
+        if not config.debug:
+            config.add_c_flags("-flto=auto")
+
+    if config.target_is_macos():
+        config.shared_linker.shared_lib_extension = ".dylib"
+        config.add_includedirs("/opt/homebrew/include")
+        config.add_ld_flags("-L/opt/homebrew/lib")

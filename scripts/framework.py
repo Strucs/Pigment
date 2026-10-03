@@ -1,7 +1,7 @@
 import os
+import plistlib
 import shutil
 import subprocess
-import plistlib
 
 # Declares the framework as a Clang module so consumers can do
 # `import <Name>` (Swift) / `@import <Name>;` (Obj-C).
@@ -57,7 +57,9 @@ def _install_name_tool(*args: str):
     """
     Run ``install_name_tool``, raising a clear error when the headerpad is too small.
     """
-    r = subprocess.run(["install_name_tool", *args], capture_output=True, text=True)
+    r = subprocess.run(
+        ["install_name_tool", *args], capture_output=True, text=True, check=False
+    )
     if r.returncode != 0:
         if "larger updated load commands do not fit" in r.stderr:
             raise RuntimeError(

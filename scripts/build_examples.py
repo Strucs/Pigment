@@ -59,28 +59,3 @@ def build_example(
 
     if has_shaders:
         config.remove_includedirs(example_shaders_dir)
-
-
-def build_test(
-    config: powermake.Config,
-    test_name: str,
-    shared: bool,
-    archives: list[str],
-):
-    include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
-    config.add_includedirs(include_dir)
-
-    test_files = powermake.get_files(f"./tests/{test_name}/**/*.c")
-
-    if shared:
-        if config.target_is_macos():
-            config.add_ld_flags("-Wl,-rpath,@executable_path/../lib")
-        elif config.target_is_linux():
-            config.add_ld_flags("-Wl,-rpath,$ORIGIN/../lib")
-
-    objects = powermake.compile_files(config, test_files)
-
-    print(
-        f"{test_name} :",
-        powermake.link_files(config, objects, archives, executable_name=test_name),
-    )

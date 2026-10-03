@@ -2,46 +2,12 @@ import os
 
 import powermake
 
-from scripts import build_common, build_lib, build_examples, build_package
+from scripts import build_common, build_examples, build_lib, build_package, build_tests
 
 
 def on_build(config: powermake.Config):
 
-    config.add_flags("-Wsecurity", "-pedantic")
-    config.remove_flags("-Wconversion", "-Wsign-conversion")
-    # config.remove_flags("-fanalyzer") # uncomment for way faster compilation
-
-    if build_common.is_msvc(config):
-        config.add_c_flags(
-            "/std:c17",
-            "/W4",
-            "/wd4820",
-            "/wd4201",
-            "/wd4100",
-            "/wd4996",
-            "/wd5045",
-            "/wd4324",
-            "/wd4061",
-            "/wd4191",
-        )
-        config.remove_flags("/Wall")
-        if config.c_compiler.type == "clang-cl":
-            config.add_c_flags("-Wno-unused-command-line-argument")
-        else:
-            config.add_c_flags("/experimental:c11atomics", "/Zc:preprocessor")
-            if not config.debug:
-                config.add_c_flags("/GL")
-                config.add_ld_flags("/LTCG")
-                config.add_shared_linker_flags("/LTCG")
-    else:
-        config.add_c_flags("-std=c17")
-        if not config.debug:
-            config.add_c_flags("-flto=auto")
-
-    if config.target_is_macos():
-        config.shared_linker.shared_lib_extension = ".dylib"
-        config.add_includedirs("/opt/homebrew/include")
-        config.add_ld_flags("-L/opt/homebrew/lib")
+    build_common.configure_build(config)
 
     if getattr(args_parsed, "xcframework", False):
         if config.debug:
@@ -61,18 +27,13 @@ def on_build(config: powermake.Config):
     gltf_artifact = build_lib.build_gltf_tool(config)
     build_lib.build_shaderc_tool(config)
 
-    needs_sdl = any(getattr(args_parsed, example) for example in example_list) or any(
-        getattr(args_parsed, test) for test in test_list
-    )
+    needs_sdl = any(getattr(args_parsed, example) for example in example_list)
     if needs_sdl:
         config.add_shared_libs("SDL3")
         archives = [a for a in (sdl_artifact, gltf_artifact, pigment_artifact) if a]
         for example in example_list:
             if getattr(args_parsed, example):
                 build_examples.build_example(config, example, shared_build, archives)
-        for test in test_list:
-            if getattr(args_parsed, test):
-                build_examples.build_test(config, test, shared_build, archives)
 
 
 parser = powermake.ArgumentParser()
@@ -88,7 +49,6 @@ parser.add_argument(
 )
 
 examples_dir = "./examples"
-tests_dir = "./tests"
 
 example_list = (
     [
@@ -99,21 +59,23 @@ example_list = (
     if os.path.isdir(examples_dir)
     else []
 )
-test_list = (
-    [f for f in os.listdir(tests_dir) if not os.path.isfile(os.path.join(tests_dir, f))]
-    if os.path.isdir(tests_dir)
-    else []
-)
 
 for example in example_list:
     parser.add_argument(
         f"--{example}", help=f"build {example} example", action="store_true"
     )
 
-for test in test_list:
-    parser.add_argument(f"--{test}", help=f"build {test} test", action="store_true")
-
 args_parsed = parser.parse_args()
 shared_build = bool(getattr(args_parsed, "shared", False))
 
-powermake.run("pigment", build_callback=on_build, args_parsed=args_parsed)
+
+def on_test(config: powermake.Config, args: list[str]):
+    build_tests.on_test(config, args, shared_build)
+
+
+powermake.run(
+    "pigment",
+    build_callback=on_build,
+    test_callback=on_test,
+    args_parsed=args_parsed,
+)
