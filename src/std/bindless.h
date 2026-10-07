@@ -35,6 +35,23 @@ extern "C" {
 typedef struct PStdBindless PStdBindless;
 typedef struct PStdPipelineLayouts PStdPipelineLayouts;
 
+/**
+ * @brief Check bindless capacities without allocating GPU resources.
+ *
+ * Checks descriptor type limits, the fragment resource limit, the pool budget
+ * and support for the complete layout. Does not guarantee allocation success.
+ * Other pipeline resources and color attachments must be checked separately.
+ *
+ * @param pigment Pigment instance.
+ * @param max_images Image slots, including the default white image. Must be nonzero.
+ * @param max_samplers Sampler slots. Must be at least two for the default samplers.
+ * @param max_cubemaps Cubemap slots. Zero reserves one descriptor.
+ * @param max_render_targets Render target image slots. Zero reserves one descriptor.
+ *
+ * @return `true` if the requested capacities are supported.
+ */
+PIGMENT_API PBool pigment_std_bindless_supported(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
+
 PIGMENT_API PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
 PIGMENT_API void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless);
 

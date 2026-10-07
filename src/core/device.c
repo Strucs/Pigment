@@ -506,14 +506,16 @@ PDeviceLimits pigment_device_limits(Pigment* pigment)
     uint32_t set_storage_buf   = indexing.maxDescriptorSetUpdateAfterBindStorageBuffers;
     uint32_t stage_storage_buf = indexing.maxPerStageDescriptorUpdateAfterBindStorageBuffers;
 
-    limits.max_sampled_images        = (set_images < stage_images) ? set_images : stage_images;
-    limits.max_samplers              = (set_samplers < stage_samplers) ? set_samplers : stage_samplers;
-    limits.max_storage_images        = (set_storage_img < stage_storage_img) ? set_storage_img : stage_storage_img;
-    limits.max_storage_buffers       = (set_storage_buf < stage_storage_buf) ? set_storage_buf : stage_storage_buf;
-    limits.max_bound_descriptor_sets = core->maxBoundDescriptorSets;
-    limits.max_push_constants_size   = core->maxPushConstantsSize;
-    limits.max_image_dimension_2d    = core->maxImageDimension2D;
-    limits.max_color_attachments     = core->maxColorAttachments;
+    limits.max_sampled_images                = (set_images < stage_images) ? set_images : stage_images;
+    limits.max_samplers                      = (set_samplers < stage_samplers) ? set_samplers : stage_samplers;
+    limits.max_storage_images                = (set_storage_img < stage_storage_img) ? set_storage_img : stage_storage_img;
+    limits.max_storage_buffers               = (set_storage_buf < stage_storage_buf) ? set_storage_buf : stage_storage_buf;
+    limits.max_bound_descriptor_sets         = core->maxBoundDescriptorSets;
+    limits.max_push_constants_size           = core->maxPushConstantsSize;
+    limits.max_image_dimension_2d            = core->maxImageDimension2D;
+    limits.max_color_attachments             = core->maxColorAttachments;
+    limits.max_per_stage_resources           = indexing.maxPerStageUpdateAfterBindResources;
+    limits.max_update_after_bind_descriptors = indexing.maxUpdateAfterBindDescriptorsInAllPools;
 
     return limits;
 }

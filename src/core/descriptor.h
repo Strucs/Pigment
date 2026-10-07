@@ -116,6 +116,17 @@ typedef struct PDescriptorSetAllocate {
     const char* name;
 } PDescriptorSetAllocate;
 
+/**
+ * @brief Query layout size support without creating Vulkan objects.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Layout to query.
+ *
+ * @return `true` if supported, `false for invalid input or allocation failure.
+ * Other pipeline layout limits must be checked separately.
+ */
+PIGMENT_API PBool pigment_descriptor_set_layout_supported(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
+
 PIGMENT_API PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
 PIGMENT_API void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescriptorSetLayout* layout);
 

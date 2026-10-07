@@ -22,6 +22,7 @@
 #include "pigment/pigment.h"
 
 #include <string.h>
+#include <inttypes.h>
 
 typedef struct PImageList {
     PImage** images;
@@ -99,36 +100,12 @@ static void batch_write_descriptors(Pigment* pigment, PStdBindless* bindless, ui
 static PResult tracked_rt_list_append(Pigment* pigment, PTrackedRTList* list, PTrackedRT entry);
 static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless);
 
-PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
+/**
+ * @brief Describe the same four bindings for queries and creation.
+ */
+static void bindless_bindings(PDescriptorBinding bindings[4], uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
 {
-    if(pigment == NULL || max_images == 0 || max_samplers == 0)
-    {
-        return NULL;
-    }
-
-    uint32_t cubemaps      = (max_cubemaps == 0) ? 1 : max_cubemaps;
-    uint32_t targets       = (max_render_targets == 0) ? 1 : max_render_targets;
-    uint32_t sampled_total = max_images + cubemaps + targets;
-
-    PDeviceLimits limits = pigment_device_limits(pigment);
-    if(sampled_total > limits.max_sampled_images)
-    {
-        PLOG_ERROR(pigment, "Bindless needs %u sampled images (%u images + %u cubemaps + %u render targets) but the device caps at %u.", sampled_total, max_images, cubemaps, targets, limits.max_sampled_images);
-        return NULL;
-    }
-    if(max_samplers > limits.max_samplers)
-    {
-        PLOG_ERROR(pigment, "Bindless needs %u samplers but the device caps at %u.", max_samplers, limits.max_samplers);
-        return NULL;
-    }
-
-    PStdBindless* bindless = P_NEW_FOR_OBJECT(pigment, bindless);
-    if(bindless == NULL)
-    {
-        return NULL;
-    }
-
-    PDescriptorBinding bindings[] = {
+    const PDescriptorBinding values[] = {
         {
          .binding = PIGMENT_BINDLESS_BINDING_SAMPLERS,
          .type    = P_DESCRIPTOR_TYPE_SAMPLER,
@@ -159,6 +136,80 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
          },
     };
 
+    memcpy(bindings, values, sizeof(values));
+}
+
+PBool pigment_std_bindless_supported(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
+{
+    if(pigment == NULL || max_images == 0 || max_samplers < 2)
+    {
+        return P_FALSE;
+    }
+
+    const uint64_t cubemaps = max_cubemaps ? max_cubemaps : 1;
+    const uint64_t targets  = max_render_targets ? max_render_targets : 1;
+    const uint64_t sampled  = (uint64_t) max_images + cubemaps + targets;
+    const uint64_t total    = sampled + max_samplers;
+    const uint32_t frames   = pigment_max_frames_in_flight(pigment);
+
+    PDeviceLimits limits = pigment_device_limits(pigment);
+
+    if(sampled > limits.max_sampled_images || max_samplers > limits.max_samplers
+       || frames == 0 || sampled > UINT32_MAX / frames || max_samplers > UINT32_MAX / frames)
+    {
+        return P_FALSE;
+    }
+
+    if(sampled > limits.max_per_stage_resources
+       || total * frames > limits.max_update_after_bind_descriptors)
+    {
+        return P_FALSE;
+    }
+
+    PDescriptorBinding bindings[4];
+    bindless_bindings(bindings, max_images, max_samplers, max_cubemaps, max_render_targets);
+
+    PDescriptorSetLayoutDesc desc = {
+        .bindings      = bindings,
+        .binding_count = sizeof(bindings) / sizeof(bindings[0]),
+    };
+
+    return pigment_descriptor_set_layout_supported(pigment, &desc);
+}
+
+PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
+{
+    if(pigment == NULL || max_images == 0 || max_samplers < 2)
+    {
+        return NULL;
+    }
+
+    uint32_t cubemaps      = (max_cubemaps == 0) ? 1 : max_cubemaps;
+    uint32_t targets       = (max_render_targets == 0) ? 1 : max_render_targets;
+    uint64_t sampled_total = (uint64_t) max_images + cubemaps + targets;
+
+    PDeviceLimits limits = pigment_device_limits(pigment);
+    if(sampled_total > limits.max_sampled_images)
+    {
+        PLOG_ERROR(pigment, "Bindless needs %" PRIu64 " sampled images (%u images + %u cubemaps + %u render targets) but the device caps at %u.", sampled_total, max_images, cubemaps, targets, limits.max_sampled_images);
+        return NULL;
+    }
+
+    if(max_samplers > limits.max_samplers)
+    {
+        PLOG_ERROR(pigment, "Bindless needs %u samplers but the device caps at %u.", max_samplers, limits.max_samplers);
+        return NULL;
+    }
+
+    PStdBindless* bindless = P_NEW_FOR_OBJECT(pigment, bindless);
+    if(bindless == NULL)
+    {
+        return NULL;
+    }
+
+    PDescriptorBinding bindings[4];
+    bindless_bindings(bindings, max_images, max_samplers, max_cubemaps, max_render_targets);
+
     PDescriptorSetLayoutDesc layout_desc = {
         .bindings      = bindings,
         .binding_count = sizeof(bindings) / sizeof(bindings[0]),
@@ -186,9 +237,9 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
 
     PDescriptorPoolSize pool_sizes[] = {
         {      .type  = P_DESCRIPTOR_TYPE_SAMPLER,
-         .count = frames * max_samplers                                    },
+         .count = frames * max_samplers                     },
         {.type  = P_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-         .count = frames * (max_images + max_cubemaps + max_render_targets)},
+         .count = frames * (max_images + cubemaps + targets)},
     };
 
     PDescriptorPoolDesc pool_desc = {

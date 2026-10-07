@@ -24,14 +24,16 @@ extern "C" {
 #include "defines.h"
 
 typedef struct PDeviceLimits {
-    uint32_t max_sampled_images;           // sampled images bindable in one descriptor set
-    uint32_t max_samplers;                 // samplers bindable in one descriptor set
-    uint32_t max_storage_images;           // storage images bindable in one descriptor set
-    uint32_t max_storage_buffers;          // storage buffers bindable in one descriptor set
-    uint32_t max_bound_descriptor_sets;    // descriptor sets bound at once
-    uint32_t max_push_constants_size;      // push constant bytes, at least 128
-    uint32_t max_image_dimension_2d;       // largest width or height of a 2D image
-    uint32_t max_color_attachments;        // color attachments in one render pass
+    uint32_t max_sampled_images;                   // sampled images bindable in one descriptor set
+    uint32_t max_samplers;                         // samplers bindable in one descriptor set
+    uint32_t max_storage_images;                   // storage images bindable in one descriptor set
+    uint32_t max_storage_buffers;                  // storage buffers bindable in one descriptor set
+    uint32_t max_bound_descriptor_sets;            // descriptor sets bound at once
+    uint32_t max_push_constants_size;              // push constant bytes, at least 128
+    uint32_t max_image_dimension_2d;               // largest width or height of a 2D image
+    uint32_t max_color_attachments;                // color attachments in one render pass
+    uint32_t max_per_stage_resources;              // update-after-bind resources per stage, excluding separate samplers
+    uint32_t max_update_after_bind_descriptors;    // descriptors across all update-after-bind pools
 } PDeviceLimits;
 
 /**

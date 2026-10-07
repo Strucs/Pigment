@@ -41,22 +41,11 @@ static PResult pool_append_set(Pigment* pigment, PDescriptorPool* pool, PDescrip
 static void pool_remove_set(PDescriptorPool* pool, PDescriptorSet* set);
 static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override);
 
-PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc)
+/**
+ * @brief Prepare Vulkan bindings and layout creation parameters.
+ */
+static void prepare_layout_info(const PDescriptorSetLayoutDesc* desc, VkDescriptorSetLayoutBinding* bindings, VkDescriptorBindingFlags* binding_flags, VkDescriptorSetLayoutBindingFlagsCreateInfo* flags_info, VkDescriptorSetLayoutCreateInfo* layout_info)
 {
-    if(pigment == NULL || desc == NULL || desc->binding_count == 0)
-    {
-        return NULL;
-    }
-
-    PDescriptorSetLayout* layout            = P_NEW_FOR_OBJECT(pigment, layout);
-    VkDescriptorSetLayoutBinding* bindings  = P_NEW_ARRAY_FOR_COMMAND(pigment, bindings, desc->binding_count);
-    VkDescriptorBindingFlags* binding_flags = P_NEW_ARRAY_FOR_COMMAND(pigment, binding_flags, desc->binding_count);
-
-    if(layout == NULL || bindings == NULL || binding_flags == NULL)
-    {
-        goto ERROR;
-    }
-
     PBool needs_update_after_bind = P_FALSE;
     for(uint32_t i = 0; i < desc->binding_count; i++)
     {
@@ -76,26 +65,81 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         }
     }
 
-    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info = {
+    *flags_info = (VkDescriptorSetLayoutBindingFlagsCreateInfo) {
         .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
         .bindingCount  = desc->binding_count,
         .pBindingFlags = binding_flags,
     };
 
-    VkDescriptorSetLayoutCreateInfo layout_info = {
+    *layout_info = (VkDescriptorSetLayoutCreateInfo) {
         .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = desc->binding_count,
         .pBindings    = bindings,
         .flags        = needs_update_after_bind ? VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
-        .pNext        = &flags_info,
+        .pNext        = flags_info,
     };
+}
 
+/**
+ * @brief Query support for prepared Vulkan layout parameters.
+ */
+static PBool query_layout_support(Pigment* pigment, const VkDescriptorSetLayoutCreateInfo* layout_info)
+{
     VkDescriptorSetLayoutSupport support = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT,
     };
 
-    vkGetDescriptorSetLayoutSupport(pigment->device->logical_device, &layout_info, &support);
-    if(!support.supported)
+    vkGetDescriptorSetLayoutSupport(pigment->device->logical_device, layout_info, &support);
+    return support.supported ? P_TRUE : P_FALSE;
+}
+
+PBool pigment_descriptor_set_layout_supported(Pigment* pigment, const PDescriptorSetLayoutDesc* desc)
+{
+    if(pigment == NULL || desc == NULL || desc->binding_count == 0 || desc->bindings == NULL)
+    {
+        return P_FALSE;
+    }
+
+    VkDescriptorSetLayoutBinding* bindings  = P_NEW_ARRAY_FOR_COMMAND(pigment, bindings, desc->binding_count);
+    VkDescriptorBindingFlags* binding_flags = P_NEW_ARRAY_FOR_COMMAND(pigment, binding_flags, desc->binding_count);
+    PBool supported                         = P_FALSE;
+
+    if(bindings == NULL || binding_flags == NULL)
+    {
+        goto FREE;
+    }
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info;
+    VkDescriptorSetLayoutCreateInfo layout_info;
+    prepare_layout_info(desc, bindings, binding_flags, &flags_info, &layout_info);
+    supported = query_layout_support(pigment, &layout_info);
+
+FREE:
+    P_FREE(pigment, bindings);
+    P_FREE(pigment, binding_flags);
+    return supported;
+}
+
+PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, const PDescriptorSetLayoutDesc* desc)
+{
+    if(pigment == NULL || desc == NULL || desc->binding_count == 0 || desc->bindings == NULL)
+    {
+        return NULL;
+    }
+
+    PDescriptorSetLayout* layout            = P_NEW_FOR_OBJECT(pigment, layout);
+    VkDescriptorSetLayoutBinding* bindings  = P_NEW_ARRAY_FOR_COMMAND(pigment, bindings, desc->binding_count);
+    VkDescriptorBindingFlags* binding_flags = P_NEW_ARRAY_FOR_COMMAND(pigment, binding_flags, desc->binding_count);
+
+    if(layout == NULL || bindings == NULL || binding_flags == NULL)
+    {
+        goto ERROR;
+    }
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info;
+    VkDescriptorSetLayoutCreateInfo layout_info;
+    prepare_layout_info(desc, bindings, binding_flags, &flags_info, &layout_info);
+    if(!query_layout_support(pigment, &layout_info))
     {
         VkPhysicalDeviceMaintenance3Properties maintenance = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES,
@@ -114,7 +158,6 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
             total += bindings[i].descriptorCount;
         }
 
-        // clang-format off
         PLOG_ERROR(
             pigment,
             "Cannot create descriptor set layout '%s' on '%s': "
@@ -138,7 +181,6 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
                 maintenance.maxPerSetDescriptors
             );
         }
-        // clang-format on
 
         goto ERROR;
     }
