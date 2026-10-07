@@ -21,6 +21,8 @@
 
 #include "internal.h"
 
+#include <inttypes.h>
+
 #define PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY 4
 
 typedef struct PDescriptorSetBatch {
@@ -87,6 +89,59 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         .flags        = needs_update_after_bind ? VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
         .pNext        = &flags_info,
     };
+
+    VkDescriptorSetLayoutSupport support = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT,
+    };
+
+    vkGetDescriptorSetLayoutSupport(pigment->device->logical_device, &layout_info, &support);
+    if(!support.supported)
+    {
+        VkPhysicalDeviceMaintenance3Properties maintenance = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES,
+        };
+
+        VkPhysicalDeviceProperties2 properties = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+            .pNext = &maintenance,
+        };
+
+        vkGetPhysicalDeviceProperties2(pigment->device->physical_device, &properties);
+
+        uint64_t total = 0;
+        for(uint32_t i = 0; i < desc->binding_count; i++)
+        {
+            total += bindings[i].descriptorCount;
+        }
+
+        // clang-format off
+        PLOG_ERROR(
+            pigment,
+            "Cannot create descriptor set layout '%s' on '%s': "
+            "vkGetDescriptorSetLayoutSupport returned VK_FALSE. "
+            "Layout has %" PRIu64 " total descriptors, %u bindings, flags=0x%x.",
+            desc->name ? desc->name : "unnamed",
+            properties.properties.deviceName,
+            total,
+            desc->binding_count,
+            layout_info.flags
+        );
+
+        if(total > maintenance.maxPerSetDescriptors)
+        {
+            PLOG_ERROR(
+                pigment,
+                "The layout has %" PRIu64 " total descriptors, "
+                "which exceeds maxPerSetDescriptors (%u). "
+                "Creating this layout requires vkGetDescriptorSetLayoutSupport to return VK_TRUE.",
+                total,
+                maintenance.maxPerSetDescriptors
+            );
+        }
+        // clang-format on
+
+        goto ERROR;
+    }
 
     VkResult result = vkCreateDescriptorSetLayout(pigment->device->logical_device, &layout_info, &pigment->vk_alloc, &layout->layout);
     if(result != VK_SUCCESS)

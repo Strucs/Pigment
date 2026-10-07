@@ -162,6 +162,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
     PDescriptorSetLayoutDesc layout_desc = {
         .bindings      = bindings,
         .binding_count = sizeof(bindings) / sizeof(bindings[0]),
+        .name          = "pigment_bindless_layout"
     };
 
     bindless->layout = pigment_create_descriptor_set_layout(pigment, &layout_desc);
