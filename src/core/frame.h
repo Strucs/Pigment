@@ -102,26 +102,97 @@ struct PRenderPassDesc {
 PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
- * @brief Begin a new frame and return the command buffer ready for recording.
+ * @brief Acquire a frame and begin recording its default command buffer.
  *
- * Drains the deletion queue at entry. Must be called after
- * pigment_wait_frame_ready to ensure the previous frame's resources
- * are freed before potentially reusing them.
+ * Call after pigment_wait_frame_ready. Drains deletions and blocks on acquire.
+ * One active CPU frame per renderer. The borrowed context expires at present.
+ * Keep renderer resources alive and defer swapchain recreation until present.
+ * Acquire, submit and present may run on different threads.
+ * The caller must synchronize access to the renderer, frame and queues.
+ * During recording, the caller must ensure exclusive host access to
+ * the command buffer, its pool and the frame's attachments.
  *
  * @param pigment Pigment instance.
- * @param renderer The renderer to begin a frame on.
+ * @param renderer Frame owner.
  *
- * @return The frame command buffer ready for recording, or NULL if the swapchain is being recreated.
+ * @return Frame context, or NULL on failure or required recreation.
  */
-PIGMENT_API PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
- * @brief End recording on the current frame's command buffer.
+ * @brief Get the frame's default command buffer.
+ *
+ * @param frame Frame context.
+ *
+ * @return Recording buffer, or NULL for a NULL or inactive frame.
+ */
+PIGMENT_API PCommandBuffer* pigment_frame_command_buffer(const PFrame* frame);
+
+/**
+ * @brief Get the frame slot.
+ *
+ * @param frame Frame context.
+ *
+ * @return Slot index, or UINT32_MAX for a NULL or inactive frame.
+ */
+PIGMENT_API uint32_t pigment_frame_slot(const PFrame* frame);
+
+/**
+ * @brief Get the acquired image for explicit image commands.
+ *
+ * @param frame Frame context.
+ *
+ * @return Acquired image, or NULL if unavailable.
+ */
+PIGMENT_API PImage* pigment_frame_image(const PFrame* frame);
+
+/**
+ * @brief Begin a pass using the frame's attachments.
+ *
+ * Requires exclusive recording access to the frame and its attachments.
  *
  * @param pigment Pigment instance.
- * @param renderer The renderer whose current frame command buffer to close.
+ * @param cmd Recording command buffer.
+ * @param frame Acquired frame.
+ * @param desc Pass settings, or NULL for defaults.
  */
-PIGMENT_API void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, const PFrame* frame, const PSwapchainPassDesc* desc);
+
+/**
+ * @brief End the pass and transition the image for presentation.
+ *
+ * @param cmd Command buffer recording the pass.
+ * @param frame Acquired frame.
+ */
+PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFrame* frame);
+
+/**
+ * @brief Submit commands for an acquired frame.
+ *
+ * Submit once, then call pigment_present_frame with CPU ordering between threads.
+ * Synchronize queue access and retain recorded resources until this call returns.
+ * The buffer and queue must belong to the renderer's graphics family.
+ *
+ * @param pigment Pigment instance.
+ * @param frame Acquired frame.
+ * @param cmd Primary command buffer with recording ended.
+ * @param queue Submit queue, or NULL for the first graphics queue.
+ * @param waits Prior GPU submissions to wait on, or NULL.
+ * @param wait_count Number of waits.
+ *
+ * @return GPU completion handle, or a zero handle on failure.
+ */
+PIGMENT_API PSubmitHandle pigment_queue_submit_frame_context(Pigment* pigment, PFrame* frame, PCommandBuffer* cmd, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count);
+
+/**
+ * @brief Present the frame, invalidate its context and advance the slot.
+ *
+ * Caller must synchronize access to the frame, renderer and present queue.
+ *
+ * @param pigment Pigment instance.
+ * @param frame Submitted frame.
+ */
+PIGMENT_API void pigment_present_frame(Pigment* pigment, PFrame* frame);
 
 /**
  * @brief Return the current frame slot index of the renderer.
@@ -142,66 +213,13 @@ PIGMENT_API uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
 PIGMENT_API uint32_t pigment_max_frames_in_flight(Pigment* pigment);
 
 /**
- * @brief Return the current frame's command buffer (same one returned by pigment_begin_frame).
+ * @brief Return the current frame's default command buffer.
  *
  * @param renderer The renderer to query.
  *
  * @return The current frame's command buffer, or NULL if no frame in progress.
  */
 PIGMENT_API PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
-
-/**
- * @brief Begin a render pass targeting the swapchain image.
- *
- * @param pigment Pigment instance.
- * @param renderer The renderer whose swapchain image to render to.
- * @param desc Optional pass parameters. NULL uses defaults (black clear color, alpha 0 if transparent).
- */
-PIGMENT_API void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, const PSwapchainPassDesc* desc);
-
-/**
- * @brief End the swapchain render pass.
- *
- * @param renderer The renderer whose swapchain pass to close.
- */
-PIGMENT_API void pigment_end_swapchain_pass(PWindowRenderer* renderer);
-
-/**
- * @brief Submit the current frame's command buffer to the GPU on the chosen queue. NULL queue
- *        falls back to the first graphics queue.
- *
- * Caller guarantees external sync on the queue. Frame submit must run on the same thread as
- * pigment_begin_frame and pigment_present.
- *
- * @param pigment Pigment instance.
- * @param renderer The renderer whose current frame to submit.
- * @param queue Queue to submit on. NULL = first graphics queue.
- * @param waits Prior submits this frame must wait on before executing. NULL if only waiting on the image available semaphore.
- * @param wait_count Number of waits.
- *
- * @return PSubmitHandle tracking the GPU completion of this frame's submit.
- */
-PIGMENT_API PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count);
-
-/**
- * @brief Present the swapchain image and cycle to the next slot.
- *
- * @param pigment Pigment instance.
- * @param renderer The renderer to present.
- */
-PIGMENT_API void pigment_present(Pigment* pigment, PWindowRenderer* renderer);
-
-/**
- * @brief Get the current acquired swapchain image as a PImage, for use with the standard image API.
- *
- * Only valid between pigment_begin_frame and pigment_present, and do not combine with
- * pigment_begin_swapchain_pass in the same frame.
- *
- * @param renderer The renderer to query.
- *
- * @return The current swapchain image as a PImage.
- */
-PIGMENT_API PImage* pigment_swapchain_image(PWindowRenderer* renderer);
 
 PIGMENT_API void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 PIGMENT_API void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);

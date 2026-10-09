@@ -476,12 +476,13 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, renderer);
 
-        PCommandBuffer* cmd = pigment_begin_frame(pigment, renderer);
-        if(cmd == NULL)
+        PFrame* frame = pigment_begin_frame_context(pigment, renderer);
+        if(frame == NULL)
         {
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
+        PCommandBuffer* cmd = pigment_frame_command_buffer(frame);
 
         PAttachmentRef scene_colors[] = {pigment_std_render_target_color_ref(rt, 0)};
         scene_colors[0].store_op      = P_STORE_OP_STORE;
@@ -515,7 +516,7 @@ int main(void)
 
         uint32_t hud_w = 0, hud_h = 0;
         pigment_get_swapchain_size(renderer, &hud_w, &hud_h);
-        pigment_std_canvas_begin(pigment, canvas, cmd, pigment_renderer_current_frame(renderer), hud_w, hud_h, P_BLEND_MODE_ALPHA);
+        pigment_std_canvas_begin(pigment, canvas, cmd, pigment_frame_slot(frame), hud_w, hud_h, P_BLEND_MODE_ALPHA);
         float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
         pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
@@ -535,16 +536,16 @@ int main(void)
 
         pigment_end_render_pass(pigment, cmd, &hud_pass);
 
-        pigment_begin_swapchain_pass(pigment, renderer, NULL);
+        pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, crt_pipeline);
         pigment_std_draw_crt(pigment, renderer, bindless, crt_pipeline, rt_slot, 1, t);
 
-        pigment_end_swapchain_pass(renderer);
+        pigment_cmd_end_swapchain_pass(cmd, frame);
 
-        pigment_end_recording_frame(pigment, renderer);
-        pigment_queue_submit_frame(pigment, renderer, NULL, NULL, 0);
-        pigment_present(pigment, renderer);
+        pigment_end_recording(pigment, cmd);
+        pigment_queue_submit_frame_context(pigment, frame, cmd, NULL, NULL, 0);
+        pigment_present_frame(pigment, frame);
     }
 
     error_code = 0;

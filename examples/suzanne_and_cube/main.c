@@ -295,14 +295,15 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, renderer);
 
-        PCommandBuffer* cmd = pigment_begin_frame(pigment, renderer);
-        if(cmd == NULL)
+        PFrame* frame = pigment_begin_frame_context(pigment, renderer);
+        if(frame == NULL)
         {
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
+        PCommandBuffer* cmd = pigment_frame_command_buffer(frame);
 
-        pigment_begin_swapchain_pass(pigment, renderer, NULL);
+        pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
         pigment_draw(pigment, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls, draw_count);
@@ -311,11 +312,11 @@ int main(void)
         pigment_bind_pipeline(pigment, cmd, gizmo_pipeline);
         pigment_std_draw_light_gizmos(pigment, renderer, gizmo_pipeline, camera, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
 
-        pigment_end_swapchain_pass(renderer);
+        pigment_cmd_end_swapchain_pass(cmd, frame);
 
-        pigment_end_recording_frame(pigment, renderer);
-        pigment_queue_submit_frame(pigment, renderer, NULL, NULL, 0);
-        pigment_present(pigment, renderer);
+        pigment_end_recording(pigment, cmd);
+        pigment_queue_submit_frame_context(pigment, frame, cmd, NULL, NULL, 0);
+        pigment_present_frame(pigment, frame);
     }
 
     error_code = 0;

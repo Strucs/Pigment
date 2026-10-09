@@ -57,7 +57,7 @@ PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn dest
 /**
  * @brief Run pending destroys whose GPU work has completed.
  *
- * Already called from pigment_begin_frame and pigment_wait_idle. Call manually
+ * Already called from pigment_begin_frame_context and pigment_wait_idle. Call manually
  * in headless or between heavy batches to reclaim memory without forcing the
  * full GPU pause that pigment_wait_idle imposes.
  *

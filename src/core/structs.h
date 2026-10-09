@@ -119,13 +119,25 @@ struct Pigment {
     PLogState* log;
 };
 
+struct PFrame {
+    PWindowRenderer* renderer;
+    PSwapchain* swapchain;
+    PSync* sync;
+    PCommandBuffer* cmd;
+    uint32_t slot;
+    uint32_t image_index;
+    PBool transparent;
+    PBool active;
+    PBool submitted;
+};
+
 struct PWindowRenderer {
     PSurface* surface;
     PSwapchain* swapchain;
     PSync* sync;
     PCommandPool* command_pool;
     PCommandBuffer** command_buffers;
-    uint32_t current_image_index;
+    PFrame frame;
     PBool needs_recreate;
     PSwapchainDesc desc;
     PResourceTracker tracker;

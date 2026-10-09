@@ -357,6 +357,12 @@ PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_SUCCESS;
     }
 
+    if(renderer->frame.active)
+    {
+        PLOG_ERROR(pigment, "Present the active frame before recreating its swapchain.");
+        return PIGMENT_ERROR;
+    }
+
     renderer->needs_recreate = P_FALSE;
 
     VkSurfaceCapabilitiesKHR caps;

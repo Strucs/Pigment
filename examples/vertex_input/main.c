@@ -193,28 +193,29 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, renderer);
 
-        PCommandBuffer* cmd = pigment_begin_frame(pigment, renderer);
-        if(cmd == NULL)
+        PFrame* frame = pigment_begin_frame_context(pigment, renderer);
+        if(frame == NULL)
         {
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
+        PCommandBuffer* cmd = pigment_frame_command_buffer(frame);
 
         PSwapchainPassDesc pass_desc = {
             .clear_color = {0.01f, 0.01f, 0.01f, 1.0f},
             .no_depth    = P_TRUE,
         };
-        pigment_begin_swapchain_pass(pigment, renderer, &pass_desc);
+        pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, &pass_desc);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
         PBuffer* vertex_buffers[] = {vertex_buffer};
         pigment_cmd_bind_vertex_buffers(pigment, cmd, 0, 1, vertex_buffers, NULL);
         pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 
-        pigment_end_swapchain_pass(renderer);
-        pigment_end_recording_frame(pigment, renderer);
-        pigment_queue_submit_frame(pigment, renderer, NULL, NULL, 0);
-        pigment_present(pigment, renderer);
+        pigment_cmd_end_swapchain_pass(cmd, frame);
+        pigment_end_recording(pigment, cmd);
+        pigment_queue_submit_frame_context(pigment, frame, cmd, NULL, NULL, 0);
+        pigment_present_frame(pigment, frame);
     }
 
     error_code = 0;

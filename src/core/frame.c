@@ -48,10 +48,16 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
     vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
 }
 
-PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
+PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer)
 {
     if(pigment == NULL || renderer == NULL)
     {
+        return NULL;
+    }
+
+    if(renderer->frame.active)
+    {
+        PLOG_ERROR(pigment, "Cannot begin a frame while the previous frame is still active.");
         return NULL;
     }
 
@@ -64,19 +70,27 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
 
     PDevice* device        = pigment->device;
     uint32_t current_frame = renderer->swapchain->current_frame;
+    uint32_t image_index   = 0;
 
-    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, UINT64_MAX, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, &renderer->current_image_index);
+    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, UINT64_MAX, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
 
-    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         recreate_image_available_semaphore(pigment, renderer->sync, current_frame);
         renderer->needs_recreate = P_TRUE;
         return NULL;
     }
-    else if(result != VK_SUCCESS)
+    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
         PLOG_ERROR(pigment, "Failed to acquire swapchain image!");
         return NULL;
+    }
+
+    // SUBOPTIMAL still acquires an image: consume its semaphore and present it
+    // before replacing the swapchain.
+    if(result == VK_SUBOPTIMAL_KHR)
+    {
+        renderer->needs_recreate = P_TRUE;
     }
 
     PCommandBuffer* cmd = renderer->command_buffers[current_frame];
@@ -88,7 +102,37 @@ PCommandBuffer* pigment_begin_frame(Pigment* pigment, PWindowRenderer* renderer)
     }
 
     pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
-    return cmd;
+    renderer->frame = (PFrame) {
+        .renderer    = renderer,
+        .swapchain   = renderer->swapchain,
+        .sync        = renderer->sync,
+        .cmd         = cmd,
+        .slot        = current_frame,
+        .image_index = image_index,
+        .transparent = renderer->desc.transparent,
+        .active      = P_TRUE,
+    };
+
+    return &renderer->frame;
+}
+
+PCommandBuffer* pigment_frame_command_buffer(const PFrame* frame)
+{
+    return frame != NULL && frame->active ? frame->cmd : NULL;
+}
+
+uint32_t pigment_frame_slot(const PFrame* frame)
+{
+    return frame != NULL && frame->active ? frame->slot : UINT32_MAX;
+}
+
+PImage* pigment_frame_image(const PFrame* frame)
+{
+    if(frame == NULL || !frame->active || frame->swapchain->image_wrappers == NULL)
+    {
+        return NULL;
+    }
+    return frame->swapchain->image_wrappers[frame->image_index];
 }
 
 uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer)
@@ -115,23 +159,21 @@ PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer)
     return renderer->command_buffers[renderer->swapchain->current_frame];
 }
 
-void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, const PSwapchainPassDesc* desc)
+void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, const PFrame* frame, const PSwapchainPassDesc* desc)
 {
-    if(pigment == NULL || renderer == NULL)
+    if(pigment == NULL || cmd == NULL || frame == NULL || !frame->active || frame->submitted)
     {
         return;
     }
-    uint32_t image_index       = renderer->current_image_index;
-    uint32_t current_frame_idx = renderer->swapchain->current_frame;
-    PCommandBuffer* cmd        = renderer->command_buffers[current_frame_idx];
-    PSwapchain* swapchain      = renderer->swapchain;
-    PBool transparent          = renderer->desc.transparent;
-    PBool multisample          = (swapchain->color_multisample != NULL);
-    PBool use_depth            = !(desc != NULL && desc->no_depth);
+    uint32_t image_index  = frame->image_index;
+    PSwapchain* swapchain = frame->swapchain;
+    PBool transparent     = frame->transparent;
+    PBool multisample     = (swapchain->color_multisample != NULL);
+    PBool use_depth       = !(desc != NULL && desc->no_depth);
 
     VkImageMemoryBarrier2 color_barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask        = VK_PIPELINE_STAGE_2_NONE,
+        .srcStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         .srcAccessMask       = VK_ACCESS_2_NONE,
         .dstStageMask        = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
         .dstAccessMask       = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -280,16 +322,15 @@ void pigment_begin_swapchain_pass(Pigment* pigment, PWindowRenderer* renderer, c
     vkCmdSetScissorWithCount(cmd->buffer, 1, &scissor);
 }
 
-void pigment_end_swapchain_pass(PWindowRenderer* renderer)
+void pigment_cmd_end_swapchain_pass(PCommandBuffer* command_buffer, const PFrame* frame)
 {
-    if(renderer == NULL)
+    if(command_buffer == NULL || frame == NULL || !frame->active || frame->submitted)
     {
         return;
     }
 
-    uint32_t image_index   = renderer->current_image_index;
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd    = renderer->command_buffers[current_frame]->buffer;
+    uint32_t image_index = frame->image_index;
+    VkCommandBuffer cmd  = command_buffer->buffer;
 
     vkCmdEndRendering(cmd);
 
@@ -303,7 +344,7 @@ void pigment_end_swapchain_pass(PWindowRenderer* renderer)
         .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image               = renderer->swapchain->images[image_index],
+        .image               = frame->swapchain->images[image_index],
         .subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
     };
 
@@ -314,16 +355,6 @@ void pigment_end_swapchain_pass(PWindowRenderer* renderer)
     };
 
     vkCmdPipelineBarrier2(cmd, &dep);
-}
-
-PImage* pigment_swapchain_image(PWindowRenderer* renderer)
-{
-    if(renderer == NULL || renderer->swapchain == NULL || renderer->swapchain->image_wrappers == NULL)
-    {
-        return NULL;
-    }
-
-    return renderer->swapchain->image_wrappers[renderer->current_image_index];
 }
 
 void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc)
@@ -737,21 +768,9 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
     P_STACK_OR_HEAP_FREE(pigment, barriers);
 }
 
-void pigment_end_recording_frame(Pigment* pigment, PWindowRenderer* renderer)
+PSubmitHandle pigment_queue_submit_frame_context(Pigment* pigment, PFrame* frame, PCommandBuffer* frame_cmd, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count)
 {
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    VkCommandBuffer cmd    = renderer->command_buffers[current_frame]->buffer;
-
-    VkResult result = vkEndCommandBuffer(cmd);
-    if(result != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to end frame command buffer! (result: %d)", result);
-    }
-}
-
-PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* renderer, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count)
-{
-    if(pigment == NULL || renderer == NULL)
+    if(pigment == NULL || frame == NULL || !frame->active || frame->submitted || frame_cmd == NULL)
     {
         return (PSubmitHandle) {0};
     }
@@ -772,15 +791,16 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
         return (PSubmitHandle) {0};
     }
 
-    uint32_t current_frame    = renderer->swapchain->current_frame;
-    uint32_t image_index      = renderer->current_image_index;
-    PCommandBuffer* frame_cmd = renderer->command_buffers[current_frame];
+    PWindowRenderer* renderer = frame->renderer;
+    uint32_t current_frame    = frame->slot;
+    uint32_t image_index      = frame->image_index;
 
-    PSubmitHandle handle                           = {.queue = queue, .value = device_queue_acquire_value(queue)};
-    renderer->sync->per_slot_handle[current_frame] = handle;
-    atomic_store_explicit(&renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
-
-    stamp_uses_submit(&frame_cmd, 1, queue->slot, handle.value);
+    if(frame_cmd->source_pool == NULL || frame_cmd->source_pool->queue_family_index != queue->family_index
+       || queue->family_index != renderer->command_pool->queue_family_index)
+    {
+        PLOG_ERROR(pigment, "Frame command buffer and submit queue must belong to the renderer's graphics family.");
+        return (PSubmitHandle) {0};
+    }
 
     uint32_t total_wait_count = 1 + wait_count;
     P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, wait_infos, total_wait_count);
@@ -790,9 +810,11 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
         return (PSubmitHandle) {0};
     }
 
+    PSubmitHandle handle = {.queue = queue, .value = device_queue_acquire_value(queue)};
+
     wait_infos[0] = (VkSemaphoreSubmitInfo) {
         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore = renderer->sync->image_available_semaphores[current_frame],
+        .semaphore = frame->sync->image_available_semaphores[current_frame],
         .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
     };
 
@@ -810,8 +832,8 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
     VkSemaphoreSubmitInfo signal_infos[2] = {
         {
          .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-         .semaphore = renderer->sync->render_finished_semaphores[image_index],
-         .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+         .semaphore = frame->sync->render_finished_semaphores[image_index],
+         .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
          },
         {
          .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
@@ -837,40 +859,44 @@ PSubmitHandle pigment_queue_submit_frame(Pigment* pigment, PWindowRenderer* rend
     };
 
     VkResult result = vkQueueSubmit2(queue->queue, 1, &submit_info, VK_NULL_HANDLE);
+    P_STACK_OR_HEAP_FREE(pigment, wait_infos);
     if(result != VK_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
         return (PSubmitHandle) {0};
     }
-    P_STACK_OR_HEAP_FREE(pigment, wait_infos);
+    frame->sync->per_slot_handle[current_frame] = handle;
+    atomic_store_explicit(&renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
+    stamp_uses_submit(&frame_cmd, 1, queue->slot, handle.value);
+    frame->submitted = P_TRUE;
 
     return handle;
 }
 
-void pigment_present(Pigment* pigment, PWindowRenderer* renderer)
+void pigment_present_frame(Pigment* pigment, PFrame* frame)
 {
-    if(pigment == NULL || renderer == NULL)
+    if(pigment == NULL || frame == NULL || !frame->active || !frame->submitted)
     {
         return;
     }
 
     uint32_t max_frame     = pigment->config.max_frames_in_flight;
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    uint32_t image_index   = renderer->current_image_index;
+    uint32_t current_frame = frame->slot;
+    uint32_t image_index   = frame->image_index;
 
-    VkSemaphore present_wait[]  = {renderer->sync->render_finished_semaphores[image_index]};
-    VkSwapchainKHR swapchains[] = {renderer->swapchain->swapchain};
+    VkSemaphore present_wait[]  = {frame->sync->render_finished_semaphores[image_index]};
+    VkSwapchainKHR swapchains[] = {frame->swapchain->swapchain};
 
     VkSwapchainPresentFenceInfoEXT present_fence_info = {0};
     void* present_pnext                               = NULL;
-    if(renderer->sync->present_fences != NULL)
+    if(frame->sync->present_fences != NULL)
     {
-        VkFence fence = renderer->sync->present_fences[current_frame];
+        VkFence fence = frame->sync->present_fences[current_frame];
         vkWaitForFences(pigment->device->logical_device, 1, &fence, VK_TRUE, UINT64_MAX);
         vkResetFences(pigment->device->logical_device, 1, &fence);
         present_fence_info.sType          = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
         present_fence_info.swapchainCount = 1;
-        present_fence_info.pFences        = &renderer->sync->present_fences[current_frame];
+        present_fence_info.pFences        = &frame->sync->present_fences[current_frame];
         present_pnext                     = &present_fence_info;
     }
 
@@ -884,14 +910,19 @@ void pigment_present(Pigment* pigment, PWindowRenderer* renderer)
         .pImageIndices      = &image_index
     };
 
-    VkResult result = vkQueuePresentKHR(renderer->swapchain->present_queue, &present_info);
+    VkResult result = vkQueuePresentKHR(frame->swapchain->present_queue, &present_info);
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        frame->renderer->needs_recreate = P_TRUE;
+    }
     if(result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR)
     {
         PLOG_ERROR(pigment, "Failed to present swap chain image!");
     }
 
-    uint32_t next_frame                = current_frame + 1;
-    renderer->swapchain->current_frame = next_frame * (next_frame < max_frame);
+    uint32_t next_frame             = current_frame + 1;
+    frame->swapchain->current_frame = next_frame * (next_frame < max_frame);
+    frame->active                   = P_FALSE;
 }
 
 void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op)

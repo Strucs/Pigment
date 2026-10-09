@@ -180,6 +180,8 @@ typedef struct Pigment Pigment;
 
 typedef struct PWindowRenderer PWindowRenderer;
 
+typedef struct PFrame PFrame;
+
 typedef struct PInstance PInstance;
 
 typedef struct LayerList LayerList;
