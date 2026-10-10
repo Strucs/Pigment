@@ -102,9 +102,10 @@ struct PRenderPassDesc {
 PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
 
 /**
- * @brief Acquire a frame and begin recording its default command buffer.
+ * @brief Acquire a frame.
  *
  * Call after pigment_wait_frame_ready. Drains deletions and blocks on acquire.
+ * The caller owns the command buffers and starts recording separately.
  * One active CPU frame per renderer. The borrowed context expires at present.
  * Keep renderer resources alive and defer swapchain recreation until present.
  * Acquire, submit and present may run on different threads.
@@ -118,15 +119,6 @@ PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* ren
  * @return Frame context, or NULL on failure or required recreation.
  */
 PIGMENT_API PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer);
-
-/**
- * @brief Get the frame's default command buffer.
- *
- * @param frame Frame context.
- *
- * @return Recording buffer, or NULL for a NULL or inactive frame.
- */
-PIGMENT_API PCommandBuffer* pigment_frame_command_buffer(const PFrame* frame);
 
 /**
  * @brief Get the frame slot.
@@ -211,15 +203,6 @@ PIGMENT_API uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
  * @return The configured maximum number of frames in flight.
  */
 PIGMENT_API uint32_t pigment_max_frames_in_flight(Pigment* pigment);
-
-/**
- * @brief Return the current frame's default command buffer.
- *
- * @param renderer The renderer to query.
- *
- * @return The current frame's command buffer, or NULL if no frame in progress.
- */
-PIGMENT_API PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer);
 
 PIGMENT_API void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);
 PIGMENT_API void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc);

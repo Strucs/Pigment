@@ -13,6 +13,8 @@ typedef struct Vertex {
     float color[3];
 } Vertex;
 
+#define FRAMES_IN_FLIGHT 2
+
 int main(void)
 {
     PAppInfo app_info = {
@@ -28,6 +30,8 @@ int main(void)
     PPipeline* pipeline       = NULL;
     PBuffer* vertex_buffer    = NULL;
     int error_code            = 1;
+
+    PCommandBuffer* frame_cmds[FRAMES_IN_FLIGHT] = {0};
 
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -52,9 +56,10 @@ int main(void)
          },
     };
     PigmentConfig config = {
-        .loggers           = loggers,
-        .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation = P_TRUE,
+        .max_frames_in_flight = FRAMES_IN_FLIGHT,
+        .loggers              = loggers,
+        .logger_count         = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation    = P_TRUE,
     };
 
     pigment = init_pigment(&app_info, &config);
@@ -84,7 +89,13 @@ int main(void)
         .height = (uint32_t) win_h,
     };
 
-    renderer = pigment_renderer_create(pigment, pool, &handles, &swapchain_desc);
+    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, FRAMES_IN_FLIGHT, frame_cmds) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create frame command buffers!\n");
+        goto FREE;
+    }
+
+    renderer = pigment_renderer_create(pigment, &handles, &swapchain_desc);
     if(renderer == NULL)
     {
         fprintf(stderr, "Failed to create renderer!\n");
@@ -199,7 +210,8 @@ int main(void)
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
-        PCommandBuffer* cmd = pigment_frame_command_buffer(frame);
+        PCommandBuffer* cmd = frame_cmds[pigment_frame_slot(frame)];
+        pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 
         PSwapchainPassDesc pass_desc = {
             .clear_color = {0.01f, 0.01f, 0.01f, 1.0f},

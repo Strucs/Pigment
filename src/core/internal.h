@@ -241,8 +241,6 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
 VkSampleCountFlags supported_sample_counts(Pigment* pigment);
 
 // commands.c
-PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count);
-void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count);
 void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint32_t queue_slot, uint64_t value);
 PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracker);
 void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracker);

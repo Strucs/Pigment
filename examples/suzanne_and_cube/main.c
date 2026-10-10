@@ -9,6 +9,8 @@
 
 #define EXAMPLE_NAME "suzanne_and_cube"
 
+#define FRAMES_IN_FLIGHT 2
+
 int main(void)
 {
     PAppInfo app_info = {
@@ -39,6 +41,8 @@ int main(void)
     PInstanceData* instance_storage2 = NULL;
     int error_code                   = 1;
 
+    PCommandBuffer* frame_cmds[FRAMES_IN_FLIGHT] = {0};
+
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
@@ -62,9 +66,10 @@ int main(void)
          },
     };
     PigmentConfig config = {
-        .loggers           = loggers,
-        .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation = P_TRUE,
+        .max_frames_in_flight = FRAMES_IN_FLIGHT,
+        .loggers              = loggers,
+        .logger_count         = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation    = P_TRUE,
     };
 
     pigment = init_pigment(&app_info, &config);
@@ -94,7 +99,13 @@ int main(void)
         .height = (uint32_t) win_h,
     };
 
-    renderer = pigment_renderer_create(pigment, pool, &handles, &swapchain_desc);
+    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, FRAMES_IN_FLIGHT, frame_cmds) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create frame command buffers!\n");
+        goto FREE;
+    }
+
+    renderer = pigment_renderer_create(pigment, &handles, &swapchain_desc);
     if(renderer == NULL)
     {
         fprintf(stderr, "Failed to create renderer!\n");
@@ -301,16 +312,17 @@ int main(void)
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
-        PCommandBuffer* cmd = pigment_frame_command_buffer(frame);
+        PCommandBuffer* cmd = frame_cmds[pigment_frame_slot(frame)];
+        pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
-        pigment_draw(pigment, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls, draw_count);
-        pigment_draw(pigment, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls2, draw_count2);
+        pigment_draw(pigment, cmd, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls, draw_count);
+        pigment_draw(pigment, cmd, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls2, draw_count2);
 
         pigment_bind_pipeline(pigment, cmd, gizmo_pipeline);
-        pigment_std_draw_light_gizmos(pigment, renderer, gizmo_pipeline, camera, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
+        pigment_std_draw_light_gizmos(pigment, cmd, renderer, gizmo_pipeline, camera, lights, gizmo_sphere, gizmo_sphere_indices, 0.15f);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 

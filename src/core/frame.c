@@ -93,20 +93,10 @@ PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer)
         renderer->needs_recreate = P_TRUE;
     }
 
-    PCommandBuffer* cmd = renderer->command_buffers[current_frame];
-
-    if((result = vkResetCommandBuffer(cmd->buffer, 0)) != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to reset command buffer! (result: %d)", result);
-        return NULL;
-    }
-
-    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
     renderer->frame = (PFrame) {
         .renderer    = renderer,
         .swapchain   = renderer->swapchain,
         .sync        = renderer->sync,
-        .cmd         = cmd,
         .slot        = current_frame,
         .image_index = image_index,
         .transparent = renderer->desc.transparent,
@@ -114,11 +104,6 @@ PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer)
     };
 
     return &renderer->frame;
-}
-
-PCommandBuffer* pigment_frame_command_buffer(const PFrame* frame)
-{
-    return frame != NULL && frame->active ? frame->cmd : NULL;
 }
 
 uint32_t pigment_frame_slot(const PFrame* frame)
@@ -147,16 +132,6 @@ uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer)
 uint32_t pigment_max_frames_in_flight(Pigment* pigment)
 {
     return (pigment != NULL) ? pigment->config.max_frames_in_flight : 0;
-}
-
-PCommandBuffer* pigment_renderer_frame_cmd(PWindowRenderer* renderer)
-{
-    if(renderer == NULL || renderer->swapchain == NULL)
-    {
-        return NULL;
-    }
-
-    return renderer->command_buffers[renderer->swapchain->current_frame];
 }
 
 void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, const PFrame* frame, const PSwapchainPassDesc* desc)
@@ -780,12 +755,14 @@ PSubmitHandle pigment_queue_submit_frame_context(Pigment* pigment, PFrame* frame
         wait_count = 0;
     }
 
+    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
+
     if(queue == NULL)
     {
-        queue = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
+        queue = graphics;
     }
 
-    if(queue == NULL || queue->timeline == VK_NULL_HANDLE)
+    if(graphics == NULL || queue == NULL || queue->timeline == VK_NULL_HANDLE)
     {
         PLOG_ERROR(pigment, "Frame submit queue unavailable, frame submit aborted.");
         return (PSubmitHandle) {0};
@@ -795,8 +772,9 @@ PSubmitHandle pigment_queue_submit_frame_context(Pigment* pigment, PFrame* frame
     uint32_t current_frame    = frame->slot;
     uint32_t image_index      = frame->image_index;
 
-    if(frame_cmd->source_pool == NULL || frame_cmd->source_pool->queue_family_index != queue->family_index
-       || queue->family_index != renderer->command_pool->queue_family_index)
+    if(frame_cmd->source_pool == NULL
+       || frame_cmd->source_pool->queue_family_index != queue->family_index
+       || queue->family_index != graphics->family_index)
     {
         PLOG_ERROR(pigment, "Frame command buffer and submit queue must belong to the renderer's graphics family.");
         return (PSubmitHandle) {0};

@@ -123,57 +123,6 @@ void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool)
     }
 }
 
-PCommandBuffer** create_command_buffers(Pigment* pigment, PCommandPool* pool, uint32_t count)
-{
-    if(pool == NULL || count == 0)
-    {
-        return NULL;
-    }
-
-    PCommandBuffer** command_buffers = P_NEW_ARRAY_FOR_COMMAND(pigment, command_buffers, count);
-    if(command_buffers == NULL)
-    {
-        return NULL;
-    }
-
-    if(pigment_create_command_buffers(pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, count, command_buffers) != PIGMENT_SUCCESS)
-    {
-        P_FREE(pigment, command_buffers);
-        return NULL;
-    }
-
-    return command_buffers;
-}
-
-void destroy_command_buffers(Pigment* pigment, PCommandBuffer** command_buffers, uint32_t count)
-{
-    if(command_buffers == NULL || count == 0)
-    {
-        return;
-    }
-
-    PCommandPool* pool = command_buffers[0]->source_pool;
-
-    P_STACK_OR_HEAP(VkCommandBuffer, vk_cmd_buffer, count);
-    if(vk_cmd_buffer != NULL)
-    {
-        for(uint32_t i = 0; i < count; i++)
-        {
-            vk_cmd_buffer[i] = command_buffers[i]->buffer;
-        }
-        vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, count, vk_cmd_buffer);
-        P_STACK_OR_HEAP_FREE(pigment, vk_cmd_buffer);
-    }
-
-    for(uint32_t i = 0; i < count; i++)
-    {
-        pool_remove_buffer(pool, command_buffers[i]);
-        P_FREE(pigment, command_buffers[i]->uses);
-        P_FREE(pigment, command_buffers[i]);
-    }
-    P_FREE(pigment, command_buffers);
-}
-
 PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds)
 {
     if(pigment == NULL || pool == NULL || count == 0 || out_cmds == NULL)

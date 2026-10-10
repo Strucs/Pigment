@@ -118,6 +118,10 @@ PIGMENT_API void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffe
 /**
  * @brief Open a command buffer for recording. Required before any pigment_cmd_* function.
  *
+ * The caller must wait for prior GPU use and synchronize access to the buffer and pool.
+ * With P_COMMAND_POOL_FLAG_RESET_BUFFER, this also resets prior recording.
+ * Otherwise, reset the pool before reusing the buffer.
+ *
  * @param pigment Pigment instance.
  * @param cmd Command buffer to record into.
  * @param flags Usage flags for this recording session. SECONDARY recording inside a render pass

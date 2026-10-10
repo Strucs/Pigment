@@ -70,7 +70,7 @@ PIGMENT_API uint64_t pigment_std_light_address(PLights* lights);
  */
 PIGMENT_API void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* lights);
 
-PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
 
 #ifdef __cplusplus
 }

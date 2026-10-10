@@ -230,14 +230,13 @@ void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* ligh
     pigment_cmd_use_buffer(pigment, cmd, lights->buffer);
 }
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
+void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
 {
-    if(pigment == NULL || renderer == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
+    if(pigment == NULL || cmd == NULL || renderer == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
     {
         return;
     }
 
-    PCommandBuffer* cmd    = pigment_renderer_frame_cmd(renderer);
     uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
     pigment_std_lights_use(pigment, cmd, lights);

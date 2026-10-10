@@ -123,7 +123,6 @@ struct PFrame {
     PWindowRenderer* renderer;
     PSwapchain* swapchain;
     PSync* sync;
-    PCommandBuffer* cmd;
     uint32_t slot;
     uint32_t image_index;
     PBool transparent;
@@ -135,8 +134,6 @@ struct PWindowRenderer {
     PSurface* surface;
     PSwapchain* swapchain;
     PSync* sync;
-    PCommandPool* command_pool;
-    PCommandBuffer** command_buffers;
     PFrame frame;
     PBool needs_recreate;
     PSwapchainDesc desc;

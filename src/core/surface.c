@@ -54,9 +54,9 @@ static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
     return temp > max ? max : temp;
 }
 
-PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc)
+PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles* handles, const PSwapchainDesc* desc)
 {
-    if(pigment == NULL || pool == NULL || handles == NULL || desc == NULL)
+    if(pigment == NULL || handles == NULL || desc == NULL)
     {
         return NULL;
     }
@@ -100,11 +100,10 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, c
         goto ERROR;
     }
 
-    renderer->surface      = surface;
-    renderer->command_pool = pool;
-    renderer->desc         = *desc;
-    renderer->desc.width   = width;
-    renderer->desc.height  = height;
+    renderer->surface     = surface;
+    renderer->desc        = *desc;
+    renderer->desc.width  = width;
+    renderer->desc.height = height;
 
     if(pigment_resource_tracker_init(pigment, &renderer->tracker) != PIGMENT_SUCCESS)
     {
@@ -113,12 +112,6 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, c
 
     renderer->swapchain = create_swapchain(pigment, &renderer->desc, surface, NULL);
     if(renderer->swapchain == NULL)
-    {
-        goto ERROR;
-    }
-
-    renderer->command_buffers = create_command_buffers(pigment, pool, pigment->config.max_frames_in_flight);
-    if(renderer->command_buffers == NULL)
     {
         goto ERROR;
     }
@@ -971,7 +964,6 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     }
 
     destroy_sync(pigment, renderer->sync, renderer->swapchain, pigment->config.max_frames_in_flight);
-    destroy_command_buffers(pigment, renderer->command_buffers, pigment->config.max_frames_in_flight);
     destroy_swapchain(pigment, renderer->swapchain);
     destroy_surface(pigment, renderer->surface);
     pigment_resource_tracker_destroy(pigment, &renderer->tracker);

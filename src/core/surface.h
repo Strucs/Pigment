@@ -23,7 +23,16 @@ extern "C" {
 
 #include "defines.h"
 
-PIGMENT_API PWindowRenderer* pigment_renderer_create(Pigment* pigment, PCommandPool* pool, const PWindowHandles* handles, const PSwapchainDesc* desc);
+/**
+ * @brief Create a window renderer.
+ *
+ * @param pigment Pigment instance.
+ * @param handles Native window handles.
+ * @param desc Swapchain settings.
+ *
+ * @return Renderer, or NULL on failure.
+ */
+PIGMENT_API PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles* handles, const PSwapchainDesc* desc);
 PIGMENT_API void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer);
 PIGMENT_API void pigment_renderer_resize(PWindowRenderer* renderer, uint32_t width, uint32_t height);
 PIGMENT_API void pigment_set_present_mode(PWindowRenderer* renderer, PPresentMode mode);

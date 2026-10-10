@@ -40,6 +40,7 @@ typedef struct Test {
     SDL_Semaphore* submit;
     SDL_Semaphore* done;
     Slot slots[MAX_SLOTS];
+    PCommandBuffer* cmds[MAX_SLOTS];
 
     // One CPU frame at a time. Semaphore handoffs protect these fields.
     PFrame* frame;
@@ -131,7 +132,7 @@ static int record_worker(void* arg)
         }
 
         CHECK(test->stage == 0);
-        CHECK(pigment_frame_command_buffer(test->frame) == test->cmd);
+        CHECK(test->cmds[test->slot] == test->cmd);
         CHECK(pigment_frame_slot(test->frame) == test->slot);
         CHECK(pigment_frame_image(test->frame) == test->image);
 
@@ -140,6 +141,8 @@ static int record_worker(void* arg)
         {
             SDL_Delay(0);
         }
+
+        pigment_begin_recording(test->pigment, test->cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 
         PSwapchainPassDesc pass = {
             .clear_color = {(float) (test->sequence % 256) / 255.0f, 0.2f, 0.4f, 1.0f},
@@ -270,10 +273,11 @@ int main(void)
 
     PCommandPool* pool = pigment_create_command_pool(test.pigment, &pool_desc);
     CHECK(pool != NULL);
+    CHECK(pigment_create_command_buffers(test.pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, slot_count, test.cmds) == PIGMENT_SUCCESS);
 
     PWindowHandles handles   = pigment_sdl_get_window_handles(window);
     PSwapchainDesc swapchain = {.width = 320, .height = 240, .present_mode = P_PRESENT_MODE_IMMEDIATE};
-    test.renderer            = pigment_renderer_create(test.pigment, pool, &handles, &swapchain);
+    test.renderer            = pigment_renderer_create(test.pigment, &handles, &swapchain);
     CHECK(test.renderer != NULL);
 
     for(uint32_t i = 0; i < slot_count; i++)
@@ -343,7 +347,7 @@ int main(void)
 
         test.slot = pigment_frame_slot(test.frame);
         CHECK(test.slot == sequence % slot_count);
-        test.cmd   = pigment_frame_command_buffer(test.frame);
+        test.cmd   = test.cmds[test.slot];
         test.image = pigment_frame_image(test.frame);
         CHECK(test.cmd != NULL && test.image != NULL);
 
