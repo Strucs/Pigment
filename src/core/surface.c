@@ -122,6 +122,12 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
+    renderer->frames = P_NEW_ARRAY_FOR_OBJECT(pigment, renderer->frames, pigment->config.max_frames_in_flight);
+    if(renderer->frames == NULL)
+    {
+        goto ERROR;
+    }
+
     return renderer;
 
 ERROR:
@@ -148,20 +154,14 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer)
         return;
     }
 
-    VkFence last_present_fence = VK_NULL_HANDLE;
-    if(renderer->sync != NULL && renderer->sync->present_fences != NULL)
-    {
-        uint32_t max_frame     = pigment->config.max_frames_in_flight;
-        uint32_t current_frame = renderer->swapchain->current_frame;
-        uint32_t last_slot     = current_frame > 0 ? current_frame - 1 : max_frame - 1;
-        last_present_fence     = renderer->sync->present_fences[last_slot];
-    }
-    else
+    const VkFence* present_fences = renderer->sync->present_fences;
+    uint32_t fence_count          = present_fences != NULL ? pigment->config.max_frames_in_flight : 0;
+    if(present_fences == NULL)
     {
         device_wait_idle(pigment);
     }
 
-    defer_destroy_renderer(pigment, destroy_renderer_immediate, renderer, &renderer->tracker, last_present_fence);
+    defer_destroy_renderer(pigment, destroy_renderer_immediate, renderer, &renderer->tracker, present_fences, fence_count);
 }
 
 static void destroy_renderer_immediate(Pigment* pigment, void* resource)
@@ -238,7 +238,7 @@ PFormat pigment_get_depth_format(PWindowRenderer* renderer)
         return P_FORMAT_UNDEFINED;
     }
 
-    return (PFormat) renderer->swapchain->depth->vk_format;
+    return (PFormat) renderer->swapchain->depth[0]->vk_format;
 }
 
 PColorSpace pigment_get_color_space(PWindowRenderer* renderer)
@@ -328,10 +328,11 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_ERROR;
     }
 
-    // create_swapchain() zero-inits the current_frame, so pass the old value
-    // so the frame-in-flight index stays consistent across a recreate (e.g.
-    // the instance ring cursor would be desynchronized otherwise).
-    new_swapchain->current_frame = old_swapchain->current_frame;
+    if(recreate_render_finished_semaphores(pigment, renderer->sync, old_swapchain->image_count, new_swapchain->image_count) != PIGMENT_SUCCESS)
+    {
+        destroy_swapchain(pigment, new_swapchain);
+        return PIGMENT_ERROR;
+    }
 
     renderer->swapchain = new_swapchain;
     destroy_swapchain(pigment, old_swapchain);
@@ -350,10 +351,12 @@ PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_SUCCESS;
     }
 
-    if(renderer->frame.active)
+    for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
     {
-        PLOG_ERROR(pigment, "Present the active frame before recreating its swapchain.");
-        return PIGMENT_ERROR;
+        if(renderer->frames[i].active)
+        {
+            return PIGMENT_NOT_READY;
+        }
     }
 
     renderer->needs_recreate = P_FALSE;
@@ -371,15 +374,10 @@ PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_ERROR;
     }
 
-    uint32_t old_image_count = renderer->swapchain->image_count;
     if(recreate_swapchain(pigment, renderer) != PIGMENT_SUCCESS)
     {
         renderer->needs_recreate = P_TRUE;
         return PIGMENT_ERROR;
-    }
-    if(old_image_count != renderer->swapchain->image_count)
-    {
-        recreate_render_finished_semaphores(pigment, renderer->sync, old_image_count, renderer->swapchain->image_count);
     }
 
     PSwapchainRecreateEvent event = {
@@ -758,6 +756,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     }
 
     swapchain->image_count          = image_count;
+    swapchain->min_image_count      = support_details->capabilities.minImageCount;
     swapchain->image_format         = surface_format.format;
     swapchain->color_space          = surface_format.colorSpace;
     swapchain->extent               = extent;
@@ -784,11 +783,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
 
 ERROR:
     destroy_support_details(pigment, support_details);
-    if(swapchain != NULL)
-    {
-        vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
-        P_FREE(pigment, swapchain);
-    }
+    destroy_swapchain(pigment, swapchain);
     return NULL;
 }
 
@@ -836,16 +831,34 @@ static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
         .mip_levels = 1,
     };
 
-    swapchain->depth = pigment_create_image(pigment, &desc);
+    uint32_t count   = pigment->config.max_frames_in_flight;
+    swapchain->depth = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->depth, count);
+    if(swapchain->depth == NULL)
+    {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
 
-    return (swapchain->depth != NULL) ? PIGMENT_SUCCESS : PIGMENT_ERROR;
+    for(uint32_t i = 0; i < count; i++)
+    {
+        swapchain->depth[i] = pigment_create_image(pigment, &desc);
+        if(swapchain->depth[i] == NULL)
+        {
+            return PIGMENT_ERROR;
+        }
+    }
+
+    return PIGMENT_SUCCESS;
 }
 
 static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
 {
     if(swapchain->depth != NULL)
     {
-        pigment_destroy_image(pigment, swapchain->depth);
+        for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
+        {
+            pigment_destroy_image(pigment, swapchain->depth[i]);
+        }
+        P_FREE(pigment, swapchain->depth);
         swapchain->depth = NULL;
     }
 }
@@ -866,16 +879,34 @@ static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* 
         .mip_levels = 1,
     };
 
-    swapchain->color_multisample = pigment_create_image(pigment, &desc);
+    uint32_t count               = pigment->config.max_frames_in_flight;
+    swapchain->color_multisample = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->color_multisample, count);
+    if(swapchain->color_multisample == NULL)
+    {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
 
-    return (swapchain->color_multisample != NULL) ? PIGMENT_SUCCESS : PIGMENT_ERROR;
+    for(uint32_t i = 0; i < count; i++)
+    {
+        swapchain->color_multisample[i] = pigment_create_image(pigment, &desc);
+        if(swapchain->color_multisample[i] == NULL)
+        {
+            return PIGMENT_ERROR;
+        }
+    }
+
+    return PIGMENT_SUCCESS;
 }
 
 static void destroy_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain)
 {
     if(swapchain->color_multisample != NULL)
     {
-        pigment_destroy_image(pigment, swapchain->color_multisample);
+        for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
+        {
+            pigment_destroy_image(pigment, swapchain->color_multisample[i]);
+        }
+        P_FREE(pigment, swapchain->color_multisample);
         swapchain->color_multisample = NULL;
     }
 }
@@ -967,6 +998,7 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
     destroy_swapchain(pigment, renderer->swapchain);
     destroy_surface(pigment, renderer->surface);
     pigment_resource_tracker_destroy(pigment, &renderer->tracker);
+    P_FREE(pigment, renderer->frames);
     P_FREE(pigment, renderer);
 }
 

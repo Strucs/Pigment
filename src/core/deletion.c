@@ -264,7 +264,7 @@ WAIT:
     destroy_fn(pigment, resource);
 }
 
-void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker, VkFence present_fence)
+void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker, const VkFence* present_fences, uint32_t fence_count)
 {
     if(pigment == NULL || destroy_fn == NULL || resource == NULL)
     {
@@ -278,12 +278,11 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
     }
 
     uint32_t queue_count = (pigment->device != NULL) ? pigment->device->queue_count : 0;
-    uint32_t cap         = queue_count + 1;
+    uint32_t cap         = queue_count + fence_count;
     PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, cap);
     if(targets == NULL)
     {
-        destroy_fn(pigment, resource);
-        return;
+        goto WAIT;
     }
 
     uint32_t target_count = 0;
@@ -312,11 +311,11 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
         }
     }
 
-    if(present_fence != VK_NULL_HANDLE)
+    for(uint32_t i = 0; i < fence_count; i++)
     {
         targets[target_count++] = (PWaitTarget) {
             .kind  = P_WAIT_FENCE,
-            .fence = present_fence,
+            .fence = present_fences[i],
         };
     }
 
@@ -324,12 +323,23 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
     {
         destroy_fn(pigment, resource);
     }
-    else
+    else if(push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count) != PIGMENT_SUCCESS)
     {
-        enqueue_or_destroy(pigment, destroy_fn, resource, targets, target_count);
+        goto WAIT;
     }
 
     P_FREE(pigment, targets);
+    return;
+
+WAIT:
+    P_FREE(pigment, targets);
+    pigment_resource_tracker_wait(pigment, tracker);
+    if(fence_count != 0)
+    {
+        vkWaitForFences(pigment->device->logical_device, fence_count, present_fences, VK_TRUE, UINT64_MAX);
+    }
+
+    destroy_fn(pigment, resource);
 }
 
 void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence)

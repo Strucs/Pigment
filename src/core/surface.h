@@ -43,6 +43,7 @@ PIGMENT_API void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCoun
  * @brief Recreate the renderer's swapchain if it was flagged dirty by an acquire failure or a
  *        pigment_renderer_resize / present_mode / sample_count / color_space change.
  *
+ * Returns PIGMENT_NOT_READY while frames remain active.
  * Dispatches the swapchain recreate callbacks at the end.
  *
  * @param pigment Pigment instance.

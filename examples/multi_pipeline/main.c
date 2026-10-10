@@ -272,7 +272,9 @@ int main(void)
 
     SDL_ShowWindow(window);
 
-    PBool running = P_TRUE;
+    PBool running       = P_TRUE;
+    uint32_t frame_slot = 0;
+
     while(running)
     {
         SDL_Event event;
@@ -295,10 +297,10 @@ int main(void)
 
         fps_camera_update(camera, &fps_state);
 
-        pigment_wait_frame_ready(pigment, renderer);
+        pigment_wait_frame_ready(pigment, renderer, frame_slot);
 
         PFrame* frame;
-        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, UINT64_MAX, &frame);
+        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, frame_slot, UINT64_MAX, &frame);
         if(acquire_result == PIGMENT_RECREATE_REQUIRED)
         {
             pigment_recreate_swapchain(pigment, renderer);
@@ -315,11 +317,11 @@ int main(void)
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[0]);
-        pigment_draw(pigment, cmd, renderer, bindless, ring, materials, lights, camera, pipelines[0], draw_calls, draw_count);
+        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[1]);
         pigment_cmd_set_depth(pigment, cmd, P_TRUE, P_FALSE, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, cmd, renderer, bindless, ring, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
+        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
@@ -336,6 +338,7 @@ int main(void)
 
         pigment_queue_submit(pigment, &submit, 1, NULL);
         pigment_present_frame(pigment, frame);
+        frame_slot = (frame_slot + 1) % pigment_max_frames_in_flight(pigment);
     }
 
     error_code = 0;

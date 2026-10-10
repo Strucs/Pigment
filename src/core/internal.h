@@ -263,7 +263,7 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
 PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
-void defer_destroy_renderer(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const PResourceTracker* tracker, VkFence present_fence);
+void defer_destroy_renderer(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const PResourceTracker* tracker, const VkFence* present_fences, uint32_t fence_count);
 
 // log.c
 PResult pigment_log_init(Pigment* pigment);

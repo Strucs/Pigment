@@ -21,37 +21,34 @@
 #include "deletion.h"
 #include "image.h"
 #include "surface.h"
-#include "synchronization.h"
 
 #include "internal.h"
 
-void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
+void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot)
 {
-    if(pigment == NULL || renderer == NULL)
+    if(pigment == NULL || renderer == NULL || slot >= pigment->config.max_frames_in_flight)
     {
         return;
     }
 
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    pigment_resource_tracker_wait(pigment, &renderer->sync->per_slot_trackers[current_frame]);
+    pigment_resource_tracker_wait(pigment, &renderer->sync->per_slot_trackers[slot]);
 }
 
-PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint64_t timeout_ns, PFrame** out_frame)
+PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot, uint64_t timeout_ns, PFrame** out_frame)
 {
     if(out_frame != NULL)
     {
         *out_frame = NULL;
     }
 
-    if(pigment == NULL || renderer == NULL || out_frame == NULL)
+    if(pigment == NULL || renderer == NULL || out_frame == NULL || slot >= pigment->config.max_frames_in_flight)
     {
         return PIGMENT_ERROR;
     }
 
-    if(renderer->frame.active)
+    if(renderer->frames[slot].active)
     {
-        PLOG_ERROR(pigment, "Cannot begin a frame while the previous frame is still active.");
-        return PIGMENT_ERROR;
+        return PIGMENT_NOT_READY;
     }
 
     drain_deletion_queue(pigment);
@@ -61,11 +58,24 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         return PIGMENT_RECREATE_REQUIRED;
     }
 
-    PDevice* device        = pigment->device;
-    uint32_t current_frame = renderer->swapchain->current_frame;
-    uint32_t image_index   = 0;
+    if(timeout_ns == UINT64_MAX)
+    {
+        uint32_t acquired = 0;
+        for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
+        {
+            acquired += renderer->frames[i].active;
+        }
 
-    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
+        if(acquired > renderer->swapchain->image_count - renderer->swapchain->min_image_count)
+        {
+            return PIGMENT_NOT_READY;
+        }
+    }
+
+    PDevice* device      = pigment->device;
+    uint32_t image_index = 0;
+
+    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, renderer->sync->image_available_semaphores[slot], VK_NULL_HANDLE, &image_index);
 
     if(result == VK_NOT_READY)
     {
@@ -79,8 +89,8 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        recreate_image_available_semaphore(pigment, renderer->sync, current_frame);
-        renderer->needs_recreate = P_TRUE;
+        renderer->swapchain->out_of_date = P_TRUE;
+        renderer->needs_recreate         = P_TRUE;
         return PIGMENT_RECREATE_REQUIRED;
     }
     else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -96,17 +106,17 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         renderer->needs_recreate = P_TRUE;
     }
 
-    renderer->frame = (PFrame) {
+    renderer->frames[slot] = (PFrame) {
         .renderer    = renderer,
         .swapchain   = renderer->swapchain,
         .sync        = renderer->sync,
-        .slot        = current_frame,
+        .slot        = slot,
         .image_index = image_index,
         .transparent = renderer->desc.transparent,
         .active      = P_TRUE,
     };
 
-    *out_frame = &renderer->frame;
+    *out_frame = &renderer->frames[slot];
     return PIGMENT_SUCCESS;
 }
 
@@ -122,15 +132,6 @@ PImage* pigment_frame_image(const PFrame* frame)
         return NULL;
     }
     return frame->swapchain->image_wrappers[frame->image_index];
-}
-
-uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer)
-{
-    if(renderer == NULL || renderer->swapchain == NULL)
-    {
-        return 0;
-    }
-    return renderer->swapchain->current_frame;
 }
 
 uint32_t pigment_max_frames_in_flight(Pigment* pigment)
@@ -175,7 +176,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
     if(multisample)
     {
         PImageBarrier color_multisample_barrier = {
-            .image       = swapchain->color_multisample,
+            .image       = swapchain->color_multisample[frame->slot],
             .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
             .new_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
             .src         = {                       P_PIPELINE_STAGE_NONE,                       P_MEMORY_ACCESS_NONE},
@@ -189,7 +190,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
     if(use_depth)
     {
         PImageBarrier depth_barrier = {
-            .image       = swapchain->depth,
+            .image       = swapchain->depth[frame->slot],
             .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
             .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
             .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
@@ -223,7 +224,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
 
     if(multisample)
     {
-        PImageView* msaa_view = image_get_or_create_view(pigment, swapchain->color_multisample, &(PImageViewDesc) {0});
+        PImageView* msaa_view = image_get_or_create_view(pigment, swapchain->color_multisample[frame->slot], &(PImageViewDesc) {0});
         if(msaa_view == NULL)
         {
             PLOG_ERROR(pigment, "Failed to get multisample color view");
@@ -250,7 +251,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
 
     if(use_depth)
     {
-        PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth, &(PImageViewDesc) {0});
+        PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth[frame->slot], &(PImageViewDesc) {0});
         if(depth_view == NULL)
         {
             PLOG_ERROR(pigment, "Failed to get depth view");
@@ -268,7 +269,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
             .clearValue  = {.depthStencil = clear_depth_stencil_value},
         };
 
-        has_stencil        = (swapchain->depth->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
+        has_stencil        = (swapchain->depth[frame->slot]->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
         stencil_attachment = depth_attachment;
     }
 
@@ -754,7 +755,13 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
         return;
     }
 
-    uint32_t max_frame     = pigment->config.max_frames_in_flight;
+    if(frame->swapchain->out_of_date)
+    {
+        // Recreation retires this image and its unconsumed present semaphore after GPU use.
+        frame->active = P_FALSE;
+        return;
+    }
+
     uint32_t current_frame = frame->slot;
     uint32_t image_index   = frame->image_index;
 
@@ -785,6 +792,10 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
     };
 
     VkResult result = vkQueuePresentKHR(frame->swapchain->present_queue, &present_info);
+    if(result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        frame->swapchain->out_of_date = P_TRUE;
+    }
     if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
         frame->renderer->needs_recreate = P_TRUE;
@@ -794,9 +805,7 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
         PLOG_ERROR(pigment, "Failed to present swap chain image!");
     }
 
-    uint32_t next_frame             = current_frame + 1;
-    frame->swapchain->current_frame = next_frame * (next_frame < max_frame);
-    frame->active                   = P_FALSE;
+    frame->active = P_FALSE;
 }
 
 void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op)

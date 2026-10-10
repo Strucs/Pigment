@@ -177,21 +177,6 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     P_FREE(pigment, sync);
 }
 
-PResult recreate_image_available_semaphore(Pigment* pigment, PSync* sync, uint32_t index)
-{
-    PDevice* device   = pigment->device;
-    VkSemaphore fresh = create_semaphore(pigment);
-    if(fresh == NULL)
-    {
-        return PIGMENT_ERROR_VULKAN;
-    }
-
-    vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[index], &pigment->vk_alloc);
-    sync->image_available_semaphores[index] = fresh;
-
-    return PIGMENT_SUCCESS;
-}
-
 PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
 {
     PResult result              = PIGMENT_ERROR_OUT_OF_MEMORY;

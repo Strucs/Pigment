@@ -58,12 +58,14 @@ PIGMENT_API PInstanceRing* pigment_std_create_instance_ring(Pigment* pigment, ui
 PIGMENT_API void pigment_std_destroy_instance_ring(Pigment* pigment, PInstanceRing* ring);
 
 /**
- * @brief Sync the ring with the renderer's current frame.
+ * @brief Select the ring slot for recording.
+ *
+ * Serialize access to the ring and finish recording a slot before switching slots.
  *
  * Resets the cursor when the frame index changes.
  *
  * @param ring Instance ring to sync.
- * @param current_frame Renderer's current frame index (from `pigment_renderer_current_frame`).
+ * @param current_frame Frame slot from pigment_frame_slot.
  */
 PIGMENT_API void pigment_std_instance_ring_sync_frame(PInstanceRing* ring, uint32_t current_frame);
 
@@ -117,9 +119,9 @@ PIGMENT_API uint64_t pigment_std_instance_ring_frame_address(PInstanceRing* ring
  */
 PIGMENT_API void pigment_std_instance_ring_flush_range(Pigment* pigment, PInstanceRing* ring, uint32_t first_instance, uint32_t instance_count);
 
-PIGMENT_API void pigment_draw(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
-PIGMENT_API void pigment_std_draw_skybox(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot);
-PIGMENT_API void pigment_std_draw_crt(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time);
+PIGMENT_API void pigment_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t frame_slot, PStdBindless* bindless, PInstanceRing* ring, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count);
+PIGMENT_API void pigment_std_draw_skybox(Pigment* pigment, PCommandBuffer* cmd, uint32_t frame_slot, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot);
+PIGMENT_API void pigment_std_draw_crt(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, uint32_t frame_slot, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time);
 
 #ifdef __cplusplus
 }

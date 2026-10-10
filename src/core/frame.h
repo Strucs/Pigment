@@ -94,37 +94,33 @@ struct PRenderPassDesc {
 };
 
 /**
- * @brief Block until the next frame slot's previous GPU work has completed.
+ * @brief Wait for a slot's submitted GPU work.
  *
  * Waits for all submits associated with the slot on every queue used.
- *
- * @param pigment Pigment instance.
- * @param renderer The renderer whose next frame slot to wait on.
- */
-PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer);
-
-/**
- * @brief Acquire a frame.
- *
- * Call after pigment_wait_frame_ready. Drains deletions before acquiring.
- * The timeout applies only to image acquisition, not prior GPU work or deletion callbacks.
- * The caller owns the command buffers and starts recording separately.
- * One active CPU frame per renderer. The borrowed context expires at present.
- * Keep renderer resources alive and defer swapchain recreation until present.
- * Acquire, submit and present may run on different threads.
- * The caller must synchronize access to the renderer, frame and queues.
- * During recording, the caller must ensure exclusive host access to
- * the command buffer, its pool and the frame's attachments.
+ * Does not wait for CPU recording or presentation.
  *
  * @param pigment Pigment instance.
  * @param renderer Frame owner.
- * @param timeout_ns Acquire timeout in nanoseconds. Zero polls, UINT64_MAX waits indefinitely.
- * @param out_frame Acquired context, set to NULL unless acquisition succeeds.
- *
- * @return PIGMENT_SUCCESS, PIGMENT_NOT_READY, PIGMENT_TIMEOUT, PIGMENT_RECREATE_REQUIRED or an error.
- * A suboptimal swapchain returns a usable frame to present before recreation.
+ * @param slot Slot index below max_frames_in_flight.
  */
-PIGMENT_API PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint64_t timeout_ns, PFrame** out_frame);
+PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot);
+
+/**
+ * @brief Acquire a frame and drain pending deletions.
+ *
+ * The caller must wait for prior GPU use of the slot and synchronize renderer, frame and queue access.
+ * Close every context with pigment_present_frame before recreating or destroying the renderer.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer Frame owner.
+ * @param slot Slot index below max_frames_in_flight.
+ * @param timeout_ns Image acquisition timeout in nanoseconds. Zero polls, UINT64_MAX requests an indefinite wait.
+ * @param out_frame Context valid until present, or NULL on failure.
+ *
+ * @return PIGMENT_SUCCESS (including suboptimal), PIGMENT_NOT_READY, PIGMENT_TIMEOUT, PIGMENT_RECREATE_REQUIRED or an error.
+ * NOT_READY also covers an active slot or an indefinite acquisition requiring pending frames to be presented first.
+ */
+PIGMENT_API PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot, uint64_t timeout_ns, PFrame** out_frame);
 
 /**
  * @brief Get the frame slot.
@@ -165,24 +161,17 @@ PIGMENT_API void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuff
 PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFrame* frame);
 
 /**
- * @brief Present the frame, invalidate its context and advance the slot.
+ * @brief Present the frame and release its CPU slot.
  *
  * Call after a successful pigment_queue_submit with signal_present set.
+ * If the swapchain is already out of date, only closes the context.
+ * Recreation waits for GPU use and retires images that were not presented.
  * Caller must synchronize access to the frame, renderer and present queue.
  *
  * @param pigment Pigment instance.
  * @param frame Submitted frame.
  */
 PIGMENT_API void pigment_present_frame(Pigment* pigment, PFrame* frame);
-
-/**
- * @brief Return the current frame slot index of the renderer.
- *
- * @param renderer The renderer to query.
- *
- * @return The current frame slot index in [0, max_frames_in_flight).
- */
-PIGMENT_API uint32_t pigment_renderer_current_frame(PWindowRenderer* renderer);
 
 /**
  * @brief Return the number of frames the renderer keeps in flight.

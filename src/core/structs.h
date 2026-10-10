@@ -138,7 +138,7 @@ struct PWindowRenderer {
     PSurface* surface;
     PSwapchain* swapchain;
     PSync* sync;
-    PFrame frame;
+    PFrame* frames;
     PBool needs_recreate;
     PSwapchainDesc desc;
     PResourceTracker tracker;
@@ -206,9 +206,10 @@ struct PSwapchain {
     VkFormat image_format;
     VkColorSpaceKHR color_space;
     VkExtent2D extent;
-    uint32_t current_frame;
-    PImage* depth;
-    PImage* color_multisample;
+    uint32_t min_image_count;
+    PBool out_of_date;
+    PImage** depth;
+    PImage** color_multisample;
     VkSampleCountFlagBits samples;
 
     VkQueue present_queue;

@@ -182,7 +182,9 @@ int main(void)
 
     SDL_ShowWindow(window);
 
-    PBool running = P_TRUE;
+    PBool running       = P_TRUE;
+    uint32_t frame_slot = 0;
+
     while(running)
     {
         SDL_Event event;
@@ -202,10 +204,10 @@ int main(void)
             }
         }
 
-        pigment_wait_frame_ready(pigment, renderer);
+        pigment_wait_frame_ready(pigment, renderer, frame_slot);
 
         PFrame* frame;
-        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, UINT64_MAX, &frame);
+        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, frame_slot, UINT64_MAX, &frame);
         if(acquire_result == PIGMENT_RECREATE_REQUIRED)
         {
             pigment_recreate_swapchain(pigment, renderer);
@@ -244,6 +246,7 @@ int main(void)
 
         pigment_queue_submit(pigment, &submit, 1, NULL);
         pigment_present_frame(pigment, frame);
+        frame_slot = (frame_slot + 1) % pigment_max_frames_in_flight(pigment);
     }
 
     error_code = 0;

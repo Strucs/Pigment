@@ -517,11 +517,11 @@ int main(void)
 
         for(;;)
         {
-            pigment_wait_frame_ready(test.pigment, test.renderer);
+            pigment_wait_frame_ready(test.pigment, test.renderer, sequence % slot_count);
             const uint64_t timeouts[] = {0, 1000000, UINT64_MAX};
             uint64_t timeout          = timeouts[sequence % 3];
-            uint32_t slot             = pigment_renderer_current_frame(test.renderer);
-            PResult result            = pigment_begin_frame_context(test.pigment, test.renderer, timeout, &test.frame);
+            uint32_t slot             = sequence % slot_count;
+            PResult result            = pigment_begin_frame_context(test.pigment, test.renderer, slot, timeout, &test.frame);
             if(result == PIGMENT_SUCCESS)
             {
                 CHECK(test.frame != NULL);
@@ -529,7 +529,6 @@ int main(void)
             }
 
             CHECK(test.frame == NULL);
-            CHECK(pigment_renderer_current_frame(test.renderer) == slot);
             if(result == PIGMENT_NOT_READY || result == PIGMENT_TIMEOUT)
             {
                 CHECK((timeout == 0 && result == PIGMENT_NOT_READY) || (timeout != 0 && result == PIGMENT_TIMEOUT));
@@ -594,12 +593,12 @@ int main(void)
             expect_submit_failure(&test, &inactive, 1);
 
             PFrame* invalid = test.frame;
-            CHECK(pigment_begin_frame_context(NULL, test.renderer, 0, &invalid) == PIGMENT_ERROR);
+            CHECK(pigment_begin_frame_context(NULL, test.renderer, 0, 0, &invalid) == PIGMENT_ERROR);
             CHECK(invalid == NULL);
             invalid = test.frame;
-            CHECK(pigment_begin_frame_context(test.pigment, NULL, 0, &invalid) == PIGMENT_ERROR);
+            CHECK(pigment_begin_frame_context(test.pigment, NULL, 0, 0, &invalid) == PIGMENT_ERROR);
             CHECK(invalid == NULL);
-            CHECK(pigment_begin_frame_context(test.pigment, test.renderer, 0, NULL) == PIGMENT_ERROR);
+            CHECK(pigment_begin_frame_context(test.pigment, test.renderer, 0, 0, NULL) == PIGMENT_ERROR);
         }
 
         memcpy(slot->handles, test.handles, sizeof(slot->handles));

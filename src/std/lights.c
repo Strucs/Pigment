@@ -230,14 +230,12 @@ void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* ligh
     pigment_cmd_use_buffer(pigment, cmd, lights->buffer);
 }
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
+void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, uint32_t frame_slot, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
 {
-    if(pigment == NULL || cmd == NULL || renderer == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
+    if(pigment == NULL || cmd == NULL || frame_slot >= pigment_max_frames_in_flight(pigment) || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
     {
         return;
     }
-
-    uint32_t current_frame = pigment_renderer_current_frame(renderer);
 
     pigment_std_lights_use(pigment, cmd, lights);
     pigment_std_mesh_use(pigment, cmd, sphere_mesh);
@@ -245,9 +243,9 @@ void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PWindo
     uint64_t camera_slot_address = 0;
     if(camera != NULL)
     {
-        pigment_std_camera_upload(pigment, camera, current_frame);
+        pigment_std_camera_upload(pigment, camera, frame_slot);
         pigment_std_camera_use(pigment, cmd, camera);
-        camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, current_frame);
+        camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, frame_slot);
     }
 
     PStdGizmoPushConstants push = {

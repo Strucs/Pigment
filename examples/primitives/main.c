@@ -426,7 +426,9 @@ int main(void)
     Uint64 start_ticks = SDL_GetPerformanceCounter();
     double ticks_freq  = (double) SDL_GetPerformanceFrequency();
 
-    PBool running = P_TRUE;
+    PBool running       = P_TRUE;
+    uint32_t frame_slot = 0;
+
     while(running)
     {
         SDL_Event event;
@@ -485,10 +487,10 @@ int main(void)
             }
         }
 
-        pigment_wait_frame_ready(pigment, renderer);
+        pigment_wait_frame_ready(pigment, renderer, frame_slot);
 
         PFrame* frame;
-        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, UINT64_MAX, &frame);
+        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, frame_slot, UINT64_MAX, &frame);
         if(acquire_result == PIGMENT_RECREATE_REQUIRED)
         {
             pigment_recreate_swapchain(pigment, renderer);
@@ -516,10 +518,10 @@ int main(void)
         pigment_begin_render_pass(pigment, cmd, &scene_pass);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
-        pigment_draw(pigment, cmd, renderer, bindless, ring, materials, lights, camera, pipeline, draw_calls, 5);
+        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipeline, draw_calls, 5);
 
         pigment_bind_pipeline(pigment, cmd, skybox_pipeline);
-        pigment_std_draw_skybox(pigment, cmd, renderer, bindless, skybox_pipeline, camera, cubemap_slot, 0);
+        pigment_std_draw_skybox(pigment, cmd, frame_slot, bindless, skybox_pipeline, camera, cubemap_slot, 0);
 
         pigment_end_render_pass(pigment, cmd, &scene_pass);
 
@@ -557,7 +559,7 @@ int main(void)
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, crt_pipeline);
-        pigment_std_draw_crt(pigment, cmd, renderer, bindless, crt_pipeline, rt_slot, 1, t);
+        pigment_std_draw_crt(pigment, cmd, renderer, frame_slot, bindless, crt_pipeline, rt_slot, 1, t);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
@@ -574,6 +576,7 @@ int main(void)
 
         pigment_queue_submit(pigment, &submit, 1, NULL);
         pigment_present_frame(pigment, frame);
+        frame_slot = (frame_slot + 1) % pigment_max_frames_in_flight(pigment);
     }
 
     error_code = 0;
