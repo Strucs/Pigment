@@ -297,12 +297,18 @@ int main(void)
 
         pigment_wait_frame_ready(pigment, renderer);
 
-        PFrame* frame = pigment_begin_frame_context(pigment, renderer);
-        if(frame == NULL)
+        PFrame* frame;
+        PResult acquire_result = pigment_begin_frame_context(pigment, renderer, UINT64_MAX, &frame);
+        if(acquire_result == PIGMENT_RECREATE_REQUIRED)
         {
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
+        if(acquire_result != PIGMENT_SUCCESS)
+        {
+            break;
+        }
+
         PCommandBuffer* cmd = frame_cmds[pigment_frame_slot(frame)];
         pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 

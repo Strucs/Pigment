@@ -34,6 +34,9 @@ typedef enum PResult {
     PIGMENT_ERROR               = 1,
     PIGMENT_ERROR_OUT_OF_MEMORY = 2,
     PIGMENT_ERROR_VULKAN        = 3,
+    PIGMENT_NOT_READY           = 4,
+    PIGMENT_TIMEOUT             = 5,
+    PIGMENT_RECREATE_REQUIRED   = 6,
 } PResult;
 
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \

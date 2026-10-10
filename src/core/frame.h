@@ -106,7 +106,8 @@ PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* ren
 /**
  * @brief Acquire a frame.
  *
- * Call after pigment_wait_frame_ready. Drains deletions and blocks on acquire.
+ * Call after pigment_wait_frame_ready. Drains deletions before acquiring.
+ * The timeout applies only to image acquisition, not prior GPU work or deletion callbacks.
  * The caller owns the command buffers and starts recording separately.
  * One active CPU frame per renderer. The borrowed context expires at present.
  * Keep renderer resources alive and defer swapchain recreation until present.
@@ -117,10 +118,13 @@ PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* ren
  *
  * @param pigment Pigment instance.
  * @param renderer Frame owner.
+ * @param timeout_ns Acquire timeout in nanoseconds. Zero polls, UINT64_MAX waits indefinitely.
+ * @param out_frame Acquired context, set to NULL unless acquisition succeeds.
  *
- * @return Frame context, or NULL on failure or required recreation.
+ * @return PIGMENT_SUCCESS, PIGMENT_NOT_READY, PIGMENT_TIMEOUT, PIGMENT_RECREATE_REQUIRED or an error.
+ * A suboptimal swapchain returns a usable frame to present before recreation.
  */
-PIGMENT_API PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer);
+PIGMENT_API PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint64_t timeout_ns, PFrame** out_frame);
 
 /**
  * @brief Get the frame slot.

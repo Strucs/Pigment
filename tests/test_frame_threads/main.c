@@ -498,8 +498,9 @@ int main(void)
     SDL_Thread* watchdog_thread = SDL_CreateThread(watchdog, "frame_watchdog", &test);
     CHECK(submit_thread != NULL && watchdog_thread != NULL);
 
-    Uint64 start         = SDL_GetTicks();
-    uint32_t recreations = 0;
+    Uint64 start             = SDL_GetTicks();
+    uint32_t recreations     = 0;
+    uint32_t acquire_retries = 0;
 
     for(uint32_t sequence = 0; sequence < frame_count; sequence++)
     {
@@ -517,11 +518,28 @@ int main(void)
         for(;;)
         {
             pigment_wait_frame_ready(test.pigment, test.renderer);
-            test.frame = pigment_begin_frame_context(test.pigment, test.renderer);
-            if(test.frame != NULL)
+            const uint64_t timeouts[] = {0, 1000000, UINT64_MAX};
+            uint64_t timeout          = timeouts[sequence % 3];
+            uint32_t slot             = pigment_renderer_current_frame(test.renderer);
+            PResult result            = pigment_begin_frame_context(test.pigment, test.renderer, timeout, &test.frame);
+            if(result == PIGMENT_SUCCESS)
             {
+                CHECK(test.frame != NULL);
                 break;
             }
+
+            CHECK(test.frame == NULL);
+            CHECK(pigment_renderer_current_frame(test.renderer) == slot);
+            if(result == PIGMENT_NOT_READY || result == PIGMENT_TIMEOUT)
+            {
+                CHECK((timeout == 0 && result == PIGMENT_NOT_READY) || (timeout != 0 && result == PIGMENT_TIMEOUT));
+                acquire_retries++;
+                SDL_PumpEvents();
+                SDL_Delay(1);
+                continue;
+            }
+
+            CHECK(result == PIGMENT_RECREATE_REQUIRED);
             CHECK(pigment_recreate_swapchain(test.pigment, test.renderer) == PIGMENT_SUCCESS);
             recreations++;
         }
@@ -574,6 +592,14 @@ int main(void)
         {
             PSubmit inactive = {.frame = test.frame, .wait_acquire = P_TRUE, .signal_present = P_TRUE};
             expect_submit_failure(&test, &inactive, 1);
+
+            PFrame* invalid = test.frame;
+            CHECK(pigment_begin_frame_context(NULL, test.renderer, 0, &invalid) == PIGMENT_ERROR);
+            CHECK(invalid == NULL);
+            invalid = test.frame;
+            CHECK(pigment_begin_frame_context(test.pigment, NULL, 0, &invalid) == PIGMENT_ERROR);
+            CHECK(invalid == NULL);
+            CHECK(pigment_begin_frame_context(test.pigment, test.renderer, 0, NULL) == PIGMENT_ERROR);
         }
 
         memcpy(slot->handles, test.handles, sizeof(slot->handles));
@@ -614,7 +640,7 @@ int main(void)
     atomic_store_explicit(&test.watchdog_stop, P_TRUE, memory_order_relaxed);
     SDL_WaitThread(watchdog_thread, NULL);
 
-    printf("OK frames=%u slots=%u queues=%u recorders=%d recreations=%u elapsed=%.3f s\n", frame_count, slot_count, queue_count, RECORDERS, recreations, (double) (SDL_GetTicks() - start) / 1000.0);
+    printf("OK frames=%u slots=%u queues=%u recorders=%d recreations=%u acquire_retries=%u elapsed=%.3f s\n", frame_count, slot_count, queue_count, RECORDERS, recreations, acquire_retries, (double) (SDL_GetTicks() - start) / 1000.0);
 
     SDL_DestroyWindow(window);
     SDL_Quit();

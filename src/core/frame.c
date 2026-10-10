@@ -36,42 +36,57 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
     pigment_resource_tracker_wait(pigment, &renderer->sync->per_slot_trackers[current_frame]);
 }
 
-PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer)
+PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint64_t timeout_ns, PFrame** out_frame)
 {
-    if(pigment == NULL || renderer == NULL)
+    if(out_frame != NULL)
     {
-        return NULL;
+        *out_frame = NULL;
+    }
+
+    if(pigment == NULL || renderer == NULL || out_frame == NULL)
+    {
+        return PIGMENT_ERROR;
     }
 
     if(renderer->frame.active)
     {
         PLOG_ERROR(pigment, "Cannot begin a frame while the previous frame is still active.");
-        return NULL;
+        return PIGMENT_ERROR;
     }
 
     drain_deletion_queue(pigment);
 
     if(renderer->needs_recreate)
     {
-        return NULL;
+        return PIGMENT_RECREATE_REQUIRED;
     }
 
     PDevice* device        = pigment->device;
     uint32_t current_frame = renderer->swapchain->current_frame;
     uint32_t image_index   = 0;
 
-    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, UINT64_MAX, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
+    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, renderer->sync->image_available_semaphores[current_frame], VK_NULL_HANDLE, &image_index);
+
+    if(result == VK_NOT_READY)
+    {
+        return PIGMENT_NOT_READY;
+    }
+
+    if(result == VK_TIMEOUT)
+    {
+        return PIGMENT_TIMEOUT;
+    }
 
     if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         recreate_image_available_semaphore(pigment, renderer->sync, current_frame);
         renderer->needs_recreate = P_TRUE;
-        return NULL;
+        return PIGMENT_RECREATE_REQUIRED;
     }
     else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
-        PLOG_ERROR(pigment, "Failed to acquire swapchain image!");
-        return NULL;
+        PLOG_ERROR(pigment, "Failed to acquire swapchain image (result: %d)", result);
+        return PIGMENT_ERROR_VULKAN;
     }
 
     // SUBOPTIMAL still acquires an image: consume its semaphore and present it
@@ -91,7 +106,8 @@ PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer)
         .active      = P_TRUE,
     };
 
-    return &renderer->frame;
+    *out_frame = &renderer->frame;
+    return PIGMENT_SUCCESS;
 }
 
 uint32_t pigment_frame_slot(const PFrame* frame)
