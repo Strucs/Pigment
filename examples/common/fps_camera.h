@@ -21,7 +21,7 @@ typedef struct FPSCameraState {
     float fov_rad;
     float near;
 
-    float last_frame_time;
+    double last_frame_time;
     float mouse_offset_x;
     float mouse_offset_y;
     float mouse_sensitivity;
@@ -78,12 +78,12 @@ void fps_camera_handle_sdl_event(PCamera* camera, FPSCameraState* state, const S
 
 void fps_camera_update(PCamera* camera, FPSCameraState* state)
 {
-    float current_time = (float) ((double) SDL_GetPerformanceCounter() / (double) SDL_GetPerformanceFrequency());
+    double current_time = (double) SDL_GetPerformanceCounter() / (double) SDL_GetPerformanceFrequency();
     if(state->last_frame_time == 0.0f)
     {
         state->last_frame_time = current_time;
     }
-    float delta_time       = current_time - state->last_frame_time;
+    float delta_time       = (float) (current_time - state->last_frame_time);
     state->last_frame_time = current_time;
     float speed            = state->speed * delta_time;
 
