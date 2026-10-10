@@ -96,6 +96,8 @@ struct PRenderPassDesc {
 /**
  * @brief Block until the next frame slot's previous GPU work has completed.
  *
+ * Waits for all submits associated with the slot on every queue used.
+ *
  * @param pigment Pigment instance.
  * @param renderer The renderer whose next frame slot to wait on.
  */
@@ -159,26 +161,9 @@ PIGMENT_API void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuff
 PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFrame* frame);
 
 /**
- * @brief Submit commands for an acquired frame.
- *
- * Submit once, then call pigment_present_frame with CPU ordering between threads.
- * Synchronize queue access and retain recorded resources until this call returns.
- * The buffer and queue must belong to the renderer's graphics family.
- *
- * @param pigment Pigment instance.
- * @param frame Acquired frame.
- * @param cmd Primary command buffer with recording ended.
- * @param queue Submit queue, or NULL for the first graphics queue.
- * @param waits Prior GPU submissions to wait on, or NULL.
- * @param wait_count Number of waits.
- *
- * @return GPU completion handle, or a zero handle on failure.
- */
-PIGMENT_API PSubmitHandle pigment_queue_submit_frame_context(Pigment* pigment, PFrame* frame, PCommandBuffer* cmd, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count);
-
-/**
  * @brief Present the frame, invalidate its context and advance the slot.
  *
+ * Call after a successful pigment_queue_submit with signal_present set.
  * Caller must synchronize access to the frame, renderer and present queue.
  *
  * @param pigment Pigment instance.

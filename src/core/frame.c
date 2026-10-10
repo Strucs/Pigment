@@ -33,19 +33,7 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer)
     }
 
     uint32_t current_frame = renderer->swapchain->current_frame;
-    PSubmitHandle slot     = renderer->sync->per_slot_handle[current_frame];
-    if(slot.queue == NULL || slot.value == 0 || slot.queue->timeline == VK_NULL_HANDLE)
-    {
-        return;
-    }
-
-    VkSemaphoreWaitInfo wait_info = {
-        .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-        .semaphoreCount = 1,
-        .pSemaphores    = &slot.queue->timeline,
-        .pValues        = &slot.value,
-    };
-    vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
+    pigment_resource_tracker_wait(pigment, &renderer->sync->per_slot_trackers[current_frame]);
 }
 
 PFrame* pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer)
@@ -136,7 +124,7 @@ uint32_t pigment_max_frames_in_flight(Pigment* pigment)
 
 void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, const PFrame* frame, const PSwapchainPassDesc* desc)
 {
-    if(pigment == NULL || cmd == NULL || frame == NULL || !frame->active || frame->submitted)
+    if(pigment == NULL || cmd == NULL || frame == NULL || !frame->active || frame->present_ready)
     {
         return;
     }
@@ -299,7 +287,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
 
 void pigment_cmd_end_swapchain_pass(PCommandBuffer* command_buffer, const PFrame* frame)
 {
-    if(command_buffer == NULL || frame == NULL || !frame->active || frame->submitted)
+    if(command_buffer == NULL || frame == NULL || !frame->active || frame->present_ready)
     {
         return;
     }
@@ -455,7 +443,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
                 .image       = ref->resolve_image,
                 .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
                 .new_layout  = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
-                .src         = {                       P_PIPELINE_STAGE_NONE,                       P_MEMORY_ACCESS_NONE},
+                .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
                 .dst         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
                 .base_mip    = ref->resolve_mip_level,
                 .mip_count   = 1,
@@ -530,8 +518,8 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
                 .image       = ref->resolve_image,
                 .old_layout  = P_IMAGE_LAYOUT_UNDEFINED,
                 .new_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
-                .src         = { P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,                                                     P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-                .dst         = {P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+                .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+                .dst         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
                 .base_mip    = ref->resolve_mip_level,
                 .mip_count   = 1,
                 .base_layer  = ref->resolve_base_layer,
@@ -727,8 +715,8 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
                     .image       = ref->resolve_image,
                     .old_layout  = P_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT,
                     .new_layout  = resolve_target,
-                    .src         = {P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
-                    .dst         = {                               dst_stage,                                         dst_access},
+                    .src         = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+                    .dst         = {                                   dst_stage,                                 dst_access},
                     .base_mip    = ref->resolve_mip_level,
                     .mip_count   = 1,
                     .base_layer  = ref->resolve_base_layer,
@@ -743,117 +731,9 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
     P_STACK_OR_HEAP_FREE(pigment, barriers);
 }
 
-PSubmitHandle pigment_queue_submit_frame_context(Pigment* pigment, PFrame* frame, PCommandBuffer* frame_cmd, PDeviceQueue* queue, const PSubmitWait* waits, uint32_t wait_count)
-{
-    if(pigment == NULL || frame == NULL || !frame->active || frame->submitted || frame_cmd == NULL)
-    {
-        return (PSubmitHandle) {0};
-    }
-
-    if(waits == NULL)
-    {
-        wait_count = 0;
-    }
-
-    PDeviceQueue* graphics = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
-
-    if(queue == NULL)
-    {
-        queue = graphics;
-    }
-
-    if(graphics == NULL || queue == NULL || queue->timeline == VK_NULL_HANDLE)
-    {
-        PLOG_ERROR(pigment, "Frame submit queue unavailable, frame submit aborted.");
-        return (PSubmitHandle) {0};
-    }
-
-    PWindowRenderer* renderer = frame->renderer;
-    uint32_t current_frame    = frame->slot;
-    uint32_t image_index      = frame->image_index;
-
-    if(frame_cmd->source_pool == NULL
-       || frame_cmd->source_pool->queue_family_index != queue->family_index
-       || queue->family_index != graphics->family_index)
-    {
-        PLOG_ERROR(pigment, "Frame command buffer and submit queue must belong to the renderer's graphics family.");
-        return (PSubmitHandle) {0};
-    }
-
-    uint32_t total_wait_count = 1 + wait_count;
-    P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, wait_infos, total_wait_count);
-    if(wait_infos == NULL)
-    {
-        PLOG_ERROR(pigment, "Failed to allocate frame submit wait list.");
-        return (PSubmitHandle) {0};
-    }
-
-    PSubmitHandle handle = {.queue = queue, .value = device_queue_acquire_value(queue)};
-
-    wait_infos[0] = (VkSemaphoreSubmitInfo) {
-        .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-        .semaphore = frame->sync->image_available_semaphores[current_frame],
-        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-    };
-
-    for(uint32_t i = 0; i < wait_count; i++)
-    {
-        PPipelineStage stage = (waits[i].stage != P_PIPELINE_STAGE_NONE) ? waits[i].stage : P_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        wait_infos[1 + i]    = (VkSemaphoreSubmitInfo) {
-            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .semaphore = (waits[i].handle.queue != NULL) ? waits[i].handle.queue->timeline : VK_NULL_HANDLE,
-            .value     = waits[i].handle.value,
-            .stageMask = pipeline_stage_to_vk(stage),
-        };
-    }
-
-    VkSemaphoreSubmitInfo signal_infos[2] = {
-        {
-         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-         .semaphore = frame->sync->render_finished_semaphores[image_index],
-         .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-         },
-        {
-         .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-         .semaphore = queue->timeline,
-         .value     = handle.value,
-         .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-         },
-    };
-
-    VkCommandBufferSubmitInfo cmd_info = {
-        .sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-        .commandBuffer = frame_cmd->buffer,
-    };
-
-    VkSubmitInfo2 submit_info = {
-        .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .waitSemaphoreInfoCount   = total_wait_count,
-        .pWaitSemaphoreInfos      = wait_infos,
-        .commandBufferInfoCount   = 1,
-        .pCommandBufferInfos      = &cmd_info,
-        .signalSemaphoreInfoCount = 2,
-        .pSignalSemaphoreInfos    = signal_infos,
-    };
-
-    VkResult result = vkQueueSubmit2(queue->queue, 1, &submit_info, VK_NULL_HANDLE);
-    P_STACK_OR_HEAP_FREE(pigment, wait_infos);
-    if(result != VK_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to submit draw command buffer! (result: %d)", result);
-        return (PSubmitHandle) {0};
-    }
-    frame->sync->per_slot_handle[current_frame] = handle;
-    atomic_store_explicit(&renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
-    stamp_uses_submit(&frame_cmd, 1, queue->slot, handle.value);
-    frame->submitted = P_TRUE;
-
-    return handle;
-}
-
 void pigment_present_frame(Pigment* pigment, PFrame* frame)
 {
-    if(pigment == NULL || frame == NULL || !frame->active || !frame->submitted)
+    if(pigment == NULL || frame == NULL || !frame->active || !frame->present_ready)
     {
         return;
     }

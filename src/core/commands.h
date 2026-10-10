@@ -36,10 +36,30 @@ typedef struct PSubmit {
 
     /**
      * @brief List of prior submits this batch should wait on before executing.
-     *        Only necesarry for cross-queue synchronization.
      */
     const PSubmitWait* waits;
     uint32_t wait_count;
+
+    /**
+     * @brief Optional frame whose slot tracks this submit's completion.
+     */
+    PFrame* frame;
+
+    /**
+     * @brief Wait for image acquisition. Required only on the first frame submit.
+     */
+    PBool wait_acquire;
+
+    /**
+     * @brief Acquire wait stage. NONE defaults to ALL_COMMANDS.
+     * Cover the first image access and its layout transition.
+     */
+    PPipelineStage acquire_stage;
+
+    /**
+     * @brief Signal presentation readiness. Required only on the final frame submit.
+     */
+    PBool signal_present;
 } PSubmit;
 
 /**
@@ -152,6 +172,18 @@ PIGMENT_API void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
 /**
  * @brief Batched submit. Consecutive submits on the same queue are coalesced into one
  *        vkQueueSubmit2 call, cross-queue splits per queue.
+ *
+ * The caller must serialize access to each queue and frame, and retain recorded
+ * resources until this call returns. Command buffers must belong to the queue family.
+ * Frame submits require the renderer's graphics family. The caller defines GPU
+ * dependencies with waits and recorded barriers. No frame submits are chained automatically.
+ * Set wait_acquire on the first frame submit and signal_present on the last.
+ * Both may be set on a single submit. No further submits may use that frame.
+ * The final submit must depend on acquisition and all work accessing the presented image.
+ * Slot reuse waits for all frame submits, including work independent of presentation.
+ * Empty command lists are allowed. Explicit waits also apply to frame submits.
+ * On failure, earlier queue batches may have succeeded. Only successful submits
+ * update frame state and receive nonzero output handles.
  *
  * @param pigment Pigment instance.
  * @param submits Array of submit descriptors.

@@ -328,6 +328,11 @@ void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd)
 
 PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t submit_count, PSubmitHandle* handles_out)
 {
+    if(handles_out != NULL)
+    {
+        memset(handles_out, 0, sizeof(*handles_out) * submit_count);
+    }
+
     if(pigment == NULL || submits == NULL || submit_count == 0)
     {
         return PIGMENT_ERROR;
@@ -339,9 +344,10 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
     uint32_t total_wait_count = 0;
     for(uint32_t i = 0; i < submit_count; i++)
     {
-        if(submits[i].cmds == NULL || submits[i].cmd_count == 0)
+        const PSubmit* submit = &submits[i];
+        if((submit->cmd_count > 0 && submit->cmds == NULL) || (submit->wait_count > 0 && submit->waits == NULL))
         {
-            PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] has no command buffers.", i);
+            PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] has a missing array.", i);
             return PIGMENT_ERROR;
         }
 
@@ -357,7 +363,8 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             PCommandBuffer* cmd = submits[i].cmds[j];
             if(cmd == NULL || cmd->source_pool == NULL)
             {
-                continue;
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] is invalid.", i, j);
+                return PIGMENT_ERROR;
             }
             if(cmd->source_pool->queue_family_index != queue->family_index)
             {
@@ -366,22 +373,67 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             }
         }
 
+        for(uint32_t j = 0; j < submit->wait_count; j++)
+        {
+            PSubmitHandle handle = submit->waits[j].handle;
+            if(handle.queue == NULL || handle.queue->timeline == VK_NULL_HANDLE || handle.value == 0)
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].waits[%u] is invalid.", i, j);
+                return PIGMENT_ERROR;
+            }
+        }
+
+        PFrame* frame = submit->frame;
+        if(frame != NULL)
+        {
+            if(!frame->active || graphics_default == NULL || queue->family_index != graphics_default->family_index)
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] requires an active frame and its graphics family.", i);
+                return PIGMENT_ERROR;
+            }
+
+            PBool acquire_waited = frame->acquire_waited;
+            PBool present_ready  = frame->present_ready;
+            for(uint32_t j = i; j > 0; j--)
+            {
+                if(submits[j - 1].frame == frame)
+                {
+                    acquire_waited = P_TRUE;
+                    present_ready  = submits[j - 1].signal_present;
+                    break;
+                }
+            }
+
+            if(present_ready || (submit->wait_acquire && acquire_waited) || (!submit->wait_acquire && !acquire_waited))
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] must wait acquire once and signal present last.", i);
+                return PIGMENT_ERROR;
+            }
+
+            total_wait_count += submit->wait_acquire ? 1 : 0;
+        }
+        else if(submit->wait_acquire || submit->signal_present || submit->acquire_stage != P_PIPELINE_STAGE_NONE)
+        {
+            PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] has frame settings without a frame.", i);
+            return PIGMENT_ERROR;
+        }
+
         total_cmd_count += submits[i].cmd_count;
         total_wait_count += submits[i].wait_count;
     }
 
     P_STACK_OR_HEAP(VkSubmitInfo2, submit_infos, submit_count);
     P_STACK_OR_HEAP(VkCommandBufferSubmitInfo, cmd_infos, total_cmd_count);
-    P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, signals, submit_count);
+    P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, signals, submit_count * 2);
     P_STACK_OR_HEAP(VkSemaphoreSubmitInfo, waits, total_wait_count == 0 ? 1 : total_wait_count);
-    P_STACK_OR_HEAP(PDeviceQueue*, submit_queues, submit_count);
-    if(submit_infos == NULL || cmd_infos == NULL || signals == NULL || waits == NULL || submit_queues == NULL)
+    P_STACK_OR_HEAP(PSubmitHandle, handles, submit_count);
+    if(submit_infos == NULL || cmd_infos == NULL || signals == NULL || waits == NULL || handles == NULL)
     {
         P_STACK_OR_HEAP_FREE(pigment, submit_infos);
         P_STACK_OR_HEAP_FREE(pigment, cmd_infos);
         P_STACK_OR_HEAP_FREE(pigment, signals);
         P_STACK_OR_HEAP_FREE(pigment, waits);
-        P_STACK_OR_HEAP_FREE(pigment, submit_queues);
+        P_STACK_OR_HEAP_FREE(pigment, handles);
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
@@ -390,14 +442,8 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
     for(uint32_t i = 0; i < submit_count; i++)
     {
         PDeviceQueue* queue = submits[i].queue != NULL ? submits[i].queue : graphics_default;
-        submit_queues[i]    = queue;
         uint64_t this_value = device_queue_acquire_value(queue);
-        stamp_uses_submit(submits[i].cmds, submits[i].cmd_count, queue->slot, this_value);
-
-        if(handles_out != NULL)
-        {
-            handles_out[i] = (PSubmitHandle) {.queue = queue, .value = this_value};
-        }
+        handles[i]          = (PSubmitHandle) {.queue = queue, .value = this_value};
 
         for(uint32_t j = 0; j < submits[i].cmd_count; j++)
         {
@@ -413,31 +459,53 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             PPipelineStage stage    = (wait->stage != P_PIPELINE_STAGE_NONE) ? wait->stage : P_PIPELINE_STAGE_ALL_COMMANDS_BIT;
             waits[wait_offset + j]  = (VkSemaphoreSubmitInfo) {
                 .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .semaphore = (wait->handle.queue != NULL) ? wait->handle.queue->timeline : VK_NULL_HANDLE,
+                .semaphore = wait->handle.queue->timeline,
                 .value     = wait->handle.value,
                 .stageMask = pipeline_stage_to_vk(stage),
             };
         }
 
-        signals[i] = (VkSemaphoreSubmitInfo) {
+        uint32_t wait_count = submits[i].wait_count;
+        PFrame* frame       = submits[i].frame;
+        if(submits[i].wait_acquire)
+        {
+            PPipelineStage stage              = submits[i].acquire_stage;
+            waits[wait_offset + wait_count++] = (VkSemaphoreSubmitInfo) {
+                .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .semaphore = frame->sync->image_available_semaphores[frame->slot],
+                .stageMask = stage != P_PIPELINE_STAGE_NONE ? pipeline_stage_to_vk(stage) : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            };
+        }
+
+        signals[i * 2] = (VkSemaphoreSubmitInfo) {
             .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
             .semaphore = queue->timeline,
             .value     = this_value,
             .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
         };
 
+        uint32_t signal_count = 1;
+        if(submits[i].signal_present)
+        {
+            signals[i * 2 + signal_count++] = (VkSemaphoreSubmitInfo) {
+                .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .semaphore = frame->sync->render_finished_semaphores[frame->image_index],
+                .stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            };
+        }
+
         submit_infos[i] = (VkSubmitInfo2) {
             .sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .waitSemaphoreInfoCount   = submits[i].wait_count,
-            .pWaitSemaphoreInfos      = submits[i].wait_count > 0 ? &waits[wait_offset] : NULL,
+            .waitSemaphoreInfoCount   = wait_count,
+            .pWaitSemaphoreInfos      = wait_count > 0 ? &waits[wait_offset] : NULL,
             .commandBufferInfoCount   = submits[i].cmd_count,
             .pCommandBufferInfos      = &cmd_infos[cmd_offset],
-            .signalSemaphoreInfoCount = 1,
-            .pSignalSemaphoreInfos    = &signals[i],
+            .signalSemaphoreInfoCount = signal_count,
+            .pSignalSemaphoreInfos    = &signals[i * 2],
         };
 
         cmd_offset += submits[i].cmd_count;
-        wait_offset += submits[i].wait_count;
+        wait_offset += wait_count;
     }
 
     // Batch submits by queue to minimize while keeping the order of submits intact to
@@ -446,9 +514,9 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
     uint32_t i      = 0;
     while(i < submit_count)
     {
-        PDeviceQueue* queue = submit_queues[i];
+        PDeviceQueue* queue = handles[i].queue;
         uint32_t end        = i + 1;
-        while(end < submit_count && submit_queues[end] == queue)
+        while(end < submit_count && handles[end].queue == queue)
         {
             end++;
         }
@@ -458,6 +526,26 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
         {
             break;
         }
+
+        for(uint32_t j = i; j < end; j++)
+        {
+            PSubmitHandle handle = handles[j];
+            stamp_uses_submit(submits[j].cmds, submits[j].cmd_count, queue->slot, handle.value);
+            if(handles_out != NULL)
+            {
+                handles_out[j] = handle;
+            }
+
+            PFrame* frame = submits[j].frame;
+            if(frame != NULL)
+            {
+                frame->acquire_waited = P_TRUE;
+                frame->present_ready  = submits[j].signal_present;
+                atomic_store_explicit(&frame->sync->per_slot_trackers[frame->slot].last_used[queue->slot], handle.value, memory_order_relaxed);
+                atomic_store_explicit(&frame->renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
+            }
+        }
+
         i = end;
     }
 
@@ -465,7 +553,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
     P_STACK_OR_HEAP_FREE(pigment, cmd_infos);
     P_STACK_OR_HEAP_FREE(pigment, signals);
     P_STACK_OR_HEAP_FREE(pigment, waits);
-    P_STACK_OR_HEAP_FREE(pigment, submit_queues);
+    P_STACK_OR_HEAP_FREE(pigment, handles);
 
     if(result != VK_SUCCESS)
     {

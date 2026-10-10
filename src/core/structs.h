@@ -127,7 +127,8 @@ struct PFrame {
     uint32_t image_index;
     PBool transparent;
     PBool active;
-    PBool submitted;
+    PBool acquire_waited;
+    PBool present_ready;
 };
 
 struct PWindowRenderer {
@@ -280,7 +281,7 @@ struct PCommandBuffer {
 struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
-    PSubmitHandle* per_slot_handle;
+    PResourceTracker* per_slot_trackers;
     VkFence* present_fences;
 };
 

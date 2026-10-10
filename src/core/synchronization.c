@@ -45,10 +45,18 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         goto ERROR;
     }
 
-    sync->per_slot_handle = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->per_slot_handle, max_frame);
-    if(sync->per_slot_handle == NULL)
+    sync->per_slot_trackers = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->per_slot_trackers, max_frame);
+    if(sync->per_slot_trackers == NULL)
     {
         goto ERROR;
+    }
+
+    for(uint32_t i = 0; i < max_frame; i++)
+    {
+        if(pigment_resource_tracker_init(pigment, &sync->per_slot_trackers[i]) != PIGMENT_SUCCESS)
+        {
+            goto ERROR;
+        }
     }
 
     if(pigment_has_swapchain_maintenance1(pigment))
@@ -122,7 +130,16 @@ ERROR:
             }
             P_FREE(pigment, sync->present_fences);
         }
-        P_FREE(pigment, sync->per_slot_handle);
+
+        if(sync->per_slot_trackers != NULL)
+        {
+            for(uint32_t i = 0; i < max_frame; i++)
+            {
+                pigment_resource_tracker_destroy(pigment, &sync->per_slot_trackers[i]);
+            }
+            P_FREE(pigment, sync->per_slot_trackers);
+        }
+
         P_FREE(pigment, sync->render_finished_semaphores);
         P_FREE(pigment, sync->image_available_semaphores);
         P_FREE(pigment, sync);
@@ -140,6 +157,7 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
 
     for(size_t i = 0; i < max_frame; i++)
     {
+        pigment_resource_tracker_destroy(pigment, &sync->per_slot_trackers[i]);
         vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], &pigment->vk_alloc);
         if(sync->present_fences != NULL)
         {
@@ -153,7 +171,7 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     }
 
     P_FREE(pigment, sync->present_fences);
-    P_FREE(pigment, sync->per_slot_handle);
+    P_FREE(pigment, sync->per_slot_trackers);
     P_FREE(pigment, sync->render_finished_semaphores);
     P_FREE(pigment, sync->image_available_semaphores);
     P_FREE(pigment, sync);

@@ -556,7 +556,17 @@ int main(void)
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
         pigment_end_recording(pigment, cmd);
-        pigment_queue_submit_frame_context(pigment, frame, cmd, NULL, NULL, 0);
+
+        PSubmit submit = {
+            .cmds           = &cmd,
+            .cmd_count      = 1,
+            .frame          = frame,
+            .wait_acquire   = P_TRUE,
+            .acquire_stage  = P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .signal_present = P_TRUE,
+        };
+
+        pigment_queue_submit(pigment, &submit, 1, NULL);
         pigment_present_frame(pigment, frame);
     }
 
