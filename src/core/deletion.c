@@ -264,7 +264,7 @@ WAIT:
     destroy_fn(pigment, resource);
 }
 
-void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker, const VkFence* present_fences, uint32_t fence_count)
+void defer_destroy_swapchain(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const VkFence* present_fences, uint32_t fence_count)
 {
     if(pigment == NULL || destroy_fn == NULL || resource == NULL)
     {
@@ -277,39 +277,13 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
         return;
     }
 
-    uint32_t queue_count = (pigment->device != NULL) ? pigment->device->queue_count : 0;
-    uint32_t cap         = queue_count + fence_count;
-    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, cap);
+    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, fence_count);
     if(targets == NULL)
     {
         goto WAIT;
     }
 
     uint32_t target_count = 0;
-
-    if(tracker != NULL && tracker->last_used != NULL && pigment->device != NULL && pigment->device->queues != NULL)
-    {
-        PDevice* device = pigment->device;
-        for(uint32_t i = 0; i < device->queue_count; i++)
-        {
-            PDeviceQueue* queue = &device->queues[i];
-            if(queue->timeline == VK_NULL_HANDLE)
-            {
-                continue;
-            }
-
-            uint64_t value = atomic_load_explicit(&tracker->last_used[queue->slot], memory_order_relaxed);
-            if(value == 0)
-            {
-                continue;
-            }
-
-            targets[target_count++] = (PWaitTarget) {
-                .kind     = P_WAIT_TIMELINE,
-                .timeline = {.semaphore = queue->timeline, .value = value},
-            };
-        }
-    }
 
     for(uint32_t i = 0; i < fence_count; i++)
     {
@@ -333,7 +307,6 @@ void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resou
 
 WAIT:
     P_FREE(pigment, targets);
-    pigment_resource_tracker_wait(pigment, tracker);
     if(fence_count != 0)
     {
         vkWaitForFences(pigment->device->logical_device, fence_count, present_fences, VK_TRUE, UINT64_MAX);

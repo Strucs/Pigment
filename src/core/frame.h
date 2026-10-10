@@ -109,7 +109,7 @@ PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* ren
  * @brief Acquire a frame and drain pending deletions.
  *
  * The caller must wait for prior GPU use of the slot and synchronize renderer, frame and queue access.
- * Close every context with pigment_present_frame before recreating or destroying the renderer.
+ * Contexts survive swapchain recreation. Close them with pigment_present_frame before destroying the renderer.
  *
  * @param pigment Pigment instance.
  * @param renderer Frame owner.
@@ -164,8 +164,8 @@ PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFram
  * @brief Present the frame and release its CPU slot.
  *
  * Call after a successful pigment_queue_submit with signal_present set.
- * If the swapchain is already out of date, only closes the context.
- * Recreation waits for GPU use and retires images that were not presented.
+ * Replaced or out-of-date swapchains only close the context, without presenting.
+ * Their resources remain alive until recorded and submitted uses finish.
  * Caller must synchronize access to the frame, renderer and present queue.
  *
  * @param pigment Pigment instance.

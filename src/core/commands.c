@@ -559,7 +559,8 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             {
                 frame->acquire_waited = P_TRUE;
                 frame->present_ready  = submits[j].signal_present;
-                atomic_store_explicit(&frame->sync->per_slot_trackers[frame->slot].last_used[queue->slot], handle.value, memory_order_relaxed);
+                atomic_store_explicit(&frame->renderer->per_slot_trackers[frame->slot].last_used[queue->slot], handle.value, memory_order_relaxed);
+                atomic_store_explicit(&frame->swapchain->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
                 atomic_store_explicit(&frame->renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
             }
         }
@@ -808,7 +809,7 @@ void pigment_cmd_use_image(Pigment* pigment, PCommandBuffer* cmd, PImage* image)
     {
         return;
     }
-    pigment_cmd_use(pigment, cmd, &image->tracker);
+    pigment_cmd_use(pigment, cmd, image->tracker);
 }
 
 void pigment_cmd_use_sampler(Pigment* pigment, PCommandBuffer* cmd, PSampler* sampler)

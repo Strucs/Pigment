@@ -45,20 +45,6 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         goto ERROR;
     }
 
-    sync->per_slot_trackers = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->per_slot_trackers, max_frame);
-    if(sync->per_slot_trackers == NULL)
-    {
-        goto ERROR;
-    }
-
-    for(uint32_t i = 0; i < max_frame; i++)
-    {
-        if(pigment_resource_tracker_init(pigment, &sync->per_slot_trackers[i]) != PIGMENT_SUCCESS)
-        {
-            goto ERROR;
-        }
-    }
-
     if(pigment_has_swapchain_maintenance1(pigment))
     {
         sync->present_fences = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->present_fences, max_frame);
@@ -131,15 +117,6 @@ ERROR:
             P_FREE(pigment, sync->present_fences);
         }
 
-        if(sync->per_slot_trackers != NULL)
-        {
-            for(uint32_t i = 0; i < max_frame; i++)
-            {
-                pigment_resource_tracker_destroy(pigment, &sync->per_slot_trackers[i]);
-            }
-            P_FREE(pigment, sync->per_slot_trackers);
-        }
-
         P_FREE(pigment, sync->render_finished_semaphores);
         P_FREE(pigment, sync->image_available_semaphores);
         P_FREE(pigment, sync);
@@ -157,7 +134,6 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
 
     for(size_t i = 0; i < max_frame; i++)
     {
-        pigment_resource_tracker_destroy(pigment, &sync->per_slot_trackers[i]);
         vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], &pigment->vk_alloc);
         if(sync->present_fences != NULL)
         {
@@ -171,59 +147,9 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     }
 
     P_FREE(pigment, sync->present_fences);
-    P_FREE(pigment, sync->per_slot_trackers);
     P_FREE(pigment, sync->render_finished_semaphores);
     P_FREE(pigment, sync->image_available_semaphores);
     P_FREE(pigment, sync);
-}
-
-PResult recreate_render_finished_semaphores(Pigment* pigment, PSync* sync, uint32_t old_count, uint32_t new_count)
-{
-    PResult result              = PIGMENT_ERROR_OUT_OF_MEMORY;
-    PDevice* device             = pigment->device;
-    VkSemaphore* new_semaphores = P_NEW_ARRAY_FOR_OBJECT(pigment, new_semaphores, new_count);
-    if(new_semaphores == NULL)
-    {
-        goto ERROR;
-    }
-
-    result = PIGMENT_ERROR_VULKAN;
-    for(uint32_t i = 0; i < new_count; i++)
-    {
-        new_semaphores[i] = create_semaphore(pigment);
-        if(new_semaphores[i] == NULL)
-        {
-            goto ERROR;
-        }
-    }
-
-    for(uint32_t i = 0; i < old_count; i++)
-    {
-        vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
-    }
-
-    P_FREE(pigment, sync->render_finished_semaphores);
-    sync->render_finished_semaphores = new_semaphores;
-
-    return PIGMENT_SUCCESS;
-
-ERROR:
-    PLOG_ERROR(pigment, "Failed to recreate render_finished_semaphores, keeping previous ones");
-    if(new_semaphores == NULL)
-    {
-        return result;
-    }
-
-    for(uint32_t i = 0; i < new_count; i++)
-    {
-        if(new_semaphores[i] != NULL)
-        {
-            vkDestroySemaphore(device->logical_device, new_semaphores[i], &pigment->vk_alloc);
-        }
-    }
-    P_FREE(pigment, new_semaphores);
-
-    return result;
 }
 
 static VkSemaphore create_semaphore(Pigment* pigment)

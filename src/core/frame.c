@@ -31,7 +31,7 @@ void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint3
         return;
     }
 
-    pigment_resource_tracker_wait(pigment, &renderer->sync->per_slot_trackers[slot]);
+    pigment_resource_tracker_wait(pigment, &renderer->per_slot_trackers[slot]);
 }
 
 PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot, uint64_t timeout_ns, PFrame** out_frame)
@@ -63,7 +63,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         uint32_t acquired = 0;
         for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
         {
-            acquired += renderer->frames[i].active;
+            acquired += renderer->frames[i].active && renderer->frames[i].swapchain == renderer->swapchain;
         }
 
         if(acquired > renderer->swapchain->image_count - renderer->swapchain->min_image_count)
@@ -75,7 +75,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
     PDevice* device      = pigment->device;
     uint32_t image_index = 0;
 
-    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, renderer->sync->image_available_semaphores[slot], VK_NULL_HANDLE, &image_index);
+    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, renderer->swapchain->sync->image_available_semaphores[slot], VK_NULL_HANDLE, &image_index);
 
     if(result == VK_NOT_READY)
     {
@@ -99,8 +99,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         return PIGMENT_ERROR_VULKAN;
     }
 
-    // SUBOPTIMAL still acquires an image: consume its semaphore and present it
-    // before replacing the swapchain.
+    // SUBOPTIMAL still acquires a usable image.
     if(result == VK_SUBOPTIMAL_KHR)
     {
         renderer->needs_recreate = P_TRUE;
@@ -109,13 +108,14 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
     renderer->frames[slot] = (PFrame) {
         .renderer    = renderer,
         .swapchain   = renderer->swapchain,
-        .sync        = renderer->sync,
+        .sync        = renderer->swapchain->sync,
         .slot        = slot,
         .image_index = image_index,
         .transparent = renderer->desc.transparent,
         .active      = P_TRUE,
     };
 
+    resource_tracker_retain(&renderer->swapchain->tracker);
     *out_frame = &renderer->frames[slot];
     return PIGMENT_SUCCESS;
 }
@@ -150,6 +150,8 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
     PBool transparent     = frame->transparent;
     PBool multisample     = (swapchain->color_multisample != NULL);
     PBool use_depth       = !(desc != NULL && desc->no_depth);
+
+    pigment_cmd_use_image(pigment, cmd, swapchain->image_wrappers[image_index]);
 
     VkImageMemoryBarrier2 color_barrier = {
         .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -755,10 +757,11 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
         return;
     }
 
-    if(frame->swapchain->out_of_date)
+    if(frame->swapchain->out_of_date || frame->swapchain->retired)
     {
         // Recreation retires this image and its unconsumed present semaphore after GPU use.
         frame->active = P_FALSE;
+        resource_tracker_release(pigment, &frame->swapchain->tracker);
         return;
     }
 
@@ -796,7 +799,7 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
     {
         frame->swapchain->out_of_date = P_TRUE;
     }
-    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    if((result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) && frame->swapchain == frame->renderer->swapchain)
     {
         frame->renderer->needs_recreate = P_TRUE;
     }
@@ -806,6 +809,7 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
     }
 
     frame->active = P_FALSE;
+    resource_tracker_release(pigment, &frame->swapchain->tracker);
 }
 
 void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op)

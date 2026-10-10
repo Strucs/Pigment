@@ -31,9 +31,12 @@ typedef struct Worker {
     SDL_Semaphore* done;
     uint32_t slot;
     uint32_t recorded;
+    uint32_t width;
+    uint32_t height;
     PBool stop;
 } Worker;
 
+static uint32_t recreations;
 static _Atomic uint32_t errors;
 static _Atomic uint64_t last_progress;
 static _Atomic PBool watchdog_stop;
@@ -51,6 +54,14 @@ static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const
     pigment_default_log_callback(severity, type, record, NULL);
 }
 
+static void on_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data)
+{
+    (void) pigment;
+    (void) event;
+    (void) user_data;
+    recreations++;
+}
+
 static int record_worker(void* arg)
 {
     Worker* worker = arg;
@@ -64,6 +75,8 @@ static int record_worker(void* arg)
 
         CHECK(pigment_frame_slot(worker->frame) == worker->slot);
         CHECK(pigment_frame_image(worker->frame) == worker->image);
+        CHECK(pigment_image_width(worker->image) == worker->width);
+        CHECK(pigment_image_height(worker->image) == worker->height);
         pigment_begin_recording(worker->pigment, worker->cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 
         PSwapchainPassDesc pass = {
@@ -145,7 +158,8 @@ int main(void)
 
     PWindowRenderer* renderer = pigment_renderer_create(pigment, &handles, &swapchain);
     CHECK(renderer != NULL);
-    PFrame* invalid = (PFrame*) renderer;
+    uint32_t callback = pigment_register_swapchain_recreate(pigment, renderer, on_recreate, NULL);
+    PFrame* invalid   = (PFrame*) renderer;
     CHECK(pigment_begin_frame_context(pigment, renderer, SLOTS, 0, &invalid) == PIGMENT_ERROR);
     CHECK(invalid == NULL);
 
@@ -172,7 +186,7 @@ int main(void)
 
     uint32_t acquired_total = 0;
     uint32_t peak_active    = 0;
-    uint32_t recreations    = 0;
+    uint32_t mixed_batches  = 0;
     Uint64 progress         = SDL_GetTicks();
     atomic_store_explicit(&last_progress, progress, memory_order_relaxed);
     SDL_Thread* watchdog_thread = SDL_CreateThread(watchdog, "overlap_watchdog", NULL);
@@ -189,6 +203,7 @@ int main(void)
             uint32_t slot  = (batch + i) % SLOTS;
             Worker* worker = &workers[slot];
             pigment_wait_frame_ready(pigment, renderer, slot);
+            CHECK(pigment_submit_complete(pigment, previous[slot]));
 
             PResult result = pigment_begin_frame_context(pigment, renderer, slot, 0, &worker->frame);
             if(result == PIGMENT_RECREATE_REQUIRED || result == PIGMENT_NOT_READY)
@@ -200,6 +215,9 @@ int main(void)
             CHECK(worker->frame != NULL);
             worker->image = pigment_frame_image(worker->frame);
             CHECK(worker->image != NULL);
+            worker->width  = pigment_image_width(worker->image);
+            worker->height = pigment_image_height(worker->image);
+
             for(uint32_t j = 0; j < count; j++)
             {
                 CHECK(worker->frame != workers[order[j]].frame);
@@ -210,6 +228,16 @@ int main(void)
             PFrame* busy = worker->frame;
             CHECK(pigment_begin_frame_context(pigment, renderer, slot, UINT64_MAX, &busy) == PIGMENT_NOT_READY);
             CHECK(busy == NULL);
+
+            // Keep frames from successive generations active together.
+            if(batch % 31 == 0 && i + 1 < SLOTS)
+            {
+                pigment_set_sample_count(renderer, i & 1 ? P_SAMPLE_COUNT_4 : P_SAMPLE_COUNT_1);
+                CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_SUCCESS);
+                pigment_drain_pending(pigment);
+                CHECK(pigment_frame_image(worker->frame) == worker->image);
+                mixed_batches += i == 0;
+            }
         }
 
         if(count == 0)
@@ -233,7 +261,7 @@ int main(void)
             CHECK(SDL_SyncWindow(window));
             pigment_renderer_resize(renderer, (uint32_t) width, 240);
             pigment_set_sample_count(renderer, (batch & 1) ? P_SAMPLE_COUNT_1 : P_SAMPLE_COUNT_4);
-            CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_NOT_READY);
+            CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_SUCCESS);
         }
 
         for(uint32_t i = 0; i < count; i++)
@@ -249,6 +277,15 @@ int main(void)
                 CHECK(SDL_GetTicks() - progress < 30000);
             }
         }
+
+        if(resize)
+        {
+            // Recreate again with recorded commands still waiting for submission.
+            pigment_set_sample_count(renderer, (batch & 1) ? P_SAMPLE_COUNT_4 : P_SAMPLE_COUNT_1);
+            CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_SUCCESS);
+            pigment_drain_pending(pigment);
+        }
+        uint32_t before_present = recreations;
 
         // Submit in reverse acquisition order, on alternating graphics queues.
         PSubmit submits[SLOTS];
@@ -285,13 +322,16 @@ int main(void)
             previous[slot] = submitted[i];
             if(resize && i + 1 < count)
             {
-                CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_NOT_READY);
+                CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_SUCCESS);
             }
         }
 
         SDL_PumpEvents();
         CHECK(pigment_recreate_swapchain(pigment, renderer) == PIGMENT_SUCCESS);
-        recreations += resize;
+        if(resize)
+        {
+            CHECK(recreations == before_present);
+        }
         acquired_total += count;
         progress = SDL_GetTicks();
         atomic_store_explicit(&last_progress, progress, memory_order_relaxed);
@@ -307,20 +347,27 @@ int main(void)
         recorded += workers[i].recorded;
         pigment_wait_frame_ready(pigment, renderer, i);
         CHECK(pigment_submit_complete(pigment, previous[i]));
-        pigment_destroy_command_pool(pigment, workers[i].pool);
         SDL_DestroySemaphore(workers[i].start);
         SDL_DestroySemaphore(workers[i].done);
     }
 
     CHECK(recorded == acquired_total);
     CHECK(peak_active > 1);
+    CHECK(mixed_batches > 1);
+    pigment_unregister_swapchain_recreate(pigment, callback);
 
+    // Recorded references keep retired generations alive even after renderer destruction.
     pigment_renderer_destroy(pigment, renderer);
+    pigment_drain_pending(pigment);
+    for(uint32_t i = 0; i < SLOTS; i++)
+    {
+        pigment_destroy_command_pool(pigment, workers[i].pool);
+    }
     destroy_pigment(pigment);
     CHECK(atomic_load_explicit(&errors, memory_order_relaxed) == 0);
     atomic_store_explicit(&watchdog_stop, P_TRUE, memory_order_relaxed);
     SDL_WaitThread(watchdog_thread, NULL);
-    printf("OK frames=%u peak_active=%u recreations=%u\n", acquired_total, peak_active, recreations);
+    printf("OK frames=%u peak_active=%u recreations=%u mixed_batches=%u\n", acquired_total, peak_active, recreations, mixed_batches);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

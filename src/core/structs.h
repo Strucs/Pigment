@@ -137,7 +137,7 @@ struct PFrame {
 struct PWindowRenderer {
     PSurface* surface;
     PSwapchain* swapchain;
-    PSync* sync;
+    PResourceTracker* per_slot_trackers;
     PFrame* frames;
     PBool needs_recreate;
     PSwapchainDesc desc;
@@ -199,6 +199,10 @@ struct SwapChainSupportDetails {
 };
 
 struct PSwapchain {
+    PWindowRenderer* renderer;
+    PSync* sync;
+    PResourceTracker tracker;
+    PBool retired;
     VkSwapchainKHR swapchain;
     VkImage* images;
     PImage** image_wrappers;
@@ -286,7 +290,6 @@ struct PCommandBuffer {
 struct PSync {
     VkSemaphore* image_available_semaphores;
     VkSemaphore* render_finished_semaphores;
-    PResourceTracker* per_slot_trackers;
     VkFence* present_fences;
 };
 
@@ -348,7 +351,8 @@ struct PImage {
     VkMemoryPropertyFlags memory_flags;
 
     PImageViewCache view_cache;
-    PResourceTracker tracker;
+    PResourceTracker* tracker;
+    PBool owns_tracker;
 };
 
 struct PSampler {

@@ -59,7 +59,8 @@ PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn dest
  *
  * Already called from pigment_begin_frame_context and pigment_wait_idle. Call manually
  * in headless or between heavy batches to reclaim memory without forcing the
- * full GPU pause that pigment_wait_idle imposes.
+ * full GPU pause that pigment_wait_idle imposes. Without swapchain maintenance support,
+ * reclaiming old swapchains waits for the device and requires exclusive queue access.
  *
  * @param pigment Pigment instance.
  */

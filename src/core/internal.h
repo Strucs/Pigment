@@ -248,6 +248,7 @@ void resource_tracker_retain(PResourceTracker* tracker);
 void resource_tracker_release(Pigment* pigment, PResourceTracker* tracker);
 
 // image.c
+PImage* wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, PResourceTracker* tracker);
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
 PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, const PVkAllocationCreateInfo* alloc_info);
 VkImageLayout image_layout_to_vk(PImageLayout layout);
@@ -263,7 +264,7 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
 PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
-void defer_destroy_renderer(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const PResourceTracker* tracker, const VkFence* present_fences, uint32_t fence_count);
+void defer_destroy_swapchain(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const VkFence* present_fences, uint32_t fence_count);
 
 // log.c
 PResult pigment_log_init(Pigment* pigment);

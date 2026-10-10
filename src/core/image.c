@@ -480,11 +480,13 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         return NULL;
     }
 
-    if(pigment_resource_tracker_init(pigment, &image->tracker) != PIGMENT_SUCCESS)
+    image->tracker = pigment_create_resource_tracker(pigment);
+    if(image->tracker == NULL)
     {
         P_FREE(pigment, image);
         return NULL;
     }
+    image->owns_tracker = P_TRUE;
 
     image->vk_format    = (VkFormat) desc->format;
     image->vk_usage     = translate_usage(desc->usage);
@@ -505,7 +507,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
 
     if(image->host_mapped && validate_host_mapped(pigment, image, desc->type) != PIGMENT_SUCCESS)
     {
-        pigment_resource_tracker_destroy(pigment, &image->tracker);
+        pigment_destroy_resource_tracker(pigment, image->tracker);
         P_FREE(pigment, image);
         return NULL;
     }
@@ -515,7 +517,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
         image->shared_families = P_NEW_ARRAY_FOR_OBJECT(pigment, image->shared_families, desc->shared_queue_count);
         if(image->shared_families == NULL)
         {
-            pigment_resource_tracker_destroy(pigment, &image->tracker);
+            pigment_destroy_resource_tracker(pigment, image->tracker);
             P_FREE(pigment, image);
             return NULL;
         }
@@ -526,7 +528,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
     {
         PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d)", desc->width, desc->height, desc->format);
         P_FREE(pigment, image->shared_families);
-        pigment_resource_tracker_destroy(pigment, &image->tracker);
+        pigment_destroy_resource_tracker(pigment, image->tracker);
         P_FREE(pigment, image);
         return NULL;
     }
@@ -541,10 +543,23 @@ void pigment_destroy_image(Pigment* pigment, PImage* image)
         return;
     }
 
-    pigment_defer_destroy_tracked(pigment, destroy_image_immediate, image, &image->tracker);
+    if(image->owns_tracker)
+    {
+        pigment_defer_destroy_tracked(pigment, destroy_image_immediate, image, image->tracker);
+    }
+    else
+    {
+        // The swapchain releases its wrappers after all tracked uses finish.
+        destroy_image_immediate(pigment, image);
+    }
 }
 
 PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height)
+{
+    return wrap_image(pigment, vk_image, format, usage, width, height, NULL);
+}
+
+PImage* wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, PResourceTracker* tracker)
 {
     if(pigment == NULL || vk_image == VK_NULL_HANDLE)
     {
@@ -557,7 +572,9 @@ PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage vk_image, VkFormat forma
         return NULL;
     }
 
-    if(pigment_resource_tracker_init(pigment, &image->tracker) != PIGMENT_SUCCESS)
+    image->owns_tracker = tracker == NULL;
+    image->tracker      = tracker != NULL ? tracker : pigment_create_resource_tracker(pigment);
+    if(image->tracker == NULL)
     {
         P_FREE(pigment, image);
         return NULL;
@@ -586,7 +603,10 @@ static void destroy_image_immediate(Pigment* pigment, void* resource)
     PImage* image = (PImage*) resource;
     free_resources(pigment, image);
     P_FREE(pigment, image->shared_families);
-    pigment_resource_tracker_destroy(pigment, &image->tracker);
+    if(image->owns_tracker)
+    {
+        pigment_destroy_resource_tracker(pigment, image->tracker);
+    }
     P_FREE(pigment, image);
 }
 
@@ -754,7 +774,7 @@ void pigment_image_wait(Pigment* pigment, PImage* image)
         return;
     }
 
-    pigment_resource_tracker_wait(pigment, &image->tracker);
+    pigment_resource_tracker_wait(pigment, image->tracker);
 }
 
 void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count)
