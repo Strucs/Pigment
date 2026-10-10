@@ -78,8 +78,7 @@ typedef struct PCommandBufferInheritance {
 } PCommandBufferInheritance;
 
 /**
- * @brief Create a command pool tied to a queue family. The pool is tracked by Pigment and freed
- *        at shutdown if the user does not destroy it explicitly via pigment_destroy_command_pool.
+ * @brief Create a command pool tied to a queue family.
  *
  * @param pigment Pigment instance.
  * @param desc Pool description (queue flags, transient / reset flags, debug name).
@@ -141,6 +140,7 @@ PIGMENT_API void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffe
  * The caller must wait for prior GPU use and synchronize access to the buffer and pool.
  * With P_COMMAND_POOL_FLAG_RESET_BUFFER, this also resets prior recording.
  * Otherwise, reset the pool before reusing the buffer.
+ * A successful begin releases resources retained by the previous recording.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer to record into.
@@ -153,6 +153,9 @@ PIGMENT_API void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, 
 /**
  * @brief Execute secondary command buffers from inside a primary's render pass. Secondaries must
  *        have been recorded with matching PCommandBufferInheritance.
+ *
+ * Their tracked resources are retained by the primary too. Keep the secondary buffers
+ * and their pools alive and unchanged until the primary is reset or freed.
  *
  * @param pigment Pigment instance.
  * @param primary Primary command buffer currently in a render pass.
@@ -173,8 +176,8 @@ PIGMENT_API void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
  * @brief Batched submit. Consecutive submits on the same queue are coalesced into one
  *        vkQueueSubmit2 call, cross-queue splits per queue.
  *
- * The caller must serialize access to each queue and frame, and retain recorded
- * resources until this call returns. Command buffers must belong to the queue family.
+ * The caller must serialize access to each queue and frame.
+ * Command buffers must belong to the queue family.
  * Frame submits require the renderer's graphics family. The caller defines GPU
  * dependencies with waits and recorded barriers. No frame submits are chained automatically.
  * Set wait_acquire on the first frame submit and signal_present on the last.
@@ -221,8 +224,7 @@ PIGMENT_API void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd,
  *
  * A tracker lets a custom resource be stamped at submit time via pigment_cmd_use, so its
  * deferred destroy can wait on the exact GPU completion value of the last submit that used it.
- * Pigment's built-in resource types (PBuffer, PImage, PSampler, PPipeline, PDescriptorSet,
- * PWindowRenderer) own a tracker internally, so this is only needed for user types.
+ * Built-in buffers, images, samplers, pipelines and descriptor sets already own trackers.
  *
  * @param pigment Pigment instance.
  *
@@ -232,6 +234,7 @@ PIGMENT_API PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
 
 /**
  * @brief Destroy a tracker created by pigment_create_resource_tracker.
+ * Recorded uses and pending GPU work delay its release.
  *
  * @param pigment Pigment instance.
  * @param tracker Tracker to destroy.
@@ -239,14 +242,13 @@ PIGMENT_API PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
 PIGMENT_API void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracker);
 
 /**
- * @brief Stamp a custom resource tracker at submit time.
+ * @brief Retain a custom resource for this recording and track its GPU use.
  *
- * The destroy of the resource will be able to wait on the precise GPU completion value of the
- * last submit that stamped this tracker. Use this for user types holding a tracker from
- * pigment_create_resource_tracker, for example an aggregate resource wrapping several built-in
- * objects, or a wrapper around raw Vulkan handles you allocated yourself. For Pigment's built-in
- * resource types use the dedicated pigment_cmd_use_buffer, pigment_cmd_use_image and
- * pigment_cmd_use_sampler.
+ * References last until the command buffer is reset or freed, including after submission.
+ * Destroy through pigment_defer_destroy_tracked. Synchronize the first recorded use
+ * with destruction and stop recording new uses after requesting destruction.
+ * For built-in resources, use pigment_cmd_use_buffer, pigment_cmd_use_image or
+ * pigment_cmd_use_sampler for indirect accesses such as GPU addresses or bindless indices.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer being recorded.
@@ -257,7 +259,7 @@ PIGMENT_API void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourc
 /**
  * @brief Block until the GPU has finished every submit stamped on the tracker.
  *
- * Use it on custom resource tracker.
+ * This waits for submitted work only. Recorded references remain retained.
  *
  * @param pigment Pigment instance.
  * @param tracker Tracker from pigment_create_resource_tracker.

@@ -77,6 +77,7 @@ static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head
 static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
 static PBool target_signaled(VkDevice device, const PWaitTarget* target);
+static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker);
 
 PDeletionQueue* create_deletion_queue(Pigment* pigment)
 {
@@ -168,16 +169,45 @@ void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resour
     P_FREE(pigment, targets);
 }
 
-void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker)
+void resource_tracker_retain(PResourceTracker* tracker)
+{
+    atomic_fetch_add_explicit(&tracker->references, 1, memory_order_relaxed);
+}
+
+void resource_tracker_release(Pigment* pigment, PResourceTracker* tracker)
+{
+    if(atomic_fetch_sub_explicit(&tracker->references, 1, memory_order_acq_rel) == 1)
+    {
+        destroy_tracked(pigment, tracker);
+    }
+}
+
+void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, PResourceTracker* tracker)
 {
     if(pigment == NULL || destroy_fn == NULL || resource == NULL)
     {
         return;
     }
 
-    if(pigment->deletions == NULL || tracker == NULL || tracker->last_used == NULL || pigment->device == NULL || pigment->device->queues == NULL)
+    if(tracker == NULL || tracker->last_used == NULL)
     {
         pigment_defer_destroy(pigment, destroy_fn, resource);
+        return;
+    }
+
+    tracker->destroy_fn = destroy_fn;
+    tracker->resource   = resource;
+    resource_tracker_release(pigment, tracker);
+}
+
+static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker)
+{
+    PDestroyFn destroy_fn = tracker->destroy_fn;
+    void* resource        = tracker->resource;
+
+    if(pigment->deletions == NULL || pigment->device == NULL || pigment->device->queues == NULL)
+    {
+        destroy_fn(pigment, resource);
         return;
     }
 
@@ -186,8 +216,7 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
     PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, queue_count);
     if(targets == NULL)
     {
-        pigment_defer_destroy(pigment, destroy_fn, resource);
-        return;
+        goto WAIT;
     }
 
     uint32_t target_count = 0;
@@ -213,11 +242,26 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
     {
         destroy_fn(pigment, resource);
     }
-    else
+    else if(push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count) != PIGMENT_SUCCESS)
     {
-        enqueue_or_destroy(pigment, destroy_fn, resource, targets, target_count);
+        P_FREE(pigment, targets);
+        goto WAIT;
     }
     P_FREE(pigment, targets);
+    return;
+
+WAIT:
+    // No recorded references remain, so the submit values cannot change.
+    for(uint32_t i = 0; i < queue_count; i++)
+    {
+        PSubmitHandle handle = {
+            .queue = &device->queues[i],
+            .value = atomic_load_explicit(&tracker->last_used[i], memory_order_relaxed),
+        };
+        pigment_submit_wait(pigment, handle);
+    }
+
+    destroy_fn(pigment, resource);
 }
 
 void defer_destroy_renderer(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker, VkFence present_fence)

@@ -101,6 +101,9 @@ typedef struct PRuntimeConfig {
 
 struct PResourceTracker {
     _Atomic uint64_t* last_used;
+    _Atomic uint32_t references;
+    void (*destroy_fn)(Pigment*, void*);
+    void* resource;
 };
 
 struct Pigment {
@@ -276,6 +279,7 @@ struct PCommandBuffer {
     PResourceTracker** uses;
     uint32_t use_count;
     uint32_t use_capacity;
+    PBool tracking_failed;
 };
 
 struct PSync {
@@ -295,6 +299,7 @@ struct PDescriptorPool {
     uint32_t set_count;
     uint32_t set_capacity;
     PBool allow_free_set;
+    PResourceTracker tracker;
 };
 
 struct PDescriptorSet {

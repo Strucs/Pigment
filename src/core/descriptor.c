@@ -25,15 +25,8 @@
 
 #define PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY 4
 
-typedef struct PDescriptorSetBatch {
-    PDescriptorPool* pool;
-    VkDescriptorSet* vk_sets;
-    PDescriptorSet** wrappers;
-    uint32_t count;
-} PDescriptorSetBatch;
-
 static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource);
-static void destroy_descriptor_sets_immediate(Pigment* pigment, void* resource);
+static void destroy_descriptor_set_immediate(Pigment* pigment, void* resource);
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
 static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
@@ -263,6 +256,12 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
         goto ERROR;
     }
 
+    if(pigment_resource_tracker_init(pigment, &pool->tracker) != PIGMENT_SUCCESS)
+    {
+        vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
+        goto ERROR;
+    }
+
     pool->allow_free_set = desc->allow_free_set;
 
     set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t) pool->pool, desc->name);
@@ -283,18 +282,20 @@ void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
         return;
     }
 
-    pigment_defer_destroy(pigment, destroy_descriptor_pool_immediate, pool);
+    for(uint32_t i = 0; i < pool->set_count; i++)
+    {
+        PDescriptorSet* set = pool->sets[i];
+        pigment_defer_destroy_tracked(pigment, destroy_descriptor_set_immediate, set, &set->tracker);
+    }
+    pool->set_count = 0;
+    pigment_defer_destroy_tracked(pigment, destroy_descriptor_pool_immediate, pool, &pool->tracker);
 }
 
 static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource)
 {
     PDescriptorPool* pool = (PDescriptorPool*) resource;
     vkDestroyDescriptorPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
-    for(uint32_t i = 0; i < pool->set_count; i++)
-    {
-        pigment_resource_tracker_destroy(pigment, &pool->sets[i]->tracker);
-        P_FREE(pigment, pool->sets[i]);
-    }
+    pigment_resource_tracker_destroy(pigment, &pool->tracker);
     P_FREE(pigment, pool->sets);
     P_FREE(pigment, pool);
 }
@@ -304,6 +305,21 @@ void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
     if(pigment == NULL || pool == NULL)
     {
         return;
+    }
+
+    if(atomic_load_explicit(&pool->tracker.references, memory_order_acquire) != pool->set_count + 1)
+    {
+        PLOG_ERROR(pigment, "Cannot reset descriptor pool while set destruction is pending.");
+        return;
+    }
+
+    for(uint32_t i = 0; i < pool->set_count; i++)
+    {
+        if(atomic_load_explicit(&pool->sets[i]->tracker.references, memory_order_acquire) != 1)
+        {
+            PLOG_ERROR(pigment, "Reset command buffers referencing descriptor sets before resetting their pool.");
+            return;
+        }
     }
 
     VkResult result = vkResetDescriptorPool(pigment->device->logical_device, pool->pool, 0);
@@ -317,27 +333,27 @@ void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
     {
         pigment_resource_tracker_destroy(pigment, &pool->sets[i]->tracker);
         P_FREE(pigment, pool->sets[i]);
+        resource_tracker_release(pigment, &pool->tracker);
     }
     pool->set_count = 0;
 }
 
-static void destroy_descriptor_sets_immediate(Pigment* pigment, void* resource)
+static void destroy_descriptor_set_immediate(Pigment* pigment, void* resource)
 {
-    PDescriptorSetBatch* batch = (PDescriptorSetBatch*) resource;
-    vkFreeDescriptorSets(pigment->device->logical_device, batch->pool->pool, batch->count, batch->vk_sets);
-    for(uint32_t i = 0; i < batch->count; i++)
+    PDescriptorSet* set   = resource;
+    PDescriptorPool* pool = set->source_pool;
+    if(pool->allow_free_set)
     {
-        pigment_resource_tracker_destroy(pigment, &batch->wrappers[i]->tracker);
-        P_FREE(pigment, batch->wrappers[i]);
+        vkFreeDescriptorSets(pigment->device->logical_device, pool->pool, 1, &set->set);
     }
-    P_FREE(pigment, batch->vk_sets);
-    P_FREE(pigment, batch->wrappers);
-    P_FREE(pigment, batch);
+    pigment_resource_tracker_destroy(pigment, &set->tracker);
+    P_FREE(pigment, set);
+    resource_tracker_release(pigment, &pool->tracker);
 }
 
 void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, uint32_t count)
 {
-    if(pigment == NULL || sets == NULL || count == 0)
+    if(pigment == NULL || sets == NULL || count == 0 || sets[0] == NULL)
     {
         return;
     }
@@ -358,59 +374,11 @@ void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, ui
         }
     }
 
-    PDescriptorSetBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
-    if(batch == NULL)
-    {
-        return;
-    }
-    batch->vk_sets  = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->vk_sets, count);
-    batch->wrappers = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->wrappers, count);
-    if(batch->vk_sets == NULL || batch->wrappers == NULL)
-    {
-        P_FREE(pigment, batch->vk_sets);
-        P_FREE(pigment, batch->wrappers);
-        P_FREE(pigment, batch);
-        return;
-    }
-    batch->pool  = pool;
-    batch->count = count;
-
-    uint32_t queue_count      = pigment->device->queue_count;
-    PResourceTracker combined = {0};
-    if(pigment_resource_tracker_init(pigment, &combined) != PIGMENT_SUCCESS)
-    {
-        for(uint32_t i = 0; i < count; i++)
-        {
-            batch->vk_sets[i]  = sets[i]->set;
-            batch->wrappers[i] = sets[i];
-            pool_remove_set(pool, sets[i]);
-        }
-        pigment_defer_destroy(pigment, destroy_descriptor_sets_immediate, batch);
-        return;
-    }
-
     for(uint32_t i = 0; i < count; i++)
     {
-        _Atomic uint64_t* table = sets[i]->tracker.last_used;
-        if(table != NULL)
-        {
-            for(uint32_t q = 0; q < queue_count; q++)
-            {
-                uint64_t value   = atomic_load_explicit(&table[q], memory_order_relaxed);
-                uint64_t current = atomic_load_explicit(&combined.last_used[q], memory_order_relaxed);
-                if(value > current)
-                {
-                    atomic_store_explicit(&combined.last_used[q], value, memory_order_relaxed);
-                }
-            }
-        }
-        batch->vk_sets[i]  = sets[i]->set;
-        batch->wrappers[i] = sets[i];
         pool_remove_set(pool, sets[i]);
+        pigment_defer_destroy_tracked(pigment, destroy_descriptor_set_immediate, sets[i], &sets[i]->tracker);
     }
-
-    pigment_defer_destroy_tracked(pigment, destroy_descriptor_sets_immediate, batch, &combined);
-    pigment_resource_tracker_destroy(pigment, &combined);
 }
 
 PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets)
@@ -506,6 +474,11 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
         }
 
         out_sets[i] = temp_sets[i];
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        resource_tracker_retain(&pool->tracker);
     }
 
     temp_allocated = 0;

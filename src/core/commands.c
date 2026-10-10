@@ -25,6 +25,8 @@ static void destroy_command_buffers_immediate(Pigment* pigment, void* resource);
 static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_family_index, VkCommandPoolCreateFlags flags);
 static VkCommandPoolCreateFlags pigment_flags_to_vk(PCommandPoolFlags flags);
 static PResult cmd_track_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
+static void cmd_release_uses(Pigment* pigment, PCommandBuffer* cmd);
+static void destroy_resource_tracker_immediate(Pigment* pigment, void* resource);
 static PResult pool_append_buffer(Pigment* pigment, PCommandPool* pool, PCommandBuffer* cmd);
 static void pool_remove_buffer(PCommandPool* pool, PCommandBuffer* cmd);
 
@@ -96,6 +98,7 @@ static void destroy_command_pool_immediate(Pigment* pigment, void* resource)
     vkDestroyCommandPool(pigment->device->logical_device, pool->pool, &pigment->vk_alloc);
     for(uint32_t i = 0; i < pool->buffer_count; i++)
     {
+        cmd_release_uses(pigment, pool->buffers[i]);
         P_FREE(pigment, pool->buffers[i]->uses);
         P_FREE(pigment, pool->buffers[i]);
     }
@@ -119,7 +122,7 @@ void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool)
 
     for(uint32_t i = 0; i < pool->buffer_count; i++)
     {
-        pool->buffers[i]->use_count = 0;
+        cmd_release_uses(pigment, pool->buffers[i]);
     }
 }
 
@@ -218,8 +221,6 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
         return;
     }
 
-    cmd->use_count = 0;
-
     VkCommandBufferUsageFlags vk_flags = 0;
     if(flags & P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
     {
@@ -282,6 +283,10 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
     {
         PLOG_ERROR(pigment, "Failed to begin command buffer recording (result: %d)", result);
     }
+    else
+    {
+        cmd_release_uses(pigment, cmd);
+    }
 
     P_STACK_OR_HEAP_FREE(pigment, color_formats);
 }
@@ -307,6 +312,14 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
             return;
         }
         vk_secondaries[i] = secondaries[i]->buffer;
+        if(secondaries[i]->tracking_failed)
+        {
+            primary->tracking_failed = P_TRUE;
+        }
+        for(uint32_t j = 0; j < secondaries[i]->use_count; j++)
+        {
+            pigment_cmd_use(pigment, primary, secondaries[i]->uses[j]);
+        }
     }
 
     vkCmdExecuteCommands(primary->buffer, count, vk_secondaries);
@@ -364,6 +377,11 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             if(cmd == NULL || cmd->source_pool == NULL)
             {
                 PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] is invalid.", i, j);
+                return PIGMENT_ERROR;
+            }
+            if(cmd->tracking_failed)
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] has incomplete resource tracking.", i, j);
                 return PIGMENT_ERROR;
             }
             if(cmd->source_pool->queue_family_index != queue->family_index)
@@ -612,6 +630,7 @@ static void destroy_command_buffers_immediate(Pigment* pigment, void* resource)
     vkFreeCommandBuffers(pigment->device->logical_device, batch->pool->pool, batch->count, batch->vk_buffers);
     for(uint32_t i = 0; i < batch->count; i++)
     {
+        cmd_release_uses(pigment, batch->wrappers[i]);
         P_FREE(pigment, batch->wrappers[i]->uses);
         P_FREE(pigment, batch->wrappers[i]);
     }
@@ -769,7 +788,8 @@ void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tr
     }
     if(cmd_track_use(pigment, cmd, tracker) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "pigment_cmd_use: failed to grow uses array, tracking dropped for this entry.");
+        cmd->tracking_failed = P_TRUE;
+        PLOG_ERROR(pigment, "pigment_cmd_use: failed to retain resource, recording cannot be submitted.");
     }
 }
 
@@ -802,13 +822,34 @@ void pigment_cmd_use_sampler(Pigment* pigment, PCommandBuffer* cmd, PSampler* sa
 
 static PResult cmd_track_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker)
 {
+    for(uint32_t i = 0; i < cmd->use_count; i++)
+    {
+        if(cmd->uses[i] == tracker)
+        {
+            return PIGMENT_SUCCESS;
+        }
+    }
+
     PResult res = P_ARRAY_RESERVE_OBJECT(pigment, cmd->uses, cmd->use_count, cmd->use_capacity, 1, PIGMENT_CMD_USES_INITIAL_CAPACITY);
     if(res != PIGMENT_SUCCESS)
     {
         return res;
     }
+
+    resource_tracker_retain(tracker);
     cmd->uses[cmd->use_count++] = tracker;
     return PIGMENT_SUCCESS;
+}
+
+static void cmd_release_uses(Pigment* pigment, PCommandBuffer* cmd)
+{
+    for(uint32_t i = 0; i < cmd->use_count; i++)
+    {
+        resource_tracker_release(pigment, cmd->uses[i]);
+    }
+
+    cmd->use_count       = 0;
+    cmd->tracking_failed = P_FALSE;
 }
 
 void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint32_t queue_slot, uint64_t value)
@@ -851,6 +892,7 @@ PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracke
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
+    atomic_init(&tracker->references, 1);
     return PIGMENT_SUCCESS;
 }
 
@@ -937,11 +979,23 @@ PResourceTracker* pigment_create_resource_tracker(Pigment* pigment)
 
 void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTracker* tracker)
 {
-    if(tracker == NULL)
+    if(pigment == NULL || tracker == NULL)
     {
         return;
     }
 
+    if(atomic_load_explicit(&tracker->references, memory_order_acquire) == 0)
+    {
+        destroy_resource_tracker_immediate(pigment, tracker);
+        return;
+    }
+
+    pigment_defer_destroy_tracked(pigment, destroy_resource_tracker_immediate, tracker, tracker);
+}
+
+static void destroy_resource_tracker_immediate(Pigment* pigment, void* resource)
+{
+    PResourceTracker* tracker = resource;
     pigment_resource_tracker_destroy(pigment, tracker);
     P_FREE(pigment, tracker);
 }

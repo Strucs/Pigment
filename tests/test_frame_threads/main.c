@@ -248,6 +248,9 @@ static int submit_worker(void* arg)
 
         CHECK(test->stage == 1);
         CHECK(SDL_GetCurrentThreadID() != test->recording_thread);
+        pigment_destroy_buffer(test->pigment, test->slots[test->slot].source);
+        test->slots[test->slot].source = NULL;
+        pigment_drain_pending(test->pigment);
         if((test->sequence & 7) == 0)
         {
             SDL_Delay(0);
@@ -460,17 +463,13 @@ int main(void)
     {
         PBufferDesc desc = {
             .size   = WORDS * sizeof(uint32_t),
-            .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
+            .usage  = P_BUFFER_USAGE_TRANSFER_DST,
             .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT},
-            .name   = "frame_threads_source",
+            .name   = "frame_threads_readback",
         };
 
-        test.slots[i].source   = pigment_create_buffer(test.pigment, &desc);
-        desc.usage             = P_BUFFER_USAGE_TRANSFER_DST;
-        desc.name              = "frame_threads_readback";
         test.slots[i].readback = pigment_create_buffer(test.pigment, &desc);
-        CHECK(test.slots[i].source != NULL && test.slots[i].readback != NULL);
-        CHECK(pigment_buffer_mapped(test.slots[i].source) != NULL);
+        CHECK(test.slots[i].readback != NULL);
         CHECK(pigment_buffer_mapped(test.slots[i].readback) != NULL);
 
         desc.usage                 = P_BUFFER_USAGE_TRANSFER_SRC | P_BUFFER_USAGE_TRANSFER_DST;
@@ -536,7 +535,17 @@ int main(void)
         Slot* slot = &test.slots[test.slot];
         verify_slot(&test, slot);
 
+        PBufferDesc source_desc = {
+            .size   = WORDS * sizeof(uint32_t),
+            .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
+            .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT},
+            .name   = "frame_threads_source",
+        };
+
+        slot->source = pigment_create_buffer(test.pigment, &source_desc);
+        CHECK(slot->source != NULL);
         uint32_t* words = pigment_buffer_mapped(slot->source);
+        CHECK(words != NULL);
         for(uint32_t i = 0; i < WORDS; i++)
         {
             words[i] = pattern(sequence, i);

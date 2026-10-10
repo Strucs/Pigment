@@ -132,6 +132,15 @@ PIGMENT_API void pigment_destroy_descriptor_set_layout(Pigment* pigment, PDescri
 
 PIGMENT_API PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescriptorPoolDesc* desc);
 PIGMENT_API void pigment_destroy_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
+
+/**
+ * @brief Reset a pool after its command buffers and pending set destructions are released.
+ *
+ * Wait for GPU use, reset referencing command buffers and drain pending set destructions first.
+ *
+ * @param pigment Pigment instance.
+ * @param pool Pool to reset.
+ */
 PIGMENT_API void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool);
 
 PIGMENT_API PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets);

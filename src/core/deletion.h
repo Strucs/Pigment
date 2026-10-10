@@ -40,19 +40,19 @@ typedef void (*PDestroyFn)(Pigment*, void*);
 PIGMENT_API void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource);
 
 /**
- * @brief Defer a destroy with a precise wait target read from a resource tracker.
+ * @brief Defer destruction until recorded references and GPU uses have ended.
  *
- * Waits only on the submit value the resource was last stamped with with pigment_cmd_use_*.
- * If the tracker has never been stamped, the destroy runs immediately. Use this for your own
- * custom tracked resources. Built-in pigment_destroy_* functions that take a PResourceTracker
- * already use this internally.
+ * Command buffers retain tracked resources until reset or destruction, even without a submit.
+ * Then destruction waits for their last submit on each queue. An unused resource is released
+ * immediately. Request destruction once per tracker and keep it alive until the callback.
+ * The callback may call pigment_destroy_resource_tracker to release a custom tracker.
  *
  * @param pigment Pigment instance.
  * @param destroy_fn The function to call to destroy the resource.
  * @param resource The resource to destroy.
- * @param tracker Tracker embedded in the resource (or any compatible struct).
+ * @param tracker Resource tracker consumed by this destruction request.
  */
-PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PResourceTracker* tracker);
+PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, PResourceTracker* tracker);
 
 /**
  * @brief Run pending destroys whose GPU work has completed.

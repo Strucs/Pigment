@@ -13,9 +13,16 @@ def build_test(
     archives: list[str],
 ) -> str:
     include_dir = os.path.join(os.path.dirname(config.lib_build_directory), "include")
+    test_shaders_dir = os.path.join(
+        os.path.dirname(config.lib_build_directory), "test_shaders", test_name
+    )
     config.add_includedirs(include_dir)
 
-    test_files = powermake.get_files(f"./tests/{test_name}/**/*.c")
+    test_files = list(powermake.get_files(f"./tests/{test_name}/**/*.c"))
+    if build_common.build_shaders(
+        f"./tests/{test_name}/**/*", test_shaders_dir, test_files
+    ):
+        config.add_includedirs(test_shaders_dir)
 
     if shared:
         if config.target_is_macos():
