@@ -29,6 +29,7 @@ typedef struct PImageResources {
     VkImage image;
     PVkAllocation* allocation;
     PImageViewCache view_cache;
+    PResourceTracker* tracker;
 } PImageResources;
 
 static void destroy_image_immediate(Pigment* pigment, void* resource);
@@ -622,38 +623,51 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
         return;
     }
 
+    if(image->wrapped)
+    {
+        PLOG_ERROR(pigment, "Cannot resize an external image.");
+        return;
+    }
+
     PImageResources* old = P_NEW_FOR_OBJECT(pigment, old);
     if(old == NULL)
     {
-        PLOG_ERROR(pigment, "Failed to allocate old resource bundle for resize, falling back to blocking path");
-        device_wait_idle(pigment);
-        free_resources(pigment, image);
-        if(allocate_resources(pigment, image, width, height) != PIGMENT_SUCCESS)
-        {
-            PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
-        }
+        PLOG_ERROR(pigment, "Failed to retain image resources for resize.");
+        return;
+    }
+
+    // Build the replacement without modifying the current image on failure.
+    PImage replacement           = *image;
+    replacement.image            = VK_NULL_HANDLE;
+    replacement.image_allocation = NULL;
+    replacement.view_cache       = (PImageViewCache) {0};
+    replacement.mapped           = NULL;
+    replacement.row_pitch        = 0;
+    replacement.tracker          = pigment_create_resource_tracker(pigment);
+    if(replacement.tracker == NULL)
+    {
+        P_FREE(pigment, old);
+        PLOG_ERROR(pigment, "Failed to create image tracker for resize.");
+        return;
+    }
+
+    if(allocate_resources(pigment, &replacement, width, height) != PIGMENT_SUCCESS)
+    {
+        free_resources(pigment, &replacement);
+        pigment_destroy_resource_tracker(pigment, replacement.tracker);
+        P_FREE(pigment, old);
+        PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
         return;
     }
 
     old->image      = image->image;
     old->allocation = image->image_allocation;
     old->view_cache = image->view_cache;
+    old->tracker    = image->tracker;
+    *image          = replacement;
 
-    image->image            = VK_NULL_HANDLE;
-    image->image_allocation = NULL;
-    image->view_cache       = (PImageViewCache) {0};
-
-    if(allocate_resources(pigment, image, width, height) != PIGMENT_SUCCESS)
-    {
-        image->image            = old->image;
-        image->image_allocation = old->allocation;
-        image->view_cache       = old->view_cache;
-        P_FREE(pigment, old);
-        PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
-        return;
-    }
-
-    pigment_defer_destroy(pigment, destroy_image_resources, old);
+    // Recorded commands retain the tracker of the allocation they reference.
+    pigment_defer_destroy_tracked(pigment, destroy_image_resources, old, old->tracker);
 }
 
 static void destroy_image_resources(Pigment* pigment, void* resource)
@@ -672,6 +686,7 @@ static void destroy_image_resources(Pigment* pigment, void* resource)
     {
         alloc->destroy_image(alloc->user_data, res->image, res->allocation);
     }
+    pigment_destroy_resource_tracker(pigment, res->tracker);
     P_FREE(pigment, res);
 }
 

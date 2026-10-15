@@ -25,9 +25,28 @@ typedef struct Release {
 } Release;
 
 static _Atomic uint32_t errors;
+static _Thread_local int fail_calloc_after = -1;
+static _Thread_local PBool expect_error;
+static _Thread_local uint32_t expected_errors;
+
+static void* test_calloc(void* user_data, uint64_t size, uint64_t alignment, PAllocScope scope)
+{
+    if(scope == P_ALLOC_SCOPE_OBJECT && fail_calloc_after >= 0 && fail_calloc_after-- == 0)
+    {
+        return NULL;
+    }
+
+    return pigment_default_allocator.calloc(user_data, size, alignment, scope);
+}
 
 static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const PigmentLogRecord* record, void* user_data)
 {
+    if(expect_error && (severity & PIGMENT_LOG_ERROR_BIT) && !(type & PIGMENT_LOG_TYPE_VALIDATION_BIT))
+    {
+        expected_errors++;
+        return;
+    }
+
     if((severity & PIGMENT_LOG_ERROR_BIT) || ((severity & PIGMENT_LOG_WARN_BIT) && (type & PIGMENT_LOG_TYPE_VALIDATION_BIT)))
     {
         atomic_fetch_add_explicit(&errors, 1, memory_order_relaxed);
@@ -231,6 +250,171 @@ static void test_images(Pigment* pigment, PCommandPool* pool, PCommandBuffer* cm
     SDL_DestroySemaphore(start);
 }
 
+// Each recording uses a different allocation of the same PImage.
+static void test_resize(Pigment* pigment, PCommandPool* pool, PCommandBuffer* cmd, PBuffer* readback, PBool submit)
+{
+    PImageDesc desc = {
+        .width  = 4,
+        .height = 4,
+        .format = P_FORMAT_R8G8B8A8_UNORM,
+        .usage  = P_IMAGE_USAGE_RENDER_COLOR | P_IMAGE_USAGE_TRANSFER_SRC,
+    };
+
+    PImage* image = pigment_create_image(pigment, &desc);
+    assert(image != NULL);
+    pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
+
+    for(uint32_t i = 0; i < IMAGES; i++)
+    {
+        PAttachmentRef attachment = {
+            .image       = image,
+            .layer_count = 1,
+            .store_op    = P_STORE_OP_STORE,
+        };
+
+        PRenderPassDesc pass = {
+            .color_attachments = &attachment,
+            .color_count       = 1,
+            .clear_color       = {(float) (i & 1), 0.0f, 1.0f, 1.0f},
+            .layer_count       = 1,
+        };
+
+        pigment_begin_render_pass(pigment, cmd, &pass);
+        pigment_end_render_pass(pigment, cmd, &pass);
+
+        PImageBarrier transition = {
+            .image      = image,
+            .old_layout = P_IMAGE_LAYOUT_COLOR_ATTACHMENT,
+            .new_layout = P_IMAGE_LAYOUT_TRANSFER_SRC,
+            .src        = {P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+            .dst        = {               P_PIPELINE_STAGE_TRANSFER_BIT,          P_MEMORY_ACCESS_TRANSFER_READ_BIT},
+        };
+
+        pigment_cmd_image_barriers(pigment, cmd, &transition, 1);
+        PBufferImageCopy copy = {
+            .buffer_offset = i * PIXELS * 4,
+            .layer_count   = 1,
+            .extent_w      = 4,
+            .extent_h      = 4,
+            .extent_d      = 1,
+        };
+
+        pigment_cmd_copy_image_to_buffer(pigment, cmd, image, P_IMAGE_LAYOUT_TRANSFER_SRC, readback, &copy, 1);
+
+        VkImage previous          = pigment_vk_image(image);
+        PImageView* view          = image_get_or_create_view(pigment, image, &(PImageViewDesc) {0});
+        VkImageView previous_view = pigment_vk_image_view(view);
+
+        pigment_image_resize(pigment, image, 5 + i, 5 + i);
+        pigment_drain_pending(pigment);
+
+        assert(pigment_image_width(image) == 5 + i && pigment_image_height(image) == 5 + i);
+        assert(pigment_vk_image(image) != previous);
+        assert(pigment_vk_image_view(view) == previous_view);
+        assert(image_get_or_create_view(pigment, image, &(PImageViewDesc) {0}) != view);
+    }
+
+    PBufferBarrier barrier = {
+        .buffer = readback,
+        .src    = {P_PIPELINE_STAGE_TRANSFER_BIT, P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
+        .dst    = {    P_PIPELINE_STAGE_HOST_BIT,      P_MEMORY_ACCESS_HOST_READ_BIT},
+    };
+
+    pigment_cmd_buffer_barriers(pigment, cmd, &barrier, 1);
+    pigment_end_recording(pigment, cmd);
+
+    // The current allocation is unused and can be freed before the older ones.
+    pigment_destroy_image(pigment, image);
+    pigment_drain_pending(pigment);
+
+    if(submit)
+    {
+        // Resubmission must retain every old allocation after the first GPU completion.
+        for(uint32_t repeat = 0; repeat < 2; repeat++)
+        {
+            PSubmit submission = {.cmds = &cmd, .cmd_count = 1};
+            PSubmitHandle handle;
+            assert(pigment_queue_submit(pigment, &submission, 1, &handle) == PIGMENT_SUCCESS);
+            pigment_submit_wait(pigment, handle);
+            pigment_buffer_invalidate(pigment, readback, 0, IMAGES * PIXELS * 4);
+
+            const uint8_t* pixels = pigment_buffer_mapped(readback);
+            for(uint32_t i = 0; i < IMAGES; i++)
+            {
+                for(uint32_t j = 0; j < PIXELS; j++)
+                {
+                    uint32_t offset = (i * PIXELS + j) * 4;
+                    assert(pixels[offset] == ((i & 1) ? 255 : 0));
+                    assert(pixels[offset + 1] == 0);
+                    assert(pixels[offset + 2] == 255);
+                    assert(pixels[offset + 3] == 255);
+                }
+            }
+
+            pigment_drain_pending(pigment);
+        }
+    }
+
+    // Also release old allocations when their commands were never submitted.
+    pigment_reset_command_pool(pigment, pool);
+    pigment_drain_pending(pigment);
+}
+
+static void test_resize_failure(Pigment* pigment)
+{
+    PImageDesc desc = {
+        .width  = 4,
+        .height = 4,
+        .format = P_FORMAT_R8G8B8A8_UNORM,
+        .usage  = P_IMAGE_USAGE_TRANSFER_SRC | P_IMAGE_USAGE_SAMPLED,
+        .flags  = P_IMAGE_FLAG_HOST_MAPPED,
+    };
+
+    PImage* image = pigment_create_image(pigment, &desc);
+    assert(image != NULL);
+    VkImage original   = pigment_vk_image(image);
+    PImageView* view   = image_get_or_create_view(pigment, image, &(PImageViewDesc) {0});
+    void* mapped       = pigment_image_mapped(image);
+    uint64_t row_pitch = pigment_image_row_pitch(image);
+    assert(mapped != NULL && row_pitch >= 16);
+
+    // Fail the old bundle, new tracker, timeline array and view allocations in turn.
+    for(int fail = 0; fail < 4; fail++)
+    {
+        expected_errors   = 0;
+        expect_error      = P_TRUE;
+        fail_calloc_after = fail;
+        pigment_image_resize(pigment, image, 8, 8);
+        assert(fail_calloc_after == -1 && expected_errors > 0);
+        expect_error = P_FALSE;
+
+        assert(pigment_vk_image(image) == original);
+        assert(pigment_image_width(image) == 4 && pigment_image_height(image) == 4);
+        assert(image_get_or_create_view(pigment, image, &(PImageViewDesc) {0}) == view);
+        assert(pigment_image_mapped(image) == mapped);
+        assert(pigment_image_row_pitch(image) == row_pitch);
+    }
+
+    // An external wrapper cannot replace the allocation owned by its caller.
+    PImage* wrapper = pigment_vk_wrap_image(pigment, original, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 4, 4, NULL);
+    assert(wrapper != NULL);
+    expected_errors = 0;
+    expect_error    = P_TRUE;
+    pigment_image_resize(pigment, wrapper, 8, 8);
+    expect_error = P_FALSE;
+    assert(expected_errors == 1);
+    assert(pigment_vk_image(wrapper) == original);
+    assert(pigment_image_width(wrapper) == 4 && pigment_image_height(wrapper) == 4);
+    pigment_destroy_image(pigment, wrapper);
+    pigment_drain_pending(pigment);
+
+    pigment_image_resize(pigment, image, 8, 8);
+    assert(pigment_image_width(image) == 8 && pigment_image_height(image) == 8);
+    assert(pigment_image_mapped(image) != NULL && pigment_image_row_pitch(image) >= 32);
+    pigment_destroy_image(pigment, image);
+    pigment_drain_pending(pigment);
+}
+
 int main(void)
 {
     assert(SDL_setenv_unsafe("VK_VALIDATION_VALIDATE_SYNC", "true", 1) == 0);
@@ -248,7 +432,11 @@ int main(void)
         .callback        = log_callback,
     };
 
+    PAllocator allocator = pigment_default_allocator;
+    allocator.calloc     = test_calloc;
+
     PigmentConfig config = {
+        .allocator         = &allocator,
         .enable_validation = P_TRUE,
         .loggers           = &logger,
         .logger_count      = 1
@@ -279,13 +467,16 @@ int main(void)
     for(uint32_t i = 0; i < ITERATIONS; i++)
     {
         test_images(pigment, pool, cmd, readback, i % 6);
+        test_resize(pigment, pool, cmd, readback, (i & 1) == 0);
     }
+
+    test_resize_failure(pigment);
 
     pigment_destroy_buffer(pigment, readback);
     pigment_destroy_command_pool(pigment, pool);
     destroy_pigment(pigment);
     assert(atomic_load_explicit(&errors, memory_order_relaxed) == 0);
-    printf("OK iterations=%u images=%u release_threads=%u\n", ITERATIONS, ITERATIONS * IMAGES, IMAGES);
+    printf("OK iterations=%u images=%u release_threads=%u resizes=%u\n", ITERATIONS, ITERATIONS * IMAGES, IMAGES, ITERATIONS * IMAGES);
 
     SDL_Quit();
     return 0;

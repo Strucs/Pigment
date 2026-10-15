@@ -209,6 +209,19 @@ PIGMENT_API void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* 
 
 PIGMENT_API PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc);
 PIGMENT_API void pigment_destroy_image(Pigment* pigment, PImage* image);
+
+/**
+ * @brief Replace an owned image's allocation without preserving its contents.
+ *
+ * Old allocations and views survive recorded and GPU uses. Failure leaves the image unchanged.
+ * Synchronize host access to the image. Refresh views and descriptors for subsequent recording.
+ * External images cannot be resized.
+ *
+ * @param pigment Pigment instance.
+ * @param image Image to resize.
+ * @param width New width in pixels.
+ * @param height New height in pixels.
+ */
 PIGMENT_API void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint32_t height);
 
 /**
@@ -240,7 +253,8 @@ PIGMENT_API void pigment_image_flush(Pigment* pigment, PImage* image);
 PIGMENT_API void pigment_image_invalidate(Pigment* pigment, PImage* image);
 
 /**
- * @brief Block until the GPU has finished every submitted command that used the image.
+ * @brief Wait for submitted uses of the current image allocation.
+ * Previous allocations retired by resize are released separately.
  *
  * @param pigment Pigment instance.
  * @param image Image to wait on.
