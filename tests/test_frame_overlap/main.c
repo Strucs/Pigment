@@ -112,15 +112,24 @@ int main(void)
     SDL_Window* window = SDL_CreateWindow("test_frame_overlap", 320, 240, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
     CHECK(window != NULL);
 
-    PAppInfo app                   = {.app_name = "test_frame_overlap", .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)};
+    PAppInfo app = {
+        .app_name    = "test_frame_overlap",
+        .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)
+    };
+
     PigmentLoggerCreateInfo logger = {
         .severity_filter = PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
         .type_filter     = PIGMENT_LOG_TYPE_GENERAL_BIT | PIGMENT_LOG_TYPE_VALIDATION_BIT | PIGMENT_LOG_TYPE_PERFORMANCE_BIT,
         .callback        = log_callback,
     };
 
-    PQueueRequest queue_request = {.required = P_QUEUE_GRAPHICS_BIT, .count = 2, .priority = 1.0f};
-    PigmentConfig config        = {
+    PQueueRequest queue_request = {
+        .required = P_QUEUE_GRAPHICS_BIT,
+        .count    = 2,
+        .priority = 1.0f
+    };
+
+    PigmentConfig config = {
         .max_frames_in_flight = SLOTS,
         .loggers              = &logger,
         .logger_count         = 1,

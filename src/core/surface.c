@@ -47,6 +47,7 @@ static void destroy_surface(Pigment* pigment, PSurface* surface);
 static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
 static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void retire_swapchain(Pigment* pigment, void* resource);
+static void release_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer);
 
 static inline uint32_t clamp(uint32_t value, uint32_t min, uint32_t max)
@@ -117,6 +118,9 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
+    renderer->swapchain->renderer = renderer;
+    resource_tracker_retain(&renderer->tracker);
+
     renderer->per_slot_trackers = P_NEW_ARRAY_FOR_OBJECT(pigment, renderer->per_slot_trackers, pigment->config.max_frames_in_flight);
     if(renderer->per_slot_trackers == NULL)
     {
@@ -137,14 +141,12 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         goto ERROR;
     }
 
-    renderer->swapchain->renderer = renderer;
-    resource_tracker_retain(&renderer->tracker);
     return renderer;
 
 ERROR:
     if(renderer != NULL)
     {
-        destroy_renderer_internal(pigment, renderer);
+        pigment_renderer_destroy(pigment, renderer);
     }
     else if(surface != NULL)
     {
@@ -167,7 +169,7 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer)
 
     PSwapchain* swapchain = renderer->swapchain;
     renderer->swapchain   = NULL;
-    pigment_defer_destroy_tracked(pigment, retire_swapchain, swapchain, &swapchain->tracker);
+    release_swapchain(pigment, swapchain);
     pigment_defer_destroy_tracked(pigment, destroy_renderer_immediate, renderer, &renderer->tracker);
 }
 
@@ -307,7 +309,7 @@ PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
     new_swapchain->renderer = renderer;
     resource_tracker_retain(&renderer->tracker);
     renderer->swapchain = new_swapchain;
-    pigment_defer_destroy_tracked(pigment, retire_swapchain, old_swapchain, &old_swapchain->tracker);
+    release_swapchain(pigment, old_swapchain);
     return PIGMENT_SUCCESS;
 }
 
@@ -763,7 +765,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
 
 ERROR:
     destroy_support_details(pigment, support_details);
-    destroy_swapchain(pigment, swapchain);
+    release_swapchain(pigment, swapchain);
     return NULL;
 }
 
@@ -775,7 +777,7 @@ static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
         destroy_sync(pigment, swapchain->sync, swapchain, pigment->config.max_frames_in_flight);
         destroy_swapchain_color_multisample(pigment, swapchain);
         destroy_swapchain_depth(pigment, swapchain);
-        destroy_swapchain_image_wrappers(pigment, swapchain);
+        P_FREE(pigment, swapchain->image_wrappers);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
         P_FREE(pigment, swapchain->images);
         pigment_resource_tracker_destroy(pigment, &swapchain->tracker);
@@ -795,9 +797,32 @@ static void destroy_swapchain_immediate(Pigment* pigment, void* resource)
     destroy_swapchain(pigment, swapchain);
 }
 
+static void release_swapchain(Pigment* pigment, PSwapchain* swapchain)
+{
+    if(swapchain == NULL)
+    {
+        return;
+    }
+
+    if(swapchain->tracker.last_used == NULL)
+    {
+        destroy_swapchain(pigment, swapchain);
+        return;
+    }
+
+    destroy_swapchain_image_wrappers(pigment, swapchain);
+    pigment_defer_destroy_tracked(pigment, retire_swapchain, swapchain, &swapchain->tracker);
+}
+
 static void retire_swapchain(Pigment* pigment, void* resource)
 {
     PSwapchain* swapchain = resource;
+    if(swapchain->renderer == NULL)
+    {
+        destroy_swapchain(pigment, swapchain);
+        return;
+    }
+
     const VkFence* fences = swapchain->sync->present_fences;
     if(fences == NULL)
     {
@@ -965,7 +990,7 @@ static PResult create_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swa
 
     for(uint32_t i = 0; i < swapchain->image_count; i++)
     {
-        swapchain->image_wrappers[i] = wrap_image(pigment, swapchain->images[i], swapchain->image_format, usage, swapchain->extent.width, swapchain->extent.height, &swapchain->tracker);
+        swapchain->image_wrappers[i] = pigment_vk_wrap_image(pigment, swapchain->images[i], swapchain->image_format, usage, swapchain->extent.width, swapchain->extent.height, &swapchain->tracker);
         if(swapchain->image_wrappers[i] == NULL)
         {
             return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -989,10 +1014,6 @@ static void destroy_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapc
             pigment_destroy_image(pigment, swapchain->image_wrappers[i]);
         }
     }
-
-    P_FREE(pigment, swapchain->image_wrappers);
-
-    swapchain->image_wrappers = NULL;
 }
 
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer)
@@ -1002,7 +1023,6 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
         return;
     }
 
-    destroy_swapchain(pigment, renderer->swapchain);
     destroy_surface(pigment, renderer->surface);
     pigment_resource_tracker_destroy(pigment, &renderer->tracker);
     if(renderer->per_slot_trackers != NULL)

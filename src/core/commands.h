@@ -234,7 +234,7 @@ PIGMENT_API PResourceTracker* pigment_create_resource_tracker(Pigment* pigment);
 
 /**
  * @brief Destroy a tracker created by pigment_create_resource_tracker.
- * Recorded uses and pending GPU work delay its release.
+ * Shared image wrappers, recorded uses and pending GPU work delay its release.
  *
  * @param pigment Pigment instance.
  * @param tracker Tracker to destroy.

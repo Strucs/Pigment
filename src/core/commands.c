@@ -894,6 +894,7 @@ PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracke
     }
 
     atomic_init(&tracker->references, 1);
+    atomic_init(&tracker->dependents, NULL);
     return PIGMENT_SUCCESS;
 }
 

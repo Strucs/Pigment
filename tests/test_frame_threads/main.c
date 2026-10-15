@@ -407,7 +407,11 @@ int main(void)
     SDL_Window* window   = SDL_CreateWindow("test_frame_threads", 320, 240, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
     CHECK(window != NULL);
 
-    PAppInfo app                   = {.app_name = "test_frame_threads", .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)};
+    PAppInfo app = {
+        .app_name    = "test_frame_threads",
+        .app_version = PIGMENT_MAKE_VERSION(1, 0, 0)
+    };
+
     PigmentLoggerCreateInfo logger = {
         .user_data       = &test,
         .severity_filter = PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
@@ -415,7 +419,12 @@ int main(void)
         .callback        = log_callback,
     };
 
-    PQueueRequest queues = {.required = P_QUEUE_GRAPHICS_BIT, .count = env_count("PIGMENT_TEST_QUEUES", 2, 2), .priority = 1.0f};
+    PQueueRequest queues = {
+        .required = P_QUEUE_GRAPHICS_BIT,
+        .count    = env_count("PIGMENT_TEST_QUEUES", 2, 2),
+        .priority = 1.0f
+    };
+
     PigmentConfig config = {
         .max_frames_in_flight = slot_count,
         .loggers              = &logger,

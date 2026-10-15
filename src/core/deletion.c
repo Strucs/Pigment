@@ -78,6 +78,7 @@ static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
 static PBool target_signaled(VkDevice device, const PWaitTarget* target);
 static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker);
+static void destroy_tracked_resources(Pigment* pigment, void* resource);
 
 PDeletionQueue* create_deletion_queue(Pigment* pigment)
 {
@@ -182,6 +183,32 @@ void resource_tracker_release(Pigment* pigment, PResourceTracker* tracker)
     }
 }
 
+void resource_tracker_add(PResourceTracker* tracker, PTrackedResource* resource)
+{
+    resource_tracker_retain(tracker);
+
+    PTrackedResource* head = atomic_load_explicit(&tracker->dependents, memory_order_relaxed);
+    do
+    {
+        resource->next = head;
+    }
+    while(!atomic_compare_exchange_weak_explicit(&tracker->dependents, &head, resource, memory_order_release, memory_order_relaxed));
+}
+
+static void destroy_tracked_resources(Pigment* pigment, void* resource)
+{
+    PResourceTracker* tracker = resource;
+    PTrackedResource* node    = atomic_load_explicit(&tracker->dependents, memory_order_acquire);
+    while(node != NULL)
+    {
+        PTrackedResource* next = node->next;
+        node->destroy_fn(pigment, node->resource);
+        node = next;
+    }
+
+    tracker->destroy_fn(pigment, tracker->resource);
+}
+
 void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void* resource, PResourceTracker* tracker)
 {
     if(pigment == NULL || destroy_fn == NULL || resource == NULL)
@@ -202,8 +229,8 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
 
 static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker)
 {
-    PDestroyFn destroy_fn = tracker->destroy_fn;
-    void* resource        = tracker->resource;
+    PDestroyFn destroy_fn = destroy_tracked_resources;
+    void* resource        = tracker;
 
     if(pigment->deletions == NULL || pigment->device == NULL || pigment->device->queues == NULL)
     {

@@ -246,9 +246,9 @@ PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracke
 void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracker);
 void resource_tracker_retain(PResourceTracker* tracker);
 void resource_tracker_release(Pigment* pigment, PResourceTracker* tracker);
+void resource_tracker_add(PResourceTracker* tracker, PTrackedResource* resource);
 
 // image.c
-PImage* wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, PResourceTracker* tracker);
 VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType view_type, VkFormat format, VkImageAspectFlags aspect_flags, uint32_t base_mip, uint32_t mip_count, uint32_t base_layer, uint32_t layer_count);
 PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_t height, VkImageTiling tiling, const PVkAllocationCreateInfo* alloc_info);
 VkImageLayout image_layout_to_vk(PImageLayout layout);

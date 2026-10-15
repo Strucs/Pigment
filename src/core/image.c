@@ -549,17 +549,11 @@ void pigment_destroy_image(Pigment* pigment, PImage* image)
     }
     else
     {
-        // The swapchain releases its wrappers after all tracked uses finish.
-        destroy_image_immediate(pigment, image);
+        resource_tracker_release(pigment, image->tracker);
     }
 }
 
-PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height)
-{
-    return wrap_image(pigment, vk_image, format, usage, width, height, NULL);
-}
-
-PImage* wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, PResourceTracker* tracker)
+PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, PResourceTracker* tracker)
 {
     if(pigment == NULL || vk_image == VK_NULL_HANDLE)
     {
@@ -594,6 +588,13 @@ PImage* wrap_image(Pigment* pigment, VkImage vk_image, VkFormat format, VkImageU
     image->vk_samples       = VK_SAMPLE_COUNT_1_BIT;
     image->aspect           = VK_IMAGE_ASPECT_COLOR_BIT;
     image->name             = "external_image";
+
+    if(!image->owns_tracker)
+    {
+        image->deletion.destroy_fn = destroy_image_immediate;
+        image->deletion.resource   = image;
+        resource_tracker_add(image->tracker, &image->deletion);
+    }
 
     return image;
 }

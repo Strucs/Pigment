@@ -147,9 +147,11 @@ PIGMENT_API VkSampler pigment_vk_sampler(PSampler* sampler);
 /**
  * @brief Wrap an external VkImage in a PImage so it can be used with the regular image API.
  *
- * The caller can free the returned PImage with pigment_destroy_image but it won't destroy
- * the underlying VkImage, which is owned by the caller. The caller must ensure the VkImage
- * outlives the PImage wrapper.
+ * Destroy the wrapper with pigment_destroy_image. The VkImage remains caller-owned.
+ * With a shared tracker, request destruction of every wrapper and the tracker owner.
+ * Wrappers and views are freed after recorded and GPU uses finish, before the owner callback.
+ * Use pigment_defer_destroy_tracked on that tracker to destroy the VkImage after its wrappers.
+ * With a private tracker, keep the VkImage alive until deferred wrapper destruction completes.
  *
  * @param pigment Pigment instance.
  * @param image The VkImage to wrap.
@@ -157,10 +159,11 @@ PIGMENT_API VkSampler pigment_vk_sampler(PSampler* sampler);
  * @param usage The usage flags the VkImage was created with.
  * @param width Image width in pixels.
  * @param height Image height in pixels.
+ * @param tracker Shared lifetime tracker, or NULL for a private tracker.
  *
  * @return A PImage wrapper, or NULL on failure.
  */
-PIGMENT_API PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height);
+PIGMENT_API PImage* pigment_vk_wrap_image(Pigment* pigment, VkImage image, VkFormat format, VkImageUsageFlags usage, uint32_t width, uint32_t height, PResourceTracker* tracker);
 
 PIGMENT_API VkPipeline pigment_vk_pipeline(PPipeline* pipeline);
 PIGMENT_API VkPipelineLayout pigment_vk_pipeline_layout(PLayout* layout);

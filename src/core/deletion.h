@@ -45,6 +45,7 @@ PIGMENT_API void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, 
  * Command buffers retain tracked resources until reset or destruction, even without a submit.
  * Then destruction waits for their last submit on each queue. An unused resource is released
  * immediately. Request destruction once per tracker and keep it alive until the callback.
+ * Shared image wrappers are destroyed before this callback, after their destruction is requested.
  * The callback may call pigment_destroy_resource_tracker to release a custom tracker.
  *
  * @param pigment Pigment instance.

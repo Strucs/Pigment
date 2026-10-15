@@ -16,7 +16,7 @@ def build_test(
     test_shaders_dir = os.path.join(
         os.path.dirname(config.lib_build_directory), "test_shaders", test_name
     )
-    config.add_includedirs(include_dir)
+    config.add_includedirs(include_dir, "external/Vulkan-Headers/include")
 
     test_files = list(powermake.get_files(f"./tests/{test_name}/**/*.c"))
     if build_common.build_shaders(

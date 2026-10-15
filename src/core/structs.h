@@ -99,9 +99,16 @@ typedef struct PRuntimeConfig {
     const void* extra;
 } PRuntimeConfig;
 
+typedef struct PTrackedResource {
+    void (*destroy_fn)(Pigment*, void*);
+    void* resource;
+    struct PTrackedResource* next;
+} PTrackedResource;
+
 struct PResourceTracker {
     _Atomic uint64_t* last_used;
     _Atomic uint32_t references;
+    _Atomic(PTrackedResource*) dependents;
     void (*destroy_fn)(Pigment*, void*);
     void* resource;
 };
@@ -353,6 +360,7 @@ struct PImage {
     PImageViewCache view_cache;
     PResourceTracker* tracker;
     PBool owns_tracker;
+    PTrackedResource deletion;
 };
 
 struct PSampler {
