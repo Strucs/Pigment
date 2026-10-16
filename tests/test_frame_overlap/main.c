@@ -281,6 +281,12 @@ int main(void)
             pigment_wait_frame_ready(pigment, renderer, slot);
             CHECK(pigment_submit_complete(pigment, previous[slot]));
 
+            for(uint32_t q = 0; q < QUEUE_COUNT; q++)
+            {
+                pigment_reset_command_pool(pigment, worker->pools[q]);
+            }
+            pigment_drain_pending(pigment);
+
             PResult result = pigment_begin_frame_context(pigment, renderer, slot, 0, &worker->frame);
             if(result == PIGMENT_RECREATE_REQUIRED || result == PIGMENT_NOT_READY)
             {
