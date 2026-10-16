@@ -20,8 +20,10 @@ static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const
 
 static void test_recorded_sets(Pigment* pigment, PDescriptorSetLayout* set_layout, const PDescriptorPoolDesc* pool_desc)
 {
+    PDeviceQueue* queue = pigment_get_queue(pigment, P_QUEUE_COMPUTE_BIT);
+    assert(queue != NULL);
     PCommandPoolDesc command_desc = {
-        .queue_family = pigment_queue_family(pigment_get_queue(pigment, P_QUEUE_GRAPHICS_BIT)),
+        .queue_family = pigment_queue_family(queue),
         .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
     };
     PCommandPool* commands = pigment_create_command_pool(pigment, &command_desc);
@@ -64,7 +66,7 @@ static void test_recorded_sets(Pigment* pigment, PDescriptorSetLayout* set_layou
         pigment_destroy_pipeline(pigment, pipeline);
         pigment_drain_pending(pigment);
 
-        PSubmit submit = {.cmds = &cmd, .cmd_count = 1};
+        PSubmit submit = {.queue = queue, .cmds = &cmd, .cmd_count = 1};
         PSubmitHandle handle;
         assert(pigment_queue_submit(pigment, &submit, 1, &handle) == PIGMENT_SUCCESS);
         pigment_submit_wait(pigment, handle);

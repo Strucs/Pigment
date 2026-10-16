@@ -41,12 +41,12 @@ typedef struct PSubmit {
     uint32_t wait_count;
 
     /**
-     * @brief Optional frame whose slot tracks this submit's completion.
+     * @brief Optional frame whose slot tracks this submit's completion on any queue.
      */
     PFrame* frame;
 
     /**
-     * @brief Wait for image acquisition. Required only on the first frame submit.
+     * @brief Wait for image acquisition once, before accessing the swapchain image.
      */
     PBool wait_acquire;
 
@@ -178,10 +178,12 @@ PIGMENT_API void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
  *
  * The caller must serialize access to each queue and frame.
  * Command buffers must belong to the queue family.
- * Frame submits require the renderer's graphics family. The caller defines GPU
- * dependencies with waits and recorded barriers. No frame submits are chained automatically.
- * Set wait_acquire on the first frame submit and signal_present on the last.
- * Both may be set on a single submit. No further submits may use that frame.
+ * Frame tracking accepts any queue. Swapchain access and acquire/present flags use
+ * the default graphics family or families added with PSwapchainDesc.shared_queues.
+ * The caller defines GPU dependencies with waits and recorded barriers.
+ * Independent work may precede the acquire wait. No submits are chained automatically.
+ * Wait acquire once and signal present on the last frame submit. Both may share a submit.
+ * No further submits may use that frame after signal_present.
  * The final submit must depend on acquisition and all work accessing the presented image.
  * Slot reuse waits for all frame submits, including work independent of presentation.
  * Empty command lists are allowed. Explicit waits also apply to frame submits.

@@ -209,6 +209,20 @@ static inline uint32_t unique_queue_families(PDeviceQueue* const* queues, uint32
     return family_count;
 }
 
+static inline PBool frame_supports_queue_family(const PFrame* frame, uint32_t family, PQueueFlags required)
+{
+    const PSwapchainDesc* desc = &frame->renderer->desc;
+    for(uint32_t i = 0; i < desc->shared_queue_count; i++)
+    {
+        if(desc->shared_queues[i]->family_index == family)
+        {
+            return (desc->shared_queues[i]->flags & required) == required;
+        }
+    }
+
+    return P_FALSE;
+}
+
 // device.c
 PDevice* create_device(Pigment* pigment);
 void destroy_device(Pigment* pigment);

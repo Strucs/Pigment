@@ -30,13 +30,13 @@ static PResult create_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swa
 static void destroy_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapchain);
 static const VkFormat* preferred_formats_for_color_space(VkColorSpaceKHR color_space, uint32_t* out_count);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred);
-static VkPresentModeKHR choose_surface_present_mode(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
+static VkPresentModeKHR choose_surface_present_mode(Pigment* pigment, VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
 static VkExtent2D choose_swapchain_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
 static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, PBool transparent);
 static PFormat pick_depth_format(Pigment* pigment);
-static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
+static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain, const PSwapchainDesc* settings);
 static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain);
-static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain);
+static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain, const PSwapchainDesc* settings);
 static void destroy_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain);
 static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount requested);
 static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space);
@@ -61,6 +61,27 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
     if(pigment == NULL || handles == NULL || desc == NULL)
     {
         return NULL;
+    }
+
+    if((desc->shared_queue_count > 0 && desc->shared_queues == NULL) || desc->shared_queue_count == UINT32_MAX)
+    {
+        PLOG_ERROR(pigment, "Invalid swapchain queue list.");
+        return NULL;
+    }
+
+    for(uint32_t i = 0; i < desc->shared_queue_count; i++)
+    {
+        PBool found = P_FALSE;
+        for(uint32_t j = 0; j < pigment->device->queue_count; j++)
+        {
+            found |= desc->shared_queues[i] == &pigment->device->queues[j];
+        }
+
+        if(!found)
+        {
+            PLOG_ERROR(pigment, "Swapchain queues must belong to this Pigment instance.");
+            return NULL;
+        }
     }
 
     PWindowRenderer* renderer = NULL;
@@ -111,6 +132,27 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
     {
         goto ERROR;
     }
+
+    renderer->shared_queues = P_NEW_ARRAY_FOR_OBJECT(pigment, renderer->shared_queues, desc->shared_queue_count + 1);
+    if(renderer->shared_queues == NULL)
+    {
+        goto ERROR;
+    }
+
+    renderer->shared_queues[0] = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
+    if(renderer->shared_queues[0] == NULL)
+    {
+        PLOG_ERROR(pigment, "Cannot create renderer without a graphics queue.");
+        goto ERROR;
+    }
+
+    if(desc->shared_queue_count > 0)
+    {
+        memcpy(renderer->shared_queues + 1, desc->shared_queues, desc->shared_queue_count * sizeof(*renderer->shared_queues));
+    }
+
+    renderer->desc.shared_queues      = renderer->shared_queues;
+    renderer->desc.shared_queue_count = desc->shared_queue_count + 1;
 
     renderer->swapchain = create_swapchain(pigment, &renderer->desc, surface, NULL);
     if(renderer->swapchain == NULL)
@@ -509,7 +551,7 @@ static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space)
     }
 }
 
-static VkPresentModeKHR choose_surface_present_mode(VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred)
+static VkPresentModeKHR choose_surface_present_mode(Pigment* pigment, VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred)
 {
     VkPresentModeKHR requested = (VkPresentModeKHR) preferred;
 
@@ -521,6 +563,7 @@ static VkPresentModeKHR choose_surface_present_mode(VkPresentModeKHR* available_
         }
     }
 
+    PLOG_INFO(pigment, "Requested present mode is unavailable, falling back to FIFO.");
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
@@ -591,6 +634,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     PDevice* device                          = pigment->device;
     PSwapchain* swapchain                    = NULL;
     SwapChainSupportDetails* support_details = NULL;
+    uint32_t* shared_families                = NULL;
 
     swapchain = P_NEW_FOR_OBJECT(pigment, swapchain);
     if(swapchain == NULL)
@@ -652,7 +696,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     }
 
     VkSurfaceFormatKHR surface_format = choose_surface_format(support_details->formats, support_details->formats_count, desc->color_space);
-    VkPresentModeKHR present_mode     = choose_surface_present_mode(support_details->present_modes, support_details->present_modes_count, desc->present_mode);
+    VkPresentModeKHR present_mode     = choose_surface_present_mode(pigment, support_details->present_modes, support_details->present_modes_count, desc->present_mode);
     VkExtent2D extent                 = choose_swapchain_extent(support_details->capabilities, desc->width, desc->height);
 
     uint32_t image_count = desc->image_count != 0 ? desc->image_count : support_details->capabilities.minImageCount + 1;
@@ -679,11 +723,29 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     create_info.imageUsage         = wanted_usage & support_details->capabilities.supportedUsageFlags;
     create_info.imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    uint32_t shared_families[2] = {graphics_family_index, present_family_index};
-    if(present_family_index != graphics_family_index)
+    shared_families = P_NEW_ARRAY_FOR_COMMAND(pigment, shared_families, (uint64_t) desc->shared_queue_count + 1);
+    if(shared_families == NULL)
+    {
+        goto ERROR;
+    }
+
+    uint32_t family_count = unique_queue_families(desc->shared_queues, desc->shared_queue_count, shared_families);
+    PBool present_shared  = P_FALSE;
+
+    for(uint32_t i = 0; i < family_count; i++)
+    {
+        present_shared |= shared_families[i] == present_family_index;
+    }
+
+    if(!present_shared)
+    {
+        shared_families[family_count++] = present_family_index;
+    }
+
+    if(family_count > 1)
     {
         create_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
-        create_info.queueFamilyIndexCount = 2;
+        create_info.queueFamilyIndexCount = family_count;
         create_info.pQueueFamilyIndices   = shared_families;
     }
     else
@@ -744,11 +806,11 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     {
         goto ERROR;
     }
-    if(create_swapchain_depth(pigment, swapchain) != PIGMENT_SUCCESS)
+    if(create_swapchain_depth(pigment, swapchain, desc) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
-    if(create_swapchain_color_multisample(pigment, swapchain) != PIGMENT_SUCCESS)
+    if(create_swapchain_color_multisample(pigment, swapchain, desc) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -759,11 +821,13 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
+    P_FREE(pigment, shared_families);
     destroy_support_details(pigment, support_details);
 
     return swapchain;
 
 ERROR:
+    P_FREE(pigment, shared_families);
     destroy_support_details(pigment, support_details);
     release_swapchain(pigment, swapchain);
     return NULL;
@@ -853,15 +917,17 @@ static PFormat pick_depth_format(Pigment* pigment)
     return P_FORMAT_UNDEFINED;
 }
 
-static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
+static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain, const PSwapchainDesc* settings)
 {
     PImageDesc desc = {
-        .width      = swapchain->extent.width,
-        .height     = swapchain->extent.height,
-        .format     = pick_depth_format(pigment),
-        .usage      = P_IMAGE_USAGE_RENDER_DEPTH,
-        .samples    = (PSampleCount) swapchain->samples,
-        .mip_levels = 1,
+        .width              = swapchain->extent.width,
+        .height             = swapchain->extent.height,
+        .format             = pick_depth_format(pigment),
+        .usage              = P_IMAGE_USAGE_RENDER_DEPTH,
+        .samples            = (PSampleCount) swapchain->samples,
+        .mip_levels         = 1,
+        .shared_queues      = settings->shared_queues,
+        .shared_queue_count = settings->shared_queue_count,
     };
 
     uint32_t count   = pigment->config.max_frames_in_flight;
@@ -896,7 +962,7 @@ static void destroy_swapchain_depth(Pigment* pigment, PSwapchain* swapchain)
     }
 }
 
-static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain)
+static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* swapchain, const PSwapchainDesc* settings)
 {
     if(swapchain->samples == VK_SAMPLE_COUNT_1_BIT)
     {
@@ -904,12 +970,14 @@ static PResult create_swapchain_color_multisample(Pigment* pigment, PSwapchain* 
     }
 
     PImageDesc desc = {
-        .width      = swapchain->extent.width,
-        .height     = swapchain->extent.height,
-        .format     = (PFormat) swapchain->image_format,
-        .usage      = P_IMAGE_USAGE_RENDER_COLOR,
-        .samples    = (PSampleCount) swapchain->samples,
-        .mip_levels = 1,
+        .width              = swapchain->extent.width,
+        .height             = swapchain->extent.height,
+        .format             = (PFormat) swapchain->image_format,
+        .usage              = P_IMAGE_USAGE_RENDER_COLOR,
+        .samples            = (PSampleCount) swapchain->samples,
+        .mip_levels         = 1,
+        .shared_queues      = settings->shared_queues,
+        .shared_queue_count = settings->shared_queue_count,
     };
 
     uint32_t count               = pigment->config.max_frames_in_flight;
@@ -1033,6 +1101,7 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
         }
         P_FREE(pigment, renderer->per_slot_trackers);
     }
+    P_FREE(pigment, renderer->shared_queues);
     P_FREE(pigment, renderer->frames);
     P_FREE(pigment, renderer);
 }

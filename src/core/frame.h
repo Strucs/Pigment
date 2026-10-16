@@ -144,6 +144,7 @@ PIGMENT_API PImage* pigment_frame_image(const PFrame* frame);
  * @brief Begin a pass using the frame's attachments.
  *
  * Requires exclusive recording access to the frame and its attachments.
+ * The command pool must use a graphics family shared by the renderer.
  *
  * @param pigment Pigment instance.
  * @param cmd Recording command buffer.

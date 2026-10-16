@@ -148,6 +148,7 @@ struct PWindowRenderer {
     PFrame* frames;
     PBool needs_recreate;
     PSwapchainDesc desc;
+    PDeviceQueue** shared_queues;
     PResourceTracker tracker;
 };
 
@@ -291,7 +292,7 @@ struct PCommandBuffer {
     PResourceTracker** uses;
     uint32_t use_count;
     uint32_t use_capacity;
-    PBool tracking_failed;
+    PBool recording_failed;
 };
 
 struct PSync {

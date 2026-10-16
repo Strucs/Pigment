@@ -145,6 +145,14 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
     {
         return;
     }
+
+    if(cmd->source_pool == NULL || !frame_supports_queue_family(frame, cmd->source_pool->queue_family_index, P_QUEUE_GRAPHICS_BIT))
+    {
+        PLOG_ERROR(pigment, "Swapchain pass requires a graphics family shared by the renderer.");
+        cmd->recording_failed = P_TRUE;
+        return;
+    }
+
     uint32_t image_index  = frame->image_index;
     PSwapchain* swapchain = frame->swapchain;
     PBool transparent     = frame->transparent;
@@ -308,6 +316,12 @@ void pigment_cmd_end_swapchain_pass(PCommandBuffer* command_buffer, const PFrame
 {
     if(command_buffer == NULL || frame == NULL || !frame->active || frame->present_ready)
     {
+        return;
+    }
+
+    if(command_buffer->source_pool == NULL || !frame_supports_queue_family(frame, command_buffer->source_pool->queue_family_index, P_QUEUE_GRAPHICS_BIT))
+    {
+        command_buffer->recording_failed = P_TRUE;
         return;
     }
 

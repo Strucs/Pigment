@@ -24,11 +24,76 @@
     }                                                                                                 \
     while(0)
 
+typedef enum SubmitMode {
+    SUBMIT_COMBINED,
+    SUBMIT_BATCHED_GRAPHICS,
+    SUBMIT_SPLIT_GRAPHICS,
+    SUBMIT_SPLIT_QUEUES,
+    SUBMIT_SEPARATE_PRESENT_SIGNAL,
+    SUBMIT_INDEPENDENT_COPY,
+    SUBMIT_TRANSFER_FIRST_BATCHED,
+    SUBMIT_TRANSFER_AFTER_ACQUIRE,
+    SUBMIT_TRANSFER_FIRST_SPLIT,
+    SUBMIT_TRANSFER_DEPENDENCY,
+    SUBMIT_MODE_COUNT,
+} SubmitMode;
+
+typedef enum TestQueue {
+    GRAPHICS_QUEUE,
+    COPY_QUEUE,
+    TRANSFER_QUEUE,
+    QUEUE_COUNT,
+} TestQueue;
+
+static const char* const mode_names[SUBMIT_MODE_COUNT] = {
+    "combined",
+    "batched_graphics",
+    "split_graphics",
+    "split_queues",
+    "separate_present_signal",
+    "independent_copy",
+    "transfer_first_batched",
+    "transfer_after_acquire",
+    "transfer_first_split",
+    "transfer_dependency",
+};
+
+#define MAX_SUBMITS 3
+
+static PBool uses_transfer_queue(SubmitMode mode)
+{
+    return mode == SUBMIT_TRANSFER_FIRST_BATCHED || mode == SUBMIT_TRANSFER_AFTER_ACQUIRE
+           || mode == SUBMIT_TRANSFER_FIRST_SPLIT || mode == SUBMIT_TRANSFER_DEPENDENCY;
+}
+
+static PBool copy_is_independent(SubmitMode mode)
+{
+    return mode == SUBMIT_INDEPENDENT_COPY || mode == SUBMIT_TRANSFER_FIRST_BATCHED
+           || mode == SUBMIT_TRANSFER_AFTER_ACQUIRE || mode == SUBMIT_TRANSFER_FIRST_SPLIT;
+}
+
+static TestQueue copy_queue_for_mode(SubmitMode mode)
+{
+    if(uses_transfer_queue(mode))
+    {
+        return TRANSFER_QUEUE;
+    }
+
+    if(mode == SUBMIT_SPLIT_QUEUES
+       || mode == SUBMIT_SEPARATE_PRESENT_SIGNAL
+       || mode == SUBMIT_INDEPENDENT_COPY)
+    {
+        return COPY_QUEUE;
+    }
+
+    return GRAPHICS_QUEUE;
+}
+
 typedef struct Slot {
     PBuffer* source;
     PBuffer* intermediate;
     PBuffer* readback;
-    PSubmitHandle handles[2];
+    PSubmitHandle handles[QUEUE_COUNT];
     uint32_t sequence;
     PBool pending;
 } Slot;
@@ -42,19 +107,21 @@ typedef struct Test {
     SDL_Semaphore* done;
     Slot slots[MAX_SLOTS];
     PCommandBuffer* cmds[MAX_SLOTS];
-    PCommandBuffer* copies[MAX_SLOTS];
-    PDeviceQueue* queues[2];
+    PCommandBuffer* copies[QUEUE_COUNT][MAX_SLOTS];
+    PDeviceQueue* queues[QUEUE_COUNT];
 
     // One CPU frame at a time. Semaphore handoffs protect these fields.
     PFrame* frame;
     PCommandBuffer* cmd;
     PImage* image;
-    PSubmitHandle handles[2];
+    PSubmitHandle handles[QUEUE_COUNT];
     uint32_t slot;
     uint32_t sequence;
     uint32_t stage;
     uint32_t recorded[RECORDERS];
     uint32_t submitted;
+    uint32_t mode_submitted[SUBMIT_MODE_COUNT];
+    uint32_t mode_verified[SUBMIT_MODE_COUNT];
     SDL_ThreadID recording_thread;
     PBool stop;
 
@@ -118,7 +185,7 @@ static void verify_slot(Test* test, Slot* slot)
         return;
     }
 
-    for(uint32_t i = 0; i < 2; i++)
+    for(uint32_t i = 0; i < QUEUE_COUNT; i++)
     {
         CHECK(pigment_submit_complete(test->pigment, slot->handles[i]));
     }
@@ -131,6 +198,7 @@ static void verify_slot(Test* test, Slot* slot)
         CHECK(words[i] == pattern(slot->sequence, i));
     }
 
+    test->mode_verified[slot->sequence % SUBMIT_MODE_COUNT]++;
     slot->pending = P_FALSE;
 }
 
@@ -174,8 +242,8 @@ static int record_worker(void* arg)
         pigment_cmd_copy_buffer(test->pigment, test->cmd, slot->source, slot->intermediate, &copy, 1);
 
         // Batched copies on one queue use a barrier. Separate calls use explicit waits.
-        uint32_t mode = test->sequence % 6;
-        if(mode == 0 || mode == 1)
+        SubmitMode mode = (SubmitMode) (test->sequence % SUBMIT_MODE_COUNT);
+        if(mode == SUBMIT_COMBINED || mode == SUBMIT_BATCHED_GRAPHICS)
         {
             PBufferBarrier barrier = {
                 .buffer = slot->intermediate,
@@ -188,7 +256,7 @@ static int record_worker(void* arg)
 
         pigment_end_recording(test->pigment, test->cmd);
 
-        PCommandBuffer* copy_cmd = test->copies[test->slot];
+        PCommandBuffer* copy_cmd = test->copies[copy_queue_for_mode(mode)][test->slot];
         pigment_begin_recording(test->pigment, copy_cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
         PBufferBarrier reuse_barrier = {
             .buffer = slot->readback,
@@ -197,7 +265,7 @@ static int record_worker(void* arg)
         };
 
         pigment_cmd_buffer_barriers(test->pigment, copy_cmd, &reuse_barrier, 1);
-        PBuffer* source = mode == 5 ? slot->source : slot->intermediate;
+        PBuffer* source = copy_is_independent(mode) ? slot->source : slot->intermediate;
         pigment_cmd_copy_buffer(test->pigment, copy_cmd, source, slot->readback, &copy, 1);
 
         PBufferBarrier barrier = {
@@ -217,8 +285,8 @@ static int record_worker(void* arg)
 
 static void expect_submit_failure(Test* test, const PSubmit* submits, uint32_t count)
 {
-    PSubmitHandle handles[3];
-    CHECK(count <= 3);
+    PSubmitHandle handles[MAX_SUBMITS];
+    CHECK(count <= MAX_SUBMITS);
     memset(handles, 0xff, sizeof(handles));
     uint32_t previous = atomic_load_explicit(&test->submit_errors, memory_order_relaxed);
     atomic_store_explicit(&test->expect_submit_error, P_TRUE, memory_order_relaxed);
@@ -234,8 +302,8 @@ static void expect_submit_failure(Test* test, const PSubmit* submits, uint32_t c
 
 static int submit_worker(void* arg)
 {
-    Test* test              = arg;
-    uint64_t last_values[2] = {0};
+    Test* test                        = arg;
+    uint64_t last_values[QUEUE_COUNT] = {0};
     CHECK(SDL_GetCurrentThreadID() != test->main_thread);
 
     for(;;)
@@ -256,11 +324,20 @@ static int submit_worker(void* arg)
             SDL_Delay(0);
         }
 
-        uint32_t mode          = test->sequence % 6;
-        PCommandBuffer* cmds[] = {test->cmd, test->copies[test->slot]};
-        PSubmit submits[3]     = {
+        SubmitMode mode        = (SubmitMode) (test->sequence % SUBMIT_MODE_COUNT);
+        PBool first_cycle      = test->sequence < SUBMIT_MODE_COUNT;
+        TestQueue copy_queue   = copy_queue_for_mode(mode);
+        PBool separate_present = uses_transfer_queue(mode)
+                                 || mode == SUBMIT_SEPARATE_PRESENT_SIGNAL
+                                 || mode == SUBMIT_INDEPENDENT_COPY
+                                 || pigment_queue_family(test->queues[copy_queue]) != pigment_queue_family(test->queues[GRAPHICS_QUEUE]);
+
+        // Normally render, copy, then an optional empty submit that signals present.
+        // The transfer-first scenarios swap the first two submits below.
+        PCommandBuffer* cmds[]       = {test->cmd, test->copies[copy_queue_for_mode(mode)][test->slot]};
+        PSubmit submits[MAX_SUBMITS] = {
             {
-             .queue         = test->queues[0],
+             .queue         = test->queues[GRAPHICS_QUEUE],
              .cmds          = &cmds[0],
              .cmd_count     = 1,
              .frame         = test->frame,
@@ -268,23 +345,23 @@ static int submit_worker(void* arg)
              .acquire_stage = (test->sequence & 1) ? P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT : P_PIPELINE_STAGE_NONE,
              },
             {
-             .queue          = test->queues[mode >= 3 ? 1 : 0],
+             .queue          = test->queues[copy_queue],
              .cmds           = &cmds[1],
              .cmd_count      = 1,
              .frame          = test->frame,
-             .signal_present = mode < 4,
+             .signal_present = !separate_present,
              },
             {
-             .queue          = test->queues[0],
+             .queue          = test->queues[GRAPHICS_QUEUE],
              .frame          = test->frame,
              .signal_present = P_TRUE,
              },
         };
 
         // Order reuse of our buffers against the previous frame on this slot.
-        PSubmitWait reuse[2];
+        PSubmitWait reuse[QUEUE_COUNT];
         uint32_t reuse_count = 0;
-        for(uint32_t i = 0; i < 2; i++)
+        for(uint32_t i = 0; i < QUEUE_COUNT; i++)
         {
             PSubmitHandle handle = test->slots[test->slot].handles[i];
             if(handle.value != 0)
@@ -295,19 +372,21 @@ static int submit_worker(void* arg)
 
         submits[0].waits      = reuse;
         submits[0].wait_count = reuse_count;
-        if(mode == 5)
+        if(copy_is_independent(mode))
         {
             // The readback runs independently of rendering and the final present signal.
             submits[1].waits      = reuse;
             submits[1].wait_count = reuse_count;
         }
 
-        if(test->sequence == 0)
+        if(first_cycle && mode == SUBMIT_COMBINED)
         {
-            submits[0].wait_acquire = P_FALSE;
+            submits[0].wait_acquire   = P_FALSE;
+            submits[0].signal_present = P_TRUE;
             expect_submit_failure(test, submits, 1);
-            submits[0].wait_acquire = P_TRUE;
-            submits[1].wait_acquire = P_TRUE;
+            submits[0].signal_present = P_FALSE;
+            submits[0].wait_acquire   = P_TRUE;
+            submits[1].wait_acquire   = P_TRUE;
             expect_submit_failure(test, submits, 2);
             submits[1].wait_acquire   = P_FALSE;
             submits[0].signal_present = P_TRUE;
@@ -315,15 +394,62 @@ static int submit_worker(void* arg)
             submits[0].signal_present = P_FALSE;
         }
 
-        uint32_t count = mode == 0 ? 1 : (mode < 4 ? 2 : 3);
-        if(mode == 0)
+        uint32_t count = separate_present ? 3 : 2;
+        if(mode == SUBMIT_COMBINED)
         {
+            count                     = 1;
             submits[0].cmd_count      = 2;
             submits[0].signal_present = P_TRUE;
         }
 
-        PSubmitHandle handles[3];
-        if(mode >= 2 && mode <= 4)
+        if(mode == SUBMIT_TRANSFER_FIRST_BATCHED || mode == SUBMIT_TRANSFER_FIRST_SPLIT)
+        {
+            // Transfer work may be tracked before the graphics acquire wait.
+            PSubmit graphics          = submits[0];
+            submits[0]                = submits[1];
+            submits[1]                = graphics;
+            submits[1].signal_present = P_TRUE;
+            count                     = 2;
+        }
+
+        if(first_cycle && mode == SUBMIT_TRANSFER_FIRST_BATCHED)
+        {
+            // An auxiliary submit must not count as consuming the acquire semaphore.
+            submits[1].wait_acquire = P_FALSE;
+            expect_submit_failure(test, submits, count);
+            submits[1].wait_acquire = P_TRUE;
+
+            if(pigment_queue_family(test->queues[TRANSFER_QUEUE]) != pigment_queue_family(test->queues[GRAPHICS_QUEUE]))
+            {
+                PSubmit invalid = {.queue = test->queues[TRANSFER_QUEUE], .frame = test->frame, .wait_acquire = P_TRUE};
+                expect_submit_failure(test, &invalid, 1);
+                invalid.wait_acquire   = P_FALSE;
+                invalid.signal_present = P_TRUE;
+                expect_submit_failure(test, &invalid, 1);
+            }
+        }
+
+        if(first_cycle && mode == SUBMIT_TRANSFER_AFTER_ACQUIRE)
+        {
+            // The intermediate transfer submit must not hide a prior acquire wait.
+            submits[2].wait_acquire = P_TRUE;
+            expect_submit_failure(test, submits, count);
+            submits[2].wait_acquire = P_FALSE;
+        }
+
+        PSubmitHandle handles[MAX_SUBMITS];
+        if(mode == SUBMIT_TRANSFER_FIRST_SPLIT)
+        {
+            CHECK(pigment_queue_submit(test->pigment, submits, 1, handles) == PIGMENT_SUCCESS);
+            if(first_cycle && mode == SUBMIT_TRANSFER_FIRST_SPLIT)
+            {
+                submits[1].wait_acquire = P_FALSE;
+                expect_submit_failure(test, &submits[1], 1);
+                submits[1].wait_acquire = P_TRUE;
+            }
+            CHECK(pigment_queue_submit(test->pigment, &submits[1], 1, &handles[1]) == PIGMENT_SUCCESS);
+        }
+        else if(mode == SUBMIT_SPLIT_GRAPHICS || mode == SUBMIT_SPLIT_QUEUES || mode == SUBMIT_SEPARATE_PRESENT_SIGNAL || mode == SUBMIT_TRANSFER_DEPENDENCY)
         {
             CHECK(pigment_queue_submit(test->pigment, submits, 1, handles) == PIGMENT_SUCCESS);
             PSubmitWait wait      = {.handle = handles[0], .stage = P_PIPELINE_STAGE_TRANSFER_BIT};
@@ -346,13 +472,18 @@ static int submit_worker(void* arg)
         memset(test->handles, 0, sizeof(test->handles));
         for(uint32_t i = 0; i < count; i++)
         {
-            uint32_t queue = handles[i].queue == test->queues[0] ? 0 : 1;
-            CHECK(handles[i].queue == test->queues[queue] && handles[i].value > last_values[queue]);
+            uint32_t queue = 0;
+            while(queue < QUEUE_COUNT && handles[i].queue != test->queues[queue])
+            {
+                queue++;
+            }
+
+            CHECK(queue < QUEUE_COUNT && handles[i].value > last_values[queue]);
             last_values[queue]   = handles[i].value;
             test->handles[queue] = handles[i];
         }
 
-        if(test->sequence == 0)
+        if(first_cycle && mode == SUBMIT_COMBINED)
         {
             expect_submit_failure(test, submits, 1);
         }
@@ -362,6 +493,7 @@ static int submit_worker(void* arg)
             pigment_present_frame(test->pigment, test->frame);
         }
 
+        test->mode_submitted[mode]++;
         test->submitted++;
         test->stage = 2;
         SDL_SignalSemaphore(test->done);
@@ -403,8 +535,9 @@ int main(void)
 
     uint32_t frame_count = env_count("PIGMENT_TEST_FRAMES", 10000, 10000000);
     uint32_t slot_count  = env_count("PIGMENT_TEST_SLOTS", 3, MAX_SLOTS);
-    Test test            = {.main_thread = SDL_GetCurrentThreadID()};
-    SDL_Window* window   = SDL_CreateWindow("test_frame_threads", 320, 240, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
+    CHECK(frame_count >= SUBMIT_MODE_COUNT);
+    Test test          = {.main_thread = SDL_GetCurrentThreadID()};
+    SDL_Window* window = SDL_CreateWindow("test_frame_threads", 320, 240, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
     CHECK(window != NULL);
 
     PAppInfo app = {
@@ -419,10 +552,9 @@ int main(void)
         .callback        = log_callback,
     };
 
-    PQueueRequest queues = {
-        .required = P_QUEUE_GRAPHICS_BIT,
-        .count    = env_count("PIGMENT_TEST_QUEUES", 2, 2),
-        .priority = 1.0f
+    PQueueRequest queues[] = {
+        {.required = P_QUEUE_GRAPHICS_BIT, .count = env_count("PIGMENT_TEST_QUEUES", 2, 2), .priority = 1.0f},
+        {.required = P_QUEUE_TRANSFER_BIT, .count = 1, .priority = 1.0f},
     };
 
     PigmentConfig config = {
@@ -430,8 +562,8 @@ int main(void)
         .loggers              = &logger,
         .logger_count         = 1,
         .enable_validation    = P_TRUE,
-        .queue_requests       = &queues,
-        .queue_request_count  = 1,
+        .queue_requests       = queues,
+        .queue_request_count  = 2,
     };
 
     test.pigment = init_pigment(&app, &config);
@@ -440,28 +572,50 @@ int main(void)
 
     uint32_t queue_count = pigment_request_queue_count(test.pigment, 0);
     CHECK(queue_count > 0);
-    test.queues[0] = pigment_request_queue(test.pigment, 0, 0);
-    test.queues[1] = test.queues[0];
-    for(uint32_t i = 1; i < queue_count; i++)
+    test.queues[GRAPHICS_QUEUE] = pigment_request_queue(test.pigment, 0, 0);
+    test.queues[TRANSFER_QUEUE] = pigment_request_queue_count(test.pigment, 1) > 0
+                                      ? pigment_request_queue(test.pigment, 1, 0)
+                                      : test.queues[GRAPHICS_QUEUE];
+    test.queues[COPY_QUEUE]     = queue_count > 1
+                                      ? pigment_request_queue(test.pigment, 0, 1)
+                                      : test.queues[TRANSFER_QUEUE];
+
+    uint32_t used_queues   = 0;
+    uint32_t used_families = 0;
+    for(uint32_t role = 0; role < QUEUE_COUNT; role++)
     {
-        PDeviceQueue* candidate = pigment_request_queue(test.pigment, 0, i);
-        if(pigment_queue_family(candidate) == pigment_queue_family(test.queues[0]))
+        PBool new_queue  = P_TRUE;
+        PBool new_family = P_TRUE;
+        for(uint32_t previous = 0; previous < role; previous++)
         {
-            test.queues[1] = candidate;
-            break;
+            new_queue &= test.queues[role] != test.queues[previous];
+            new_family &= pigment_queue_family(test.queues[role]) != pigment_queue_family(test.queues[previous]);
         }
+        used_queues += new_queue;
+        used_families += new_family;
     }
 
-    PCommandPoolDesc pool_desc = {
-        .queue_family = pigment_queue_family(pigment_get_queue(test.pigment, P_QUEUE_GRAPHICS_BIT)),
-        .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
-        .name         = "frame_threads_pool",
-    };
+    printf("Queues used=%u families=%u (graphics=%u copy=%u transfer=%u)\n", used_queues, used_families, pigment_queue_family(test.queues[GRAPHICS_QUEUE]), pigment_queue_family(test.queues[COPY_QUEUE]), pigment_queue_family(test.queues[TRANSFER_QUEUE]));
 
-    PCommandPool* pool = pigment_create_command_pool(test.pigment, &pool_desc);
-    CHECK(pool != NULL);
-    CHECK(pigment_create_command_buffers(test.pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, slot_count, test.cmds) == PIGMENT_SUCCESS);
-    CHECK(pigment_create_command_buffers(test.pigment, pool, P_COMMAND_BUFFER_LEVEL_PRIMARY, slot_count, test.copies) == PIGMENT_SUCCESS);
+    if(used_queues == 1)
+    {
+        printf("All scenarios use one queue. Cross-queue synchronization is not covered.\n");
+    }
+
+    PCommandPool* pools[QUEUE_COUNT];
+    for(uint32_t role = 0; role < QUEUE_COUNT; role++)
+    {
+        PCommandPoolDesc pool_desc = {
+            .queue_family = pigment_queue_family(test.queues[role]),
+            .flags        = P_COMMAND_POOL_FLAG_RESET_BUFFER,
+            .name         = "frame_threads_pool",
+        };
+
+        pools[role] = pigment_create_command_pool(test.pigment, &pool_desc);
+        CHECK(pools[role] != NULL);
+        CHECK(pigment_create_command_buffers(test.pigment, pools[role], P_COMMAND_BUFFER_LEVEL_PRIMARY, slot_count, test.copies[role]) == PIGMENT_SUCCESS);
+    }
+    CHECK(pigment_create_command_buffers(test.pigment, pools[GRAPHICS_QUEUE], P_COMMAND_BUFFER_LEVEL_PRIMARY, slot_count, test.cmds) == PIGMENT_SUCCESS);
 
     PWindowHandles handles   = pigment_sdl_get_window_handles(window);
     PSwapchainDesc swapchain = {.width = 320, .height = 240, .present_mode = P_PRESENT_MODE_IMMEDIATE};
@@ -471,10 +625,12 @@ int main(void)
     for(uint32_t i = 0; i < slot_count; i++)
     {
         PBufferDesc desc = {
-            .size   = WORDS * sizeof(uint32_t),
-            .usage  = P_BUFFER_USAGE_TRANSFER_DST,
-            .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT},
-            .name   = "frame_threads_readback",
+            .size               = WORDS * sizeof(uint32_t),
+            .usage              = P_BUFFER_USAGE_TRANSFER_DST,
+            .memory             = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT},
+            .name               = "frame_threads_readback",
+            .shared_queues      = test.queues,
+            .shared_queue_count = QUEUE_COUNT,
         };
 
         test.slots[i].readback = pigment_create_buffer(test.pigment, &desc);
@@ -562,10 +718,12 @@ int main(void)
         verify_slot(&test, slot);
 
         PBufferDesc source_desc = {
-            .size   = WORDS * sizeof(uint32_t),
-            .usage  = P_BUFFER_USAGE_TRANSFER_SRC,
-            .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT},
-            .name   = "frame_threads_source",
+            .size               = WORDS * sizeof(uint32_t),
+            .usage              = P_BUFFER_USAGE_TRANSFER_SRC,
+            .memory             = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT},
+            .name               = "frame_threads_source",
+            .shared_queues      = test.queues,
+            .shared_queue_count = QUEUE_COUNT,
         };
 
         slot->source = pigment_create_buffer(test.pigment, &source_desc);
@@ -640,15 +798,26 @@ int main(void)
         pigment_destroy_buffer(test.pigment, test.slots[i].readback);
     }
 
+    for(uint32_t mode = 0; mode < SUBMIT_MODE_COUNT; mode++)
+    {
+        uint32_t expected = frame_count / SUBMIT_MODE_COUNT + (mode < frame_count % SUBMIT_MODE_COUNT);
+        CHECK(test.mode_submitted[mode] == expected);
+        CHECK(test.mode_verified[mode] == expected);
+        printf("%s: submitted=%u readbacks=%u\n", mode_names[mode], test.mode_submitted[mode], test.mode_verified[mode]);
+    }
+
     pigment_renderer_destroy(test.pigment, test.renderer);
-    pigment_destroy_command_pool(test.pigment, pool);
+    for(uint32_t role = 0; role < QUEUE_COUNT; role++)
+    {
+        pigment_destroy_command_pool(test.pigment, pools[role]);
+    }
     destroy_pigment(test.pigment);
     CHECK(atomic_load_explicit(&test.errors, memory_order_relaxed) == 0);
 
     atomic_store_explicit(&test.watchdog_stop, P_TRUE, memory_order_relaxed);
     SDL_WaitThread(watchdog_thread, NULL);
 
-    printf("OK frames=%u slots=%u queues=%u recorders=%d recreations=%u acquire_retries=%u elapsed=%.3f s\n", frame_count, slot_count, queue_count, RECORDERS, recreations, acquire_retries, (double) (SDL_GetTicks() - start) / 1000.0);
+    printf("OK frames=%u slots=%u queues_used=%u recorders=%d recreations=%u acquire_retries=%u elapsed=%.3f s\n", frame_count, slot_count, used_queues, RECORDERS, recreations, acquire_retries, (double) (SDL_GetTicks() - start) / 1000.0);
 
     SDL_DestroyWindow(window);
     SDL_Quit();

@@ -312,9 +312,9 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
             return;
         }
         vk_secondaries[i] = secondaries[i]->buffer;
-        if(secondaries[i]->tracking_failed)
+        if(secondaries[i]->recording_failed)
         {
-            primary->tracking_failed = P_TRUE;
+            primary->recording_failed = P_TRUE;
         }
         for(uint32_t j = 0; j < secondaries[i]->use_count; j++)
         {
@@ -379,7 +379,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
                 PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] is invalid.", i, j);
                 return PIGMENT_ERROR;
             }
-            if(cmd->tracking_failed)
+            if(cmd->recording_failed)
             {
                 PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] has incomplete resource tracking.", i, j);
                 return PIGMENT_ERROR;
@@ -404,9 +404,16 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
         PFrame* frame = submit->frame;
         if(frame != NULL)
         {
-            if(!frame->active || graphics_default == NULL || queue->family_index != graphics_default->family_index)
+            if(!frame->active)
             {
-                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] requires an active frame and its graphics family.", i);
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] requires an active frame.", i);
+                return PIGMENT_ERROR;
+            }
+
+            if((submit->wait_acquire || submit->signal_present)
+               && !frame_supports_queue_family(frame, queue->family_index, 0))
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] requires a shared swapchain family for acquire or present synchronization.", i);
                 return PIGMENT_ERROR;
             }
 
@@ -416,13 +423,14 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             {
                 if(submits[j - 1].frame == frame)
                 {
-                    acquire_waited = P_TRUE;
-                    present_ready  = submits[j - 1].signal_present;
-                    break;
+                    acquire_waited |= submits[j - 1].wait_acquire;
+                    present_ready |= submits[j - 1].signal_present;
                 }
             }
 
-            if(present_ready || (submit->wait_acquire && acquire_waited) || (!submit->wait_acquire && !acquire_waited))
+            if(present_ready
+               || (submit->wait_acquire && acquire_waited)
+               || (submit->signal_present && !submit->wait_acquire && !acquire_waited))
             {
                 PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u] must wait acquire once and signal present last.", i);
                 return PIGMENT_ERROR;
@@ -557,8 +565,8 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             PFrame* frame = submits[j].frame;
             if(frame != NULL)
             {
-                frame->acquire_waited = P_TRUE;
-                frame->present_ready  = submits[j].signal_present;
+                frame->acquire_waited |= submits[j].wait_acquire;
+                frame->present_ready |= submits[j].signal_present;
                 atomic_store_explicit(&frame->renderer->per_slot_trackers[frame->slot].last_used[queue->slot], handle.value, memory_order_relaxed);
                 atomic_store_explicit(&frame->swapchain->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
                 atomic_store_explicit(&frame->renderer->tracker.last_used[queue->slot], handle.value, memory_order_relaxed);
@@ -789,7 +797,7 @@ void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tr
     }
     if(cmd_track_use(pigment, cmd, tracker) != PIGMENT_SUCCESS)
     {
-        cmd->tracking_failed = P_TRUE;
+        cmd->recording_failed = P_TRUE;
         PLOG_ERROR(pigment, "pigment_cmd_use: failed to retain resource, recording cannot be submitted.");
     }
 }
@@ -849,8 +857,8 @@ static void cmd_release_uses(Pigment* pigment, PCommandBuffer* cmd)
         resource_tracker_release(pigment, cmd->uses[i]);
     }
 
-    cmd->use_count       = 0;
-    cmd->tracking_failed = P_FALSE;
+    cmd->use_count        = 0;
+    cmd->recording_failed = P_FALSE;
 }
 
 void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint32_t queue_slot, uint64_t value)

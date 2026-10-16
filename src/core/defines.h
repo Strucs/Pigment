@@ -380,6 +380,13 @@ typedef struct PSwapchainDesc {
     PSampleCount samples;    // 0 or P_SAMPLE_COUNT_1 = no MSAA. Falls back to 1x if hardware does not support requested count.
     uint32_t image_count;
     PBool transparent;
+    /**
+     * Additional queues sharing swapchain, depth and MSAA images.
+     * The default graphics family is included. Swapchain sharing with present is automatic.
+     * The renderer copies the list. Queues must belong to this Pigment instance.
+     */
+    PDeviceQueue* const* shared_queues;
+    uint32_t shared_queue_count;
 } PSwapchainDesc;
 
 typedef enum PCompareOp {
