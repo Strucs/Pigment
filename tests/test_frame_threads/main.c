@@ -398,7 +398,7 @@ static int submit_worker(void* arg)
         if(mode == SUBMIT_COMBINED)
         {
             count                     = 1;
-            submits[0].cmd_count      = 2;
+            submits[0].cmd_count      = sizeof(cmds) / sizeof(cmds[0]);
             submits[0].signal_present = P_TRUE;
         }
 
@@ -563,7 +563,7 @@ int main(void)
         .logger_count         = 1,
         .enable_validation    = P_TRUE,
         .queue_requests       = queues,
-        .queue_request_count  = 2,
+        .queue_request_count  = sizeof(queues) / sizeof(queues[0]),
     };
 
     test.pigment = init_pigment(&app, &config);

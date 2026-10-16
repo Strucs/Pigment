@@ -32,6 +32,12 @@ extern "C" {
 #define PIGMENT_DEFAULT_MAX_CUBEMAPS 16
 #define PIGMENT_DEFAULT_MAX_RENDER_TARGETS 16
 
+/**
+ * @brief Bindless descriptors with versions retained by recorded commands.
+ *
+ * The caller must serialize calls on the same bindless and changes to registered render targets.
+ * Upload helpers also require exclusive access to the default graphics queue during submission.
+ */
 typedef struct PStdBindless PStdBindless;
 typedef struct PStdPipelineLayouts PStdPipelineLayouts;
 
@@ -63,8 +69,8 @@ PIGMENT_API uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless*
 /**
  * @brief Register an already-created image into the bindless image array.
  *
- * The bindless takes ownership and destroys it with pigment_std_destroy_bindless,
- * so the caller must not destroy it afterwards.
+ * Ownership transfers on success. Changes are published by pigment_std_bindless_set.
+ * The caller must order sampling after upload completion through submission waits.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
@@ -75,7 +81,9 @@ PIGMENT_API uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless*
 PIGMENT_API uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* bindless, PImage* image);
 
 /**
- * @brief Unregister an image and free its bindless slot for reuse.
+ * @brief Remove an image from future descriptor versions.
+ *
+ * The index can be reused in a new version. Recorded commands keep their old descriptors and image.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
@@ -89,7 +97,9 @@ PIGMENT_API uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bin
 PIGMENT_API uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
 /**
- * @brief Unregister a cubemap and free its bindless slot for reuse.
+ * @brief Remove a cubemap from future descriptor versions.
+ *
+ * Recorded commands keep their old descriptors and image.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
@@ -137,16 +147,20 @@ PIGMENT_API PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bind
 PIGMENT_API PImage* pigment_std_bindless_image(PStdBindless* bindless, uint32_t image_slot);
 
 /**
- * @brief Get the bindless descriptor set for the current frame and stamp all registered resources as in-use on the given command buffer.
+ * @brief Publish pending changes and retain the resulting descriptors for cmd.
+ *
+ * Each immutable version shares one set across frames.
+ * Old versions and their resources survive recorded and GPU uses.
+ * Released pools and sets are reused for later versions.
+ * Get a set through this function for each command buffer using it. Never update the returned set.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
- * @param cmd Command buffer to record resource usage into. Can be NULL if the caller only needs the descriptor set and will handle resource lifetime manually.
- * @param current_frame Current frame in flight index.
+ * @param cmd Recording command buffer, required to retain the descriptors and resources.
  *
- * @return Descriptor set for the current frame, NULL otherwise.
+ * @return Descriptor set, or NULL on invalid input or allocation failure.
  */
-PIGMENT_API PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd, uint32_t current_frame);
+PIGMENT_API PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd);
 
 #ifdef __cplusplus
 }

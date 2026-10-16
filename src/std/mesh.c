@@ -58,10 +58,10 @@ PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, cons
     }
 
     PBufferUploadDesc uploads[] = {
-        {.dst = mesh->vertex_buffer, .data = vertices, .size = vertices_size,          .offset = 0},
-        { .dst = mesh->index_buffer, .data = indices,  .size = index_buffer_desc.size, .offset = 0},
+        {.dst = mesh->vertex_buffer, .data = vertices,          .size = vertices_size, .offset = 0},
+        { .dst = mesh->index_buffer,  .data = indices, .size = index_buffer_desc.size, .offset = 0},
     };
-    pigment_std_buffer_upload(pigment, pool, NULL, uploads, 2, NULL);
+    pigment_std_buffer_upload(pigment, pool, NULL, uploads, sizeof(uploads) / sizeof(uploads[0]), NULL);
 
     mesh->index_count = index_count;
     mesh->index_type  = P_INDEX_TYPE_UINT32;

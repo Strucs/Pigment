@@ -137,7 +137,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     VkValidationFeatureEnableEXT enabled_features[]      = {VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};
     VkValidationFeaturesEXT validation_features          = {
         .sType                         = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-        .enabledValidationFeatureCount = 1,
+        .enabledValidationFeatureCount = sizeof(enabled_features) / sizeof(enabled_features[0]),
         .pEnabledValidationFeatures    = enabled_features,
     };
 

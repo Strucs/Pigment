@@ -127,7 +127,7 @@ int main(void)
 
     PigmentConfig config = {
         .loggers           = loggers,
-        .logger_count      = 1,
+        .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
         .enable_validation = P_TRUE,
     };
 

@@ -208,8 +208,15 @@ void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuff
         return;
     }
 
+    canvas->active_slot       = NULL;
     PStdCanvasBlendSlot* slot = find_slot_for_mode(canvas, blend_mode);
     if(slot == NULL)
+    {
+        return;
+    }
+
+    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, canvas->bindless, cmd);
+    if(bindless_set == NULL)
     {
         return;
     }
@@ -223,7 +230,6 @@ void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuff
 
     pigment_bind_pipeline(pigment, cmd, slot->pipeline);
 
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, canvas->bindless, cmd, frame_index);
     pigment_cmd_bind_descriptor_sets(pigment, cmd, slot->pipeline, 0, &bindless_set, 1, NULL, 0);
 
     pigment_cmd_set_depth(pigment, cmd, P_FALSE, P_FALSE, P_COMPARE_OP_ALWAYS);

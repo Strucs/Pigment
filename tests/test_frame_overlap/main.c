@@ -196,7 +196,7 @@ int main(void)
         .logger_count         = 1,
         .enable_validation    = P_TRUE,
         .queue_requests       = queue_requests,
-        .queue_request_count  = 2,
+        .queue_request_count  = sizeof(queue_requests) / sizeof(queue_requests[0]),
     };
 
     Pigment* pigment = init_pigment(&app, &config);

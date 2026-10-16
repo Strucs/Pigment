@@ -167,8 +167,8 @@ int main(void)
     desc_additive.blend_modes      = &additive_blend;
     desc_additive.blend_mode_count = 1;
 
-    PPipelineDesc descs[2] = {desc_opaque, desc_additive};
-    if(pigment_create_graphic_pipelines(pigment, NULL, descs, 2, pipelines) != PIGMENT_SUCCESS)
+    PPipelineDesc descs[sizeof(pipelines) / sizeof(pipelines[0])] = {desc_opaque, desc_additive};
+    if(pigment_create_graphic_pipelines(pigment, NULL, descs, sizeof(descs) / sizeof(descs[0]), pipelines) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
         goto FREE;

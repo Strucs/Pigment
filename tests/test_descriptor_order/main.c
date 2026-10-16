@@ -101,7 +101,7 @@ int main(void)
     };
     PigmentConfig config = {
         .loggers           = loggers,
-        .logger_count      = 1,
+        .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
         .enable_validation = P_TRUE,
     };
 
@@ -124,7 +124,7 @@ int main(void)
     };
     PDescriptorSetLayoutDesc layout_desc = {
         .bindings      = bindings,
-        .binding_count = 1,
+        .binding_count = sizeof(bindings) / sizeof(bindings[0]),
         .name          = "test_layout",
     };
 
@@ -136,7 +136,7 @@ int main(void)
 
     PDescriptorPoolDesc pool_desc = {
         .pool_sizes      = pool_sizes,
-        .pool_size_count = 1,
+        .pool_size_count = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
         .max_sets        = 4,
         .allow_free_set  = P_TRUE,
         .name            = "test_pool",
@@ -144,12 +144,12 @@ int main(void)
 
     PDescriptorPool* pool = pigment_create_descriptor_pool(pigment, &pool_desc);
 
-    PDescriptorSetAllocate set_allocs[2] = {
+    PDescriptorSetAllocate set_allocs[] = {
         {.layout = layout, .variable_count = 0, .name = "set_a"},
         {.layout = layout, .variable_count = 0, .name = "set_b"},
     };
-    PDescriptorSet* sets[2];
-    pigment_create_descriptor_sets(pigment, pool, set_allocs, 2, sets);
+    PDescriptorSet* sets[sizeof(set_allocs) / sizeof(set_allocs[0])];
+    pigment_create_descriptor_sets(pigment, pool, set_allocs, sizeof(set_allocs) / sizeof(set_allocs[0]), sets);
     PDescriptorSet* set_a = sets[0];
     PDescriptorSet* set_b = sets[1];
 
@@ -160,12 +160,12 @@ int main(void)
 
     PDescriptorPool* pool_b = pigment_create_descriptor_pool(pigment, &pool_desc);
 
-    PDescriptorSetAllocate reset_allocs[2] = {
+    PDescriptorSetAllocate reset_allocs[] = {
         {.layout = layout, .variable_count = 0, .name = "reset_set_a"},
         {.layout = layout, .variable_count = 0, .name = "reset_set_b"},
     };
-    PDescriptorSet* reset_sets[2];
-    pigment_create_descriptor_sets(pigment, pool_b, reset_allocs, 2, reset_sets);
+    PDescriptorSet* reset_sets[sizeof(reset_allocs) / sizeof(reset_allocs[0])];
+    pigment_create_descriptor_sets(pigment, pool_b, reset_allocs, sizeof(reset_allocs) / sizeof(reset_allocs[0]), reset_sets);
 
     pigment_reset_descriptor_pool(pigment, pool_b);
 

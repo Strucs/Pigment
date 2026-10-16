@@ -122,7 +122,7 @@ typedef struct PDescriptorSetAllocate {
  * @param pigment Pigment instance.
  * @param desc Layout to query.
  *
- * @return `true` if supported, `false for invalid input or allocation failure.
+ * @return `true` if supported, `false` for invalid input or allocation failure.
  * Other pipeline layout limits must be checked separately.
  */
 PIGMENT_API PBool pigment_descriptor_set_layout_supported(Pigment* pigment, const PDescriptorSetLayoutDesc* desc);
@@ -145,6 +145,18 @@ PIGMENT_API void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool
 
 PIGMENT_API PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, const PDescriptorSetAllocate* allocs, uint32_t count, PDescriptorSet** out_sets);
 PIGMENT_API void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSet** sets, uint32_t count);
+
+/**
+ * @brief Check that a set has no recorded references or pending GPU uses.
+ *
+ * The caller must prevent new bindings, updates and destruction during reuse.
+ *
+ * @param pigment Pigment instance.
+ * @param set Descriptor set to query.
+ *
+ * @return `true` if idle, `false` for invalid input, active use or query failure.
+ */
+PIGMENT_API PBool pigment_descriptor_set_idle(Pigment* pigment, const PDescriptorSet* set);
 
 PIGMENT_API void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
 

@@ -143,9 +143,9 @@ int main(void)
         .topology               = P_TOPOLOGY_TRIANGLE_LIST,
         .sample_count           = samples,
         .vertex_bindings        = bindings,
-        .vertex_binding_count   = 1,
+        .vertex_binding_count   = sizeof(bindings) / sizeof(bindings[0]),
         .vertex_attributes      = attributes,
-        .vertex_attribute_count = 2,
+        .vertex_attribute_count = sizeof(attributes) / sizeof(attributes[0]),
         .name                   = "test_vertex_input_pipeline",
     };
 
@@ -155,7 +155,7 @@ int main(void)
         goto FREE;
     }
 
-    Vertex triangle[3] = {
+    Vertex triangle[] = {
         {{-0.5f, 0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
         { {0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}},
         {{0.0f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
@@ -230,7 +230,7 @@ int main(void)
         pigment_bind_pipeline(pigment, cmd, pipeline);
         PBuffer* vertex_buffers[] = {vertex_buffer};
         pigment_cmd_bind_vertex_buffers(pigment, cmd, 0, 1, vertex_buffers, NULL);
-        pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
+        pigment_cmd_draw(pigment, cmd, sizeof(triangle) / sizeof(triangle[0]), 1, 0, 0);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 

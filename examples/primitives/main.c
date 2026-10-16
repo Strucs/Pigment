@@ -518,7 +518,7 @@ int main(void)
         pigment_begin_render_pass(pigment, cmd, &scene_pass);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
-        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipeline, draw_calls, 5);
+        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipeline, draw_calls, sizeof(draw_calls) / sizeof(draw_calls[0]));
 
         pigment_bind_pipeline(pigment, cmd, skybox_pipeline);
         pigment_std_draw_skybox(pigment, cmd, frame_slot, bindless, skybox_pipeline, camera, cubemap_slot, 0);
