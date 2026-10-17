@@ -155,10 +155,10 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
             pigment,
             "Cannot create descriptor set layout '%s' on '%s': "
             "vkGetDescriptorSetLayoutSupport returned VK_FALSE. "
-            "Layout has %" PRIu64 " total descriptors, %u bindings, flags=0x%x.",
+            "Layout has %llu total descriptors, %u bindings, flags=0x%x.",
             desc->name ? desc->name : "unnamed",
             properties.properties.deviceName,
-            total,
+            (unsigned long long) total,
             desc->binding_count,
             layout_info.flags
         );
@@ -167,10 +167,10 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         {
             PLOG_ERROR(
                 pigment,
-                "The layout has %" PRIu64 " total descriptors, "
+                "The layout has %llu total descriptors, "
                 "which exceeds maxPerSetDescriptors (%u). "
                 "Creating this layout requires vkGetDescriptorSetLayoutSupport to return VK_TRUE.",
-                total,
+                (unsigned long long) total,
                 maintenance.maxPerSetDescriptors
             );
         }

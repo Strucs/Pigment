@@ -77,6 +77,7 @@ static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head
 static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
 static PBool target_signaled(VkDevice device, const PWaitTarget* target);
+static PBool wait_target(Pigment* pigment, const PWaitTarget* target);
 static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker);
 static void destroy_tracked_resources(Pigment* pigment, void* resource);
 
@@ -161,7 +162,29 @@ void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resour
     uint32_t count       = 0;
     if(collect_active_targets(pigment, &targets, &count) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to collect active wait targets for deferred destroy. Falling back to immediate destroy.");
+        PLOG_ERROR(pigment, "Failed to collect deferred destroy targets. Waiting for GPU completion.");
+
+        PDevice* device = pigment->device;
+        for(uint32_t i = 0; i < device->queue_count; i++)
+        {
+            PDeviceQueue* queue = &device->queues[i];
+            uint64_t value      = device_queue_current_value(queue);
+            if(queue->timeline == VK_NULL_HANDLE || value == 0)
+            {
+                continue;
+            }
+
+            PWaitTarget target = {
+                .kind     = P_WAIT_TIMELINE,
+                .timeline = {.semaphore = queue->timeline, .value = value},
+            };
+
+            if(!wait_target(pigment, &target))
+            {
+                return;
+            }
+        }
+
         destroy_fn(pigment, resource);
         return;
     }
@@ -458,7 +481,15 @@ static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* re
     PResult result = push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count);
     if(result != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to enqueue deferred destroy. Falling back to immediate destroy.");
+        PLOG_ERROR(pigment, "Failed to enqueue deferred destroy. Waiting for GPU completion.");
+        for(uint32_t i = 0; i < target_count; i++)
+        {
+            if(!wait_target(pigment, &targets[i]))
+            {
+                return;
+            }
+        }
+
         destroy_fn(pigment, resource);
     }
 }
@@ -615,7 +646,7 @@ static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_target
         return PIGMENT_SUCCESS;
     }
 
-    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, active);
+    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, device->queue_count);
     if(targets == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -655,4 +686,34 @@ static PBool target_signaled(VkDevice device, const PWaitTarget* target)
         return P_FALSE;
     }
     return current_value >= target->timeline.value;
+}
+
+static PBool wait_target(Pigment* pigment, const PWaitTarget* target)
+{
+    VkDevice device = pigment->device->logical_device;
+    VkResult result;
+
+    if(target->kind == P_WAIT_FENCE)
+    {
+        result = vkWaitForFences(device, 1, &target->fence, VK_TRUE, UINT64_MAX);
+    }
+    else
+    {
+        VkSemaphoreWaitInfo wait_info = {
+            .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+            .semaphoreCount = 1,
+            .pSemaphores    = &target->timeline.semaphore,
+            .pValues        = &target->timeline.value,
+        };
+
+        result = vkWaitSemaphores(device, &wait_info, UINT64_MAX);
+    }
+
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Deferred destroy wait failed (result: %d). Resource not destroyed.", result);
+        return P_FALSE;
+    }
+
+    return P_TRUE;
 }

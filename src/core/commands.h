@@ -91,10 +91,24 @@ PIGMENT_API PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommand
  * @brief Defer destruction of a command pool until the GPU is done with it. All command buffers
  *        still allocated from this pool are freed along with it.
  *
+ * Pending buffer callbacks retain the pool. The caller must stop using it after this call.
+ *
  * @param pigment Pigment instance.
  * @param pool Pool to destroy.
  */
 PIGMENT_API void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool);
+
+/**
+ * @brief Free command buffers processed by deferred destruction.
+ *
+ * The caller must synchronize host access to the pool.
+ * Allocation, recording begin, reset and buffer destruction also collect automatically.
+ * Call pigment_drain_pending first to process completed GPU work.
+ *
+ * @param pigment Pigment instance.
+ * @param pool Pool to collect from.
+ */
+PIGMENT_API void pigment_collect_command_pool(Pigment* pigment, PCommandPool* pool);
 
 /**
  * @brief Reset every command buffer in this pool to the initial state at once, ready to be
@@ -124,9 +138,10 @@ PIGMENT_API void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool
 PIGMENT_API PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds);
 
 /**
- * @brief Defer destruction of command buffers until the GPU is done with it. The buffers are
- *        also freed automatically when the source pool is destroyed, so calling this is only
- *        needed for early release before the pool goes away.
+ * @brief Retire command buffers after their GPU work completes.
+ *
+ * Deferred callbacks release recorded resources. Vulkan buffers are freed during
+ * pool collection or destruction. The caller must synchronize host access to the pool.
  *
  * @param pigment Pigment instance.
  * @param cmds Array of command buffers to destroy.

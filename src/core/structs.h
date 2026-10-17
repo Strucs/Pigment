@@ -277,6 +277,8 @@ struct PPipelineBuild {
     const char* name;
 };
 
+typedef struct PCommandBufferBatch PCommandBufferBatch;
+
 struct PCommandPool {
     VkCommandPool pool;
     uint32_t queue_family_index;
@@ -284,6 +286,11 @@ struct PCommandPool {
     PCommandBuffer** buffers;
     uint32_t buffer_count;
     uint32_t buffer_capacity;
+
+    _Atomic(PCommandBufferBatch*) retired_batches;
+
+    // Retained by the owner and pending buffer callbacks.
+    _Atomic uint32_t references;
 };
 
 struct PCommandBuffer {

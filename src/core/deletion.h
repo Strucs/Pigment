@@ -32,6 +32,7 @@ typedef void (*PDestroyFn)(Pigment*, void*);
  * (buffer, image, sampler, pipeline, command_pool, etc.) already
  * defer internally, so no need to call this on top of them. Prefer pigment_defer_destroy_tracked
  * when the resource carries a PResourceTracker.
+ * Allocation failure blocks the caller until GPU completion. If the wait fails, the resource is not destroyed.
  *
  * @param pigment Pigment instance.
  * @param destroy_fn The function to call to destroy the resource.
