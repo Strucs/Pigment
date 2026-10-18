@@ -33,17 +33,21 @@ PIGMENT_API void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
 PIGMENT_API void pigment_std_camera_set_view(PCamera* camera, PMat4 view);
 PIGMENT_API void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection);
 
-PIGMENT_API uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame);
-PIGMENT_API void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame);
-
 /**
- * @brief Stamp the camera's underlying buffer as used by `cmd`.
+ * @brief Publish the camera and retain its buffer in a command buffer.
+ *
+ * The address belongs to this recording. Request it again for each new recording.
+ * Unchanged data shares its version. Modified data reuses an idle buffer or allocates one.
+ * If publication fails, CPU changes are preserved for the next call.
+ * The caller must serialize access to this object.
  *
  * @param pigment Pigment instance.
- * @param cmd Command buffer.
- * @param camera Camera to stamp.
+ * @param camera Camera to publish.
+ * @param cmd Command buffer that uses the returned address.
+ *
+ * @return Buffer address, or 0 on invalid input or publication failure.
  */
-PIGMENT_API void pigment_std_camera_use(Pigment* pigment, PCommandBuffer* cmd, PCamera* camera);
+PIGMENT_API uint64_t pigment_std_camera_address(Pigment* pigment, PCamera* camera, PCommandBuffer* cmd);
 
 #ifdef __cplusplus
 }

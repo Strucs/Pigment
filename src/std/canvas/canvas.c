@@ -18,12 +18,13 @@
 
 #include "pigment/pigment.h"
 
-#include "pigment/std/draw.h"
+#include "pigment/std/bindless.h"
+#include "pigment/std/instances.h"
 
 #include "ndc_vert_spv.h"
 #include "ndc_frag_spv.h"
 
-#define DEFAULT_MAX_INSTANCES 4096U
+#define DEFAULT_INITIAL_INSTANCES 4096
 #define FULL_UV ((const float[4]) {0.0f, 0.0f, 1.0f, 1.0f})
 
 typedef struct PIGMENT_ALIGN(16) PStdCanvasInstance {
@@ -41,7 +42,7 @@ typedef struct PStdCanvasPushConstants {
 typedef struct PStdCanvasBlendSlot {
     PBlendMode mode;
     PPipeline* pipeline;
-    PInstanceRing* ring;
+    PInstances* instances;
 } PStdCanvasBlendSlot;
 
 struct PStdCanvas {
@@ -83,8 +84,8 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
         blend_mode_count = 1;
     }
 
-    PSampleCount samples   = (config->samples == 0) ? P_SAMPLE_COUNT_1 : config->samples;
-    uint32_t max_instances = (config->max_instances_per_frame == 0) ? DEFAULT_MAX_INSTANCES : config->max_instances_per_frame;
+    PSampleCount samples       = (config->samples == 0) ? P_SAMPLE_COUNT_1 : config->samples;
+    uint32_t initial_instances = (config->initial_instances == 0) ? DEFAULT_INITIAL_INSTANCES : config->initial_instances;
 
     PStdCanvas* canvas = P_NEW_FOR_OBJECT(pigment, canvas);
     if(canvas == NULL)
@@ -147,8 +148,8 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
             goto FREE;
         }
 
-        PInstanceRing* ring = pigment_std_create_instance_ring(pigment, sizeof(PStdCanvasInstance), max_instances);
-        if(ring == NULL)
+        PInstances* instances = pigment_std_create_instances(pigment, sizeof(PStdCanvasInstance), initial_instances);
+        if(instances == NULL)
         {
             pigment_destroy_pipeline(pigment, pipeline);
             goto FREE;
@@ -156,7 +157,7 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
 
         canvas->slots[i].mode     = mode;
         canvas->slots[i].pipeline = pipeline;
-        canvas->slots[i].ring     = ring;
+        canvas->slots[i].instances = instances;
         canvas->slot_count        = i + 1;
     }
 
@@ -177,9 +178,9 @@ void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas)
     {
         for(uint32_t i = 0; i < canvas->slot_count; i++)
         {
-            if(canvas->slots[i].ring != NULL)
+            if(canvas->slots[i].instances != NULL)
             {
-                pigment_std_destroy_instance_ring(pigment, canvas->slots[i].ring);
+                pigment_std_destroy_instances(pigment, canvas->slots[i].instances);
             }
             if(canvas->slots[i].pipeline != NULL)
             {
@@ -201,7 +202,7 @@ PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas, PBlendMode blend_mode
     return (slot != NULL) ? slot->pipeline : NULL;
 }
 
-void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, uint32_t frame_index, uint32_t target_w, uint32_t target_h, PBlendMode blend_mode)
+void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, uint32_t target_w, uint32_t target_h, PBlendMode blend_mode)
 {
     if(pigment == NULL || canvas == NULL || cmd == NULL)
     {
@@ -221,8 +222,7 @@ void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuff
         return;
     }
 
-    pigment_std_instance_ring_sync_frame(slot->ring, frame_index);
-    pigment_std_instance_ring_use(pigment, cmd, slot->ring);
+    pigment_std_instances_reset(slot->instances);
 
     canvas->active_slot = slot;
     canvas->target_w    = target_w;
@@ -243,17 +243,22 @@ void pigment_std_canvas_end(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer
     }
 
     PStdCanvasBlendSlot* slot = canvas->active_slot;
-    uint32_t instance_count   = pigment_std_instance_ring_cursor(slot->ring);
+    uint32_t instance_count   = pigment_std_instances_count(slot->instances);
     if(instance_count == 0)
     {
         canvas->active_slot = NULL;
         return;
     }
 
-    pigment_std_instance_ring_flush_range(pigment, slot->ring, 0, instance_count);
+    uint64_t instance_address = pigment_std_instances_address(pigment, slot->instances, cmd);
+    if(instance_address == 0)
+    {
+        canvas->active_slot = NULL;
+        return;
+    }
 
     PStdCanvasPushConstants push = {
-        .instance_buffer_address = pigment_std_instance_ring_frame_address(slot->ring),
+        .instance_buffer_address = instance_address,
     };
 
     pigment_cmd_push_constants(pigment, cmd, slot->pipeline, 0, sizeof(push), &push);
@@ -464,7 +469,7 @@ static void push_quad(Pigment* pigment, PStdCanvas* canvas, float x, float y, fl
         return;
     }
 
-    PStdCanvasInstance* inst = (PStdCanvasInstance*) pigment_std_instance_ring_alloc(pigment, canvas->active_slot->ring, 1);
+    PStdCanvasInstance* inst = (PStdCanvasInstance*) pigment_std_instances_alloc(pigment, canvas->active_slot->instances, 1);
     if(inst == NULL)
     {
         return;

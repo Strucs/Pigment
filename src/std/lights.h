@@ -59,18 +59,23 @@ PIGMENT_API uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights,
 PIGMENT_API void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc);
 PIGMENT_API void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id);
 
-PIGMENT_API uint64_t pigment_std_light_address(PLights* lights);
-
 /**
- * @brief Stamp the lights' underlying buffer as used by `cmd`.
+ * @brief Publish the lights and retain their buffer in a command buffer.
+ *
+ * The address belongs to this recording. Request it again for each new recording.
+ * Unchanged data shares its version. Modified data reuses an idle buffer or allocates one.
+ * If publication fails, CPU changes are preserved for the next call.
+ * The caller must serialize access to this object.
  *
  * @param pigment Pigment instance.
- * @param cmd Command buffer.
- * @param lights Lights to stamp.
+ * @param lights Lights to publish.
+ * @param cmd Command buffer that uses the returned address.
+ *
+ * @return Buffer address, or 0 on invalid input or publication failure.
  */
-PIGMENT_API void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* lights);
+PIGMENT_API uint64_t pigment_std_lights_address(Pigment* pigment, PLights* lights, PCommandBuffer* cmd);
 
-PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, uint32_t frame_slot, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
 
 #ifdef __cplusplus
 }

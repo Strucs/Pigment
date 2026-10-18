@@ -23,10 +23,12 @@
 #include <string.h>
 
 struct PMaterials {
-    PBuffer* buffer;
-
+    PMaterialDesc* data;
     uint32_t capacity;
     uint32_t count;
+    PBool dirty;
+
+    PStdBufferVersions buffers;
 
     uint32_t* free_slots;
     uint32_t free_count;
@@ -46,29 +48,16 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size
         return NULL;
     }
 
-    PBufferDesc desc = {
-        .size   = (uint64_t) initial_size * sizeof(PMaterialDesc),
-        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-    };
-    materials->buffer = pigment_create_buffer(pigment, &desc);
-    if(materials->buffer == NULL)
+    materials->data = P_NEW_ARRAY_FOR_OBJECT(pigment, materials->data, initial_size);
+    if(materials->data == NULL)
     {
-        PLOG_ERROR(pigment, "Failed to create material buffer (size=%llu)", (unsigned long long) desc.size);
-        goto ERROR;
+        P_FREE(pigment, materials);
+        return NULL;
     }
 
-    materials->capacity   = initial_size;
-    materials->count      = 0;
-    materials->free_count = 0;
-
+    materials->capacity = initial_size;
+    materials->dirty    = P_TRUE;
     return materials;
-
-ERROR:
-    pigment_destroy_buffer(pigment, materials->buffer);
-    P_FREE(pigment, materials->free_slots);
-    P_FREE(pigment, materials);
-    return NULL;
 }
 
 void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials)
@@ -78,35 +67,11 @@ void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials)
         return;
     }
 
-    pigment_destroy_buffer(pigment, materials->buffer);
+    destroy_buffer_versions(pigment, &materials->buffers);
+
+    P_FREE(pigment, materials->data);
     P_FREE(pigment, materials->free_slots);
     P_FREE(pigment, materials);
-}
-
-static PResult materials_grow(Pigment* pigment, PMaterials* materials)
-{
-    uint32_t new_capacity = materials->capacity * 2;
-
-    PBufferDesc desc = {
-        .size   = (uint64_t) new_capacity * sizeof(PMaterialDesc),
-        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-    };
-    PBuffer* new_buffer = pigment_create_buffer(pigment, &desc);
-    if(new_buffer == NULL)
-    {
-        return PIGMENT_ERROR_OUT_OF_MEMORY;
-    }
-
-    uint64_t used = (uint64_t) materials->count * sizeof(PMaterialDesc);
-    memcpy(pigment_buffer_mapped(new_buffer), pigment_buffer_mapped(materials->buffer), (size_t) used);
-    pigment_buffer_flush(pigment, new_buffer, 0, used);
-
-    pigment_destroy_buffer(pigment, materials->buffer);
-
-    materials->buffer   = new_buffer;
-    materials->capacity = new_capacity;
-    return PIGMENT_SUCCESS;
 }
 
 uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, const PMaterialDesc* desc)
@@ -125,7 +90,7 @@ uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, co
     {
         id = materials->count++;
     }
-    else if(materials_grow(pigment, materials) == PIGMENT_SUCCESS)
+    else if(materials->capacity <= UINT32_MAX / 2 && P_ARRAY_RESERVE_OBJECT(pigment, materials->data, materials->count, materials->capacity, 1, materials->capacity) == PIGMENT_SUCCESS)
     {
         id = materials->count++;
     }
@@ -135,28 +100,26 @@ uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, co
         return UINT32_MAX;
     }
 
-    PMaterialDesc* slot = (PMaterialDesc*) pigment_buffer_mapped(materials->buffer) + id;
-    *slot               = *desc;
-    pigment_buffer_flush(pigment, materials->buffer, (uint64_t) id * sizeof(PMaterialDesc), sizeof(PMaterialDesc));
+    materials->data[id] = *desc;
+    materials->dirty    = P_TRUE;
 
     return id;
 }
 
 void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32_t id, const PMaterialDesc* desc)
 {
-    if(pigment == NULL || materials == NULL || desc == NULL || id >= materials->capacity)
+    if(pigment == NULL || materials == NULL || desc == NULL || id >= materials->count)
     {
         return;
     }
 
-    PMaterialDesc* slot = (PMaterialDesc*) pigment_buffer_mapped(materials->buffer) + id;
-    *slot               = *desc;
-    pigment_buffer_flush(pigment, materials->buffer, (uint64_t) id * sizeof(PMaterialDesc), sizeof(PMaterialDesc));
+    materials->data[id] = *desc;
+    materials->dirty    = P_TRUE;
 }
 
 void pigment_std_material_destroy(Pigment* pigment, PMaterials* materials, uint32_t id)
 {
-    if(pigment == NULL || materials == NULL || id >= materials->capacity)
+    if(pigment == NULL || materials == NULL || id >= materials->count)
     {
         return;
     }
@@ -169,20 +132,29 @@ void pigment_std_material_destroy(Pigment* pigment, PMaterials* materials, uint3
     materials->free_slots[materials->free_count++] = id;
 }
 
-uint64_t pigment_std_material_address(PMaterials* materials)
+uint64_t pigment_std_materials_address(Pigment* pigment, PMaterials* materials, PCommandBuffer* cmd)
 {
-    if(materials == NULL)
+    if(pigment == NULL || materials == NULL || cmd == NULL)
     {
         return 0;
     }
-    return (uint64_t) pigment_buffer_address(materials->buffer);
-}
 
-void pigment_std_materials_use(Pigment* pigment, PCommandBuffer* cmd, PMaterials* materials)
-{
-    if(pigment == NULL || cmd == NULL || materials == NULL || materials->buffer == NULL)
+    if(materials->dirty)
     {
-        return;
+        uint64_t size   = (uint64_t) materials->capacity * sizeof(*materials->data);
+        PBuffer* buffer = acquire_buffer_version(pigment, &materials->buffers, size, "pigment_std_materials_version");
+        if(buffer == NULL)
+        {
+            return 0;
+        }
+
+        uint64_t used = (uint64_t) materials->count * sizeof(*materials->data);
+
+        memcpy(pigment_buffer_mapped(buffer), materials->data, (size_t) used);
+        pigment_buffer_flush(pigment, buffer, 0, used);
+
+        materials->dirty = P_FALSE;
     }
-    pigment_cmd_use_buffer(pigment, cmd, materials->buffer);
+
+    return buffer_version_address(pigment, &materials->buffers, cmd);
 }

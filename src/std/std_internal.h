@@ -21,6 +21,30 @@
 
 #define PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY 8
 
+typedef struct PStdBufferVersion PStdBufferVersion;
+
+typedef struct PStdBufferVersions {
+    PStdBufferVersion* current;
+    PStdBufferVersion* versions;
+} PStdBufferVersions;
+
+// Keep CPU instance storage aligned for shader data while using the array macros.
+typedef struct PIGMENT_ALIGN(16) PInstanceBlock {
+    unsigned char bytes[16];
+} PInstanceBlock;
+
+struct PInstances {
+    PInstanceBlock* data;
+    uint32_t block_capacity;
+    uint32_t instance_size;
+    uint32_t count;
+    PStdBufferVersions buffers;
+};
+
+PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, uint64_t size, const char* name);
+uint64_t buffer_version_address(Pigment* pigment, PStdBufferVersions* buffers, PCommandBuffer* cmd);
+void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers);
+
 typedef struct PStdPushConstants {
     uint64_t vertex_buffer;
     uint64_t instance_buffer;

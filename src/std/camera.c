@@ -29,9 +29,7 @@ typedef struct PCameraData {
 
 struct PCamera {
     PCameraData data;
-    PBuffer* buffer;
-    uint32_t frame_count;
-    uint32_t last_uploaded_frame;
+    PStdBufferVersions buffers;
     PBool dirty;
 };
 
@@ -48,23 +46,8 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
         return NULL;
     }
 
-    camera->data                = (PCameraData) {.view = P_MAT4_IDENTITY, .projection = P_MAT4_IDENTITY};
-    camera->frame_count         = pigment_max_frames_in_flight(pigment);
-    camera->last_uploaded_frame = UINT32_MAX;
-    camera->dirty               = P_TRUE;
-
-    PBufferDesc desc = {
-        .size   = (uint64_t) camera->frame_count * sizeof(PCameraData),
-        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-    };
-    camera->buffer = pigment_create_buffer(pigment, &desc);
-    if(camera->buffer == NULL)
-    {
-        PLOG_ERROR(pigment, "Failed to create camera buffer (size=%llu)", (unsigned long long) desc.size);
-        P_FREE(pigment, camera);
-        return NULL;
-    }
+    camera->data  = (PCameraData) {.view = P_MAT4_IDENTITY, .projection = P_MAT4_IDENTITY};
+    camera->dirty = P_TRUE;
 
     return camera;
 }
@@ -76,7 +59,7 @@ void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera)
         return;
     }
 
-    pigment_destroy_buffer(pigment, camera->buffer);
+    destroy_buffer_versions(pigment, &camera->buffers);
     P_FREE(pigment, camera);
 }
 
@@ -100,43 +83,26 @@ void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection)
     camera->dirty = P_TRUE;
 }
 
-void pigment_std_camera_upload(Pigment* pigment, PCamera* camera, uint32_t current_frame)
+uint64_t pigment_std_camera_address(Pigment* pigment, PCamera* camera, PCommandBuffer* cmd)
 {
-    if(pigment == NULL || camera == NULL || current_frame >= camera->frame_count)
-    {
-        return;
-    }
-    if(camera->last_uploaded_frame == current_frame && !camera->dirty)
-    {
-        return;
-    }
-    PCameraData* mapped = (PCameraData*) pigment_buffer_mapped(camera->buffer);
-    if(mapped == NULL)
-    {
-        return;
-    }
-    mapped[current_frame] = camera->data;
-    pigment_buffer_flush(pigment, camera->buffer, (uint64_t) current_frame * sizeof(PCameraData), sizeof(PCameraData));
-
-    camera->last_uploaded_frame = current_frame;
-    camera->dirty               = P_FALSE;
-}
-
-uint64_t pigment_std_camera_frame_address(PCamera* camera, uint32_t current_frame)
-{
-    if(camera == NULL)
+    if(pigment == NULL || camera == NULL || cmd == NULL)
     {
         return 0;
     }
-    uint64_t base = pigment_buffer_address(camera->buffer);
-    return base + (uint64_t) current_frame * sizeof(PCameraData);
-}
 
-void pigment_std_camera_use(Pigment* pigment, PCommandBuffer* cmd, PCamera* camera)
-{
-    if(pigment == NULL || cmd == NULL || camera == NULL || camera->buffer == NULL)
+    if(camera->dirty)
     {
-        return;
+        PBuffer* buffer = acquire_buffer_version(pigment, &camera->buffers, sizeof(camera->data), "pigment_std_camera_version");
+        if(buffer == NULL)
+        {
+            return 0;
+        }
+
+        memcpy(pigment_buffer_mapped(buffer), &camera->data, sizeof(camera->data));
+        pigment_buffer_flush(pigment, buffer, 0, sizeof(camera->data));
+
+        camera->dirty = P_FALSE;
     }
-    pigment_cmd_use_buffer(pigment, cmd, camera->buffer);
+
+    return buffer_version_address(pigment, &camera->buffers, cmd);
 }

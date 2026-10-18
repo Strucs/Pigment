@@ -25,6 +25,12 @@ extern "C" {
 
 #include "pigment/defines.h"
 
+/**
+ * @brief CPU material data with GPU versions retained by command buffers.
+ *
+ * The caller must serialize access to this object. Changes are published by
+ * pigment_std_materials_address and leave previously recorded versions unchanged.
+ */
 typedef struct PMaterials PMaterials;
 
 typedef struct PIGMENT_ALIGN(16) PMaterialDesc {
@@ -55,16 +61,21 @@ PIGMENT_API uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* m
 PIGMENT_API void pigment_std_material_update(Pigment* pigment, PMaterials* materials, uint32_t id, const PMaterialDesc* desc);
 PIGMENT_API void pigment_std_material_destroy(Pigment* pigment, PMaterials* materials, uint32_t id);
 
-PIGMENT_API uint64_t pigment_std_material_address(PMaterials* materials);
-
 /**
- * @brief Stamp the materials' underlying buffer as used by `cmd`.
+ * @brief Publish the materials and retain their buffer in a command buffer.
+ *
+ * The address belongs to this recording. Request it again for each new recording.
+ * Unchanged data shares its version. Modified data reuses an idle buffer or allocates one.
+ * If publication fails, CPU changes are preserved for the next call.
+ * The caller must serialize access to this object.
  *
  * @param pigment Pigment instance.
- * @param cmd Command buffer.
- * @param materials Materials to stamp.
+ * @param materials Materials to publish.
+ * @param cmd Command buffer that uses the returned address.
+ *
+ * @return Buffer address, or 0 on invalid input or publication failure.
  */
-PIGMENT_API void pigment_std_materials_use(Pigment* pigment, PCommandBuffer* cmd, PMaterials* materials);
+PIGMENT_API uint64_t pigment_std_materials_address(Pigment* pigment, PMaterials* materials, PCommandBuffer* cmd);
 
 #ifdef __cplusplus
 }

@@ -21,7 +21,6 @@
 
 #include "pigment/pigment.h"
 
-#include <stddef.h>
 #include <string.h>
 
 typedef struct PIGMENT_ALIGN(16) PLightsHeader {
@@ -30,25 +29,16 @@ typedef struct PIGMENT_ALIGN(16) PLightsHeader {
 } PLightsHeader;
 
 struct PLights {
-    PBuffer* buffer;
-
+    PLightsHeader header;
+    PLightDesc* data;
     uint32_t capacity;
-    uint32_t count;
+    PBool dirty;
+    PStdBufferVersions buffers;
 
     uint32_t* free_slots;
     uint32_t free_count;
     uint32_t free_capacity;
 };
-
-static PLightsHeader* lights_header(PLights* lights)
-{
-    return (PLightsHeader*) pigment_buffer_mapped(lights->buffer);
-}
-
-static PLightDesc* lights_data(PLights* lights)
-{
-    return (PLightDesc*) ((unsigned char*) pigment_buffer_mapped(lights->buffer) + sizeof(PLightsHeader));
-}
 
 PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size)
 {
@@ -63,50 +53,31 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size)
         return NULL;
     }
 
-    PBufferDesc desc = {
-        .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) initial_size * sizeof(PLightDesc),
-        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-    };
-    lights->buffer = pigment_create_buffer(pigment, &desc);
-    if(lights->buffer == NULL)
+    lights->data = P_NEW_ARRAY_FOR_OBJECT(pigment, lights->data, initial_size);
+    if(lights->data == NULL)
     {
-        PLOG_ERROR(pigment, "Failed to create light buffer (size=%llu)", (unsigned long long) desc.size);
-        goto ERROR;
+        P_FREE(pigment, lights);
+        return NULL;
     }
 
-    lights->capacity   = initial_size;
-    lights->count      = 0;
-    lights->free_count = 0;
-
-    PLightsHeader* header    = lights_header(lights);
-    header->count            = 0;
-    header->ambient_color[0] = 0.05f;
-    header->ambient_color[1] = 0.05f;
-    header->ambient_color[2] = 0.05f;
-    pigment_buffer_flush(pigment, lights->buffer, 0, sizeof(PLightsHeader));
+    lights->capacity = initial_size;
+    lights->dirty    = P_TRUE;
+    lights->header   = (PLightsHeader) {
+        .ambient_color = {0.05f, 0.05f, 0.05f}
+    };
 
     return lights;
-
-ERROR:
-    pigment_destroy_buffer(pigment, lights->buffer);
-    P_FREE(pigment, lights->free_slots);
-    P_FREE(pigment, lights);
-    return NULL;
 }
 
 void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color)
 {
-    if(pigment == NULL || lights == NULL)
+    if(pigment == NULL || lights == NULL || color == NULL)
     {
         return;
     }
 
-    PLightsHeader* header    = lights_header(lights);
-    header->ambient_color[0] = color[0];
-    header->ambient_color[1] = color[1];
-    header->ambient_color[2] = color[2];
-    pigment_buffer_flush(pigment, lights->buffer, offsetof(PLightsHeader, ambient_color), sizeof(header->ambient_color));
+    memcpy(lights->header.ambient_color, color, sizeof(lights->header.ambient_color));
+    lights->dirty = P_TRUE;
 }
 
 void pigment_std_destroy_lights(Pigment* pigment, PLights* lights)
@@ -116,35 +87,10 @@ void pigment_std_destroy_lights(Pigment* pigment, PLights* lights)
         return;
     }
 
-    pigment_destroy_buffer(pigment, lights->buffer);
+    destroy_buffer_versions(pigment, &lights->buffers);
+    P_FREE(pigment, lights->data);
     P_FREE(pigment, lights->free_slots);
     P_FREE(pigment, lights);
-}
-
-static PResult lights_grow(Pigment* pigment, PLights* lights)
-{
-    uint32_t new_capacity = lights->capacity * 2;
-
-    PBufferDesc desc = {
-        .size   = (uint64_t) sizeof(PLightsHeader) + (uint64_t) new_capacity * sizeof(PLightDesc),
-        .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-        .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-    };
-    PBuffer* new_buffer = pigment_create_buffer(pigment, &desc);
-    if(new_buffer == NULL)
-    {
-        return PIGMENT_ERROR_OUT_OF_MEMORY;
-    }
-
-    uint64_t used = sizeof(PLightsHeader) + (uint64_t) lights->count * sizeof(PLightDesc);
-    memcpy(pigment_buffer_mapped(new_buffer), pigment_buffer_mapped(lights->buffer), (size_t) used);
-    pigment_buffer_flush(pigment, new_buffer, 0, used);
-
-    pigment_destroy_buffer(pigment, lights->buffer);
-
-    lights->buffer   = new_buffer;
-    lights->capacity = new_capacity;
-    return PIGMENT_SUCCESS;
 }
 
 uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLightDesc* desc)
@@ -155,48 +101,43 @@ uint32_t pigment_std_light_create(Pigment* pigment, PLights* lights, const PLigh
     }
 
     uint32_t id;
-    PBool count_changed = P_FALSE;
     if(lights->free_count > 0)
     {
         id = lights->free_slots[--lights->free_count];
     }
+    else if(lights->header.count < lights->capacity)
+    {
+        id = lights->header.count++;
+    }
+    else if(lights->capacity <= UINT32_MAX / 2 && P_ARRAY_RESERVE_OBJECT(pigment, lights->data, lights->header.count, lights->capacity, 1, lights->capacity) == PIGMENT_SUCCESS)
+    {
+        id = lights->header.count++;
+    }
     else
     {
-        if(lights->count >= lights->capacity && lights_grow(pigment, lights) != PIGMENT_SUCCESS)
-        {
-            PLOG_ERROR(pigment, "PLights capacity (%u) reached and grow failed.", lights->capacity);
-            return UINT32_MAX;
-        }
-        id                           = lights->count++;
-        lights_header(lights)->count = lights->count;
-        count_changed                = P_TRUE;
+        PLOG_ERROR(pigment, "PLights capacity (%u) reached and grow failed.", lights->capacity);
+        return UINT32_MAX;
     }
 
-    lights_data(lights)[id] = *desc;
-
-    if(count_changed)
-    {
-        pigment_buffer_flush(pigment, lights->buffer, offsetof(PLightsHeader, count), sizeof(lights_header(lights)->count));
-    }
-    pigment_buffer_flush(pigment, lights->buffer, sizeof(PLightsHeader) + (uint64_t) id * sizeof(PLightDesc), sizeof(PLightDesc));
-
+    lights->data[id] = *desc;
+    lights->dirty    = P_TRUE;
     return id;
 }
 
 void pigment_std_light_update(Pigment* pigment, PLights* lights, uint32_t id, const PLightDesc* desc)
 {
-    if(pigment == NULL || lights == NULL || desc == NULL || id >= lights->capacity)
+    if(pigment == NULL || lights == NULL || desc == NULL || id >= lights->header.count)
     {
         return;
     }
 
-    lights_data(lights)[id] = *desc;
-    pigment_buffer_flush(pigment, lights->buffer, sizeof(PLightsHeader) + (uint64_t) id * sizeof(PLightDesc), sizeof(PLightDesc));
+    lights->data[id] = *desc;
+    lights->dirty    = P_TRUE;
 }
 
 void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id)
 {
-    if(pigment == NULL || lights == NULL || id >= lights->capacity)
+    if(pigment == NULL || lights == NULL || id >= lights->header.count)
     {
         return;
     }
@@ -207,54 +148,63 @@ void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id)
         return;
     }
 
-    lights_data(lights)[id].type             = P_LIGHT_TYPE_INVALID;
+    lights->data[id].type                    = P_LIGHT_TYPE_INVALID;
     lights->free_slots[lights->free_count++] = id;
-    pigment_buffer_flush(pigment, lights->buffer, sizeof(PLightsHeader) + (uint64_t) id * sizeof(PLightDesc) + offsetof(PLightDesc, type), sizeof(lights_data(lights)[id].type));
+    lights->dirty                            = P_TRUE;
 }
 
-uint64_t pigment_std_light_address(PLights* lights)
+uint64_t pigment_std_lights_address(Pigment* pigment, PLights* lights, PCommandBuffer* cmd)
 {
-    if(lights == NULL)
+    if(pigment == NULL || lights == NULL || cmd == NULL)
     {
         return 0;
     }
-    return (uint64_t) pigment_buffer_address(lights->buffer);
+
+    if(lights->dirty)
+    {
+        uint64_t size   = sizeof(lights->header) + (uint64_t) lights->capacity * sizeof(*lights->data);
+        PBuffer* buffer = acquire_buffer_version(pigment, &lights->buffers, size, "pigment_std_lights_version");
+        if(buffer == NULL)
+        {
+            return 0;
+        }
+
+        uint64_t used = (uint64_t) lights->header.count * sizeof(*lights->data);
+
+        unsigned char* mapped = pigment_buffer_mapped(buffer);
+        memcpy(mapped, &lights->header, sizeof(lights->header));
+        memcpy(mapped + sizeof(lights->header), lights->data, (size_t) used);
+        pigment_buffer_flush(pigment, buffer, 0, sizeof(lights->header) + used);
+
+        lights->dirty = P_FALSE;
+    }
+
+    return buffer_version_address(pigment, &lights->buffers, cmd);
 }
 
-void pigment_std_lights_use(Pigment* pigment, PCommandBuffer* cmd, PLights* lights)
+void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
 {
-    if(pigment == NULL || cmd == NULL || lights == NULL || lights->buffer == NULL)
+    if(pigment == NULL || cmd == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->header.count == 0)
     {
         return;
     }
-    pigment_cmd_use_buffer(pigment, cmd, lights->buffer);
-}
 
-void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, uint32_t frame_slot, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
-{
-    if(pigment == NULL || cmd == NULL || frame_slot >= pigment_max_frames_in_flight(pigment) || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->count == 0)
+    uint64_t light_address  = pigment_std_lights_address(pigment, lights, cmd);
+    uint64_t camera_address = pigment_std_camera_address(pigment, camera, cmd);
+    if(light_address == 0 || (camera != NULL && camera_address == 0))
     {
         return;
     }
 
-    pigment_std_lights_use(pigment, cmd, lights);
     pigment_std_mesh_use(pigment, cmd, sphere_mesh);
-
-    uint64_t camera_slot_address = 0;
-    if(camera != NULL)
-    {
-        pigment_std_camera_upload(pigment, camera, frame_slot);
-        pigment_std_camera_use(pigment, cmd, camera);
-        camera_slot_address = (uint64_t) pigment_std_camera_frame_address(camera, frame_slot);
-    }
 
     PStdGizmoPushConstants push = {
         .vertex_buffer = pigment_buffer_address(sphere_mesh->vertex_buffer),
-        .camera_buffer = camera_slot_address,
-        .light_buffer  = pigment_buffer_address(lights->buffer),
+        .camera_buffer = camera_address,
+        .light_buffer  = light_address,
         .scale         = scale,
     };
 
     pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
-    pigment_cmd_draw_indexed(pigment, cmd, sphere_mesh->index_buffer, sphere_mesh->index_type, 0, 0, sphere_index_count, 0, lights->count, 0);
+    pigment_cmd_draw_indexed(pigment, cmd, sphere_mesh->index_buffer, sphere_mesh->index_type, 0, 0, sphere_index_count, 0, lights->header.count, 0);
 }

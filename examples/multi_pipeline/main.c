@@ -24,7 +24,7 @@ int main(void)
     PWindowRenderer* renderer        = NULL;
     PStdBindless* bindless           = NULL;
     PCamera* camera                  = NULL;
-    PInstanceRing* ring              = NULL;
+    PInstances* instance_batch       = NULL;
     PMaterials* materials            = NULL;
     PLights* lights                  = NULL;
     PPipeline* pipelines[2]          = {NULL, NULL};
@@ -116,10 +116,10 @@ int main(void)
         goto FREE;
     }
 
-    ring = pigment_std_create_instance_ring(pigment, sizeof(PInstanceData), 4096);
-    if(ring == NULL)
+    instance_batch = pigment_std_create_instances(pigment, sizeof(PInstanceData), 4096);
+    if(instance_batch == NULL)
     {
-        fprintf(stderr, "Failed to create instance ring!\n");
+        fprintf(stderr, "Failed to create instance storage!\n");
         goto FREE;
     }
 
@@ -317,11 +317,11 @@ int main(void)
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[0]);
-        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipelines[0], draw_calls, draw_count);
+        pigment_draw(pigment, cmd, bindless, instance_batch, materials, lights, camera, pipelines[0], draw_calls, draw_count);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[1]);
         pigment_cmd_set_depth(pigment, cmd, P_TRUE, P_FALSE, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
+        pigment_draw(pigment, cmd, bindless, instance_batch, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
@@ -367,7 +367,7 @@ FREE:
     pigment_renderer_destroy(pigment, renderer);
     pigment_destroy_command_pool(pigment, pool);
     pigment_std_destroy_camera(pigment, camera);
-    pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_instances(pigment, instance_batch);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     pigment_std_destroy_bindless(pigment, bindless);

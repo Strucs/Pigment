@@ -37,7 +37,7 @@ int main(void)
     PWindowRenderer* renderer                             = NULL;
     PStdBindless* bindless                                = NULL;
     PCamera* camera                                       = NULL;
-    PInstanceRing* ring                                   = NULL;
+    PInstances* instance_batch                            = NULL;
     PMaterials* materials                                 = NULL;
     PLights* lights                                       = NULL;
     PPipeline* pipeline                                   = NULL;
@@ -141,10 +141,10 @@ int main(void)
         goto FREE;
     }
 
-    ring = pigment_std_create_instance_ring(pigment, sizeof(PInstanceData), 4096);
-    if(ring == NULL)
+    instance_batch = pigment_std_create_instances(pigment, sizeof(PInstanceData), 4096);
+    if(instance_batch == NULL)
     {
-        fprintf(stderr, "Failed to create instance ring!\n");
+        fprintf(stderr, "Failed to create instance storage!\n");
         goto FREE;
     }
 
@@ -518,10 +518,10 @@ int main(void)
         pigment_begin_render_pass(pigment, cmd, &scene_pass);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
-        pigment_draw(pigment, cmd, frame_slot, bindless, ring, materials, lights, camera, pipeline, draw_calls, sizeof(draw_calls) / sizeof(draw_calls[0]));
+        pigment_draw(pigment, cmd, bindless, instance_batch, materials, lights, camera, pipeline, draw_calls, sizeof(draw_calls) / sizeof(draw_calls[0]));
 
         pigment_bind_pipeline(pigment, cmd, skybox_pipeline);
-        pigment_std_draw_skybox(pigment, cmd, frame_slot, bindless, skybox_pipeline, camera, cubemap_slot, 0);
+        pigment_std_draw_skybox(pigment, cmd, bindless, skybox_pipeline, camera, cubemap_slot, 0);
 
         pigment_end_render_pass(pigment, cmd, &scene_pass);
 
@@ -536,7 +536,7 @@ int main(void)
 
         uint32_t hud_w = 0, hud_h = 0;
         pigment_get_swapchain_size(renderer, &hud_w, &hud_h);
-        pigment_std_canvas_begin(pigment, canvas, cmd, pigment_frame_slot(frame), hud_w, hud_h, P_BLEND_MODE_ALPHA);
+        pigment_std_canvas_begin(pigment, canvas, cmd, hud_w, hud_h, P_BLEND_MODE_ALPHA);
         float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
         pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
@@ -559,7 +559,7 @@ int main(void)
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, crt_pipeline);
-        pigment_std_draw_crt(pigment, cmd, renderer, frame_slot, bindless, crt_pipeline, rt_slot, 1, t);
+        pigment_std_draw_crt(pigment, cmd, renderer, bindless, crt_pipeline, rt_slot, 1, t);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
@@ -617,7 +617,7 @@ FREE:
     pigment_destroy_command_pool(pigment, pool);
     pigment_std_destroy_render_target(pigment, rt);
     pigment_std_destroy_camera(pigment, camera);
-    pigment_std_destroy_instance_ring(pigment, ring);
+    pigment_std_destroy_instances(pigment, instance_batch);
     pigment_std_destroy_lights(pigment, lights);
     pigment_std_destroy_materials(pigment, materials);
     pigment_std_destroy_bindless(pigment, bindless);
