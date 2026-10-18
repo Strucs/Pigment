@@ -29,8 +29,8 @@ typedef struct PDynamicImageDesc {
     uint32_t width;
     uint32_t height;
     PFormat format;
-    uint32_t ring_size;                    // 0 = default (2). Number of persistent-mapped staging buffers.
-    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. List every queue family that updates or samples the image.
+    uint32_t ring_size;                    // 0 = default (2). Number of cached staging buffers.
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that updates or samples the image.
     uint32_t shared_queue_count;
     const char* name;
 } PDynamicImageDesc;
@@ -54,13 +54,17 @@ PIGMENT_API PDynamicImage* pigment_std_create_dynamic_image(Pigment* pigment, co
 PIGMENT_API void pigment_std_destroy_dynamic_image(Pigment* pigment, PDynamicImage* dynamic_image);
 
 /**
- * @brief Update the dynamic image.
+ * @brief Record an update of the dynamic image.
+ *
+ * Busy staging buffers are replaced and released after their recorded and GPU uses.
+ * Pixels are copied before returning. The caller must serialize access to this object
+ * and order image updates and sampling on the GPU.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer the copy is recorded into.
  * @param dynamic_image Dynamic image to update.
  * @param pixels Source pixels, tightly packed.
- * @param size Byte size of the pixels buffe.
+ * @param size Byte size of the pixels buffer.
  *
  * @return PIGMENT_SUCCESS on success, error code otherwise.
  */

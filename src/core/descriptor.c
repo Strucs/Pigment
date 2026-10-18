@@ -503,25 +503,7 @@ FREE:
 
 PBool pigment_descriptor_set_idle(Pigment* pigment, const PDescriptorSet* set)
 {
-    if(pigment == NULL || set == NULL || atomic_load_explicit(&set->tracker.references, memory_order_acquire) != 1)
-    {
-        return P_FALSE;
-    }
-
-    for(uint32_t i = 0; i < pigment->device->queue_count; i++)
-    {
-        PSubmitHandle handle = {
-            .queue = &pigment->device->queues[i],
-            .value = atomic_load_explicit(&set->tracker.last_used[i], memory_order_relaxed),
-        };
-
-        if(!pigment_submit_complete(pigment, handle))
-        {
-            return P_FALSE;
-        }
-    }
-
-    return P_TRUE;
+    return set != NULL && resource_tracker_idle(pigment, &set->tracker);
 }
 
 void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count)

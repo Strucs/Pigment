@@ -978,6 +978,29 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
     tracker->last_used = NULL;
 }
 
+PBool resource_tracker_idle(Pigment* pigment, const PResourceTracker* tracker)
+{
+    if(pigment == NULL || tracker == NULL || atomic_load_explicit(&tracker->references, memory_order_acquire) != 1)
+    {
+        return P_FALSE;
+    }
+
+    for(uint32_t i = 0; i < pigment->device->queue_count; i++)
+    {
+        PSubmitHandle handle = {
+            .queue = &pigment->device->queues[i],
+            .value = atomic_load_explicit(&tracker->last_used[i], memory_order_relaxed),
+        };
+
+        if(!pigment_submit_complete(pigment, handle))
+        {
+            return P_FALSE;
+        }
+    }
+
+    return P_TRUE;
+}
+
 void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker)
 {
     if(pigment == NULL || tracker == NULL || pigment->device == NULL || tracker->last_used == NULL)

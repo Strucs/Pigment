@@ -75,12 +75,24 @@ PIGMENT_API void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_
 PIGMENT_API void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);
 
 /**
+ * @brief Check that a buffer has no recorded references or pending GPU uses.
+ *
+ * The caller must prevent new uses, writes and destruction during reuse.
+ *
+ * @param pigment Pigment instance.
+ * @param buffer Buffer to query.
+ *
+ * @return `true` if idle, `false` for invalid input, active use or query failure.
+ */
+PIGMENT_API PBool pigment_buffer_idle(Pigment* pigment, const PBuffer* buffer);
+
+/**
  * @brief Block until the GPU has finished every submitted command that used the buffer.
  *
  * @param pigment Pigment instance.
  * @param buffer Buffer to wait on.
  */
-PIGMENT_API void pigment_buffer_wait(Pigment* pigment, PBuffer* buffer);
+PIGMENT_API void pigment_buffer_wait(Pigment* pigment, const PBuffer* buffer);
 
 PIGMENT_API void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count);
 

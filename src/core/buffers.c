@@ -185,7 +185,12 @@ void pigment_buffer_invalidate(Pigment* pigment, PBuffer* buffer, uint64_t offse
     alloc->invalidate(alloc->user_data, buffer->allocation, (VkDeviceSize) offset, (size == 0) ? VK_WHOLE_SIZE : (VkDeviceSize) size);
 }
 
-void pigment_buffer_wait(Pigment* pigment, PBuffer* buffer)
+PBool pigment_buffer_idle(Pigment* pigment, const PBuffer* buffer)
+{
+    return buffer != NULL && resource_tracker_idle(pigment, &buffer->tracker);
+}
+
+void pigment_buffer_wait(Pigment* pigment, const PBuffer* buffer)
 {
     if(buffer == NULL)
     {
