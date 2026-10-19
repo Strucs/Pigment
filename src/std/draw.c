@@ -26,161 +26,355 @@
 
 #include <string.h>
 
-void pigment_draw(Pigment* pigment, PCommandBuffer* cmd, PStdBindless* bindless, PInstances* instances, PMaterials* materials, PLights* lights, PCamera* camera, PPipeline* pipeline, PDrawCall* draws, uint32_t draw_count)
+typedef struct PPreparedDraw {
+    PMeshBuffers mesh;
+    PResourceTracker* vertex_reference;
+    PResourceTracker* index_reference;
+    uint32_t first_instance;
+    uint32_t instance_count;
+    uint32_t first_index;
+    uint32_t index_count;
+} PPreparedDraw;
+
+typedef enum PStdDrawType {
+    P_STD_DRAW_MESHES,
+    P_STD_DRAW_SKYBOX,
+    P_STD_DRAW_CRT,
+    P_STD_DRAW_LIGHT_GIZMOS,
+} PStdDrawType;
+
+struct PStdDrawBatch {
+    PStdDrawType type;
+    PStdBindlessVersion* bindless;
+    PStdBufferVersion* instances;
+    PStdBufferVersion* materials;
+    PStdBufferVersion* lights;
+    PStdBufferVersion* camera;
+    PPreparedDraw* draws;
+    uint32_t draw_count;
+
+    union {
+        PStdSkyboxPushConstants skybox;
+        PStdCrtPushConstants crt;
+        float gizmo_scale;
+    };
+};
+
+static void draw_meshes(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline);
+static void draw_skybox(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline);
+static void draw_crt(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline);
+static void draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline);
+
+PStdDrawBatch* pigment_std_prepare_draws(Pigment* pigment, PStdBindless* bindless, PInstances* instances, PMaterials* materials, PLights* lights, PCamera* camera, const PDrawCall* draws, uint32_t draw_count)
 {
-    if(pigment == NULL || cmd == NULL || bindless == NULL || instances == NULL || instances->instance_size != sizeof(PInstanceData) || pipeline == NULL || draws == NULL || draw_count == 0)
+    if(pigment == NULL || bindless == NULL || instances == NULL || instances->instance_size != sizeof(PInstanceData) || draws == NULL || draw_count == 0)
     {
-        return;
+        return NULL;
     }
 
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, cmd);
-    if(bindless_set == NULL)
-    {
-        return;
-    }
-    pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &bindless_set, 1, NULL, 0);
-
-    uint64_t material_buffer_address = pigment_std_materials_address(pigment, materials, cmd);
-    uint64_t light_buffer_address    = pigment_std_lights_address(pigment, lights, cmd);
-    uint64_t camera_buffer_address   = pigment_std_camera_address(pigment, camera, cmd);
-    if((materials != NULL && material_buffer_address == 0)
-       || (lights != NULL && light_buffer_address == 0)
-       || (camera != NULL && camera_buffer_address == 0))
-    {
-        return;
-    }
-
-    uint64_t instance_count = 0;
+    uint64_t count = 0;
     for(uint32_t i = 0; i < draw_count; i++)
     {
         if(draws[i].mesh != NULL && draws[i].instances != NULL)
         {
-            instance_count += draws[i].instance_count;
-            if(instance_count > UINT32_MAX)
+            count += draws[i].instance_count;
+            if(count > UINT32_MAX)
             {
-                return;
+                return NULL;
             }
         }
     }
-    if(instance_count == 0)
+
+    if(count == 0)
     {
-        return;
+        return NULL;
+    }
+
+    PStdDrawBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
+    if(batch == NULL)
+    {
+        return NULL;
+    }
+
+    batch->type  = P_STD_DRAW_MESHES;
+    batch->draws = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->draws, draw_count);
+    if(batch->draws == NULL)
+    {
+        goto ERROR;
     }
 
     pigment_std_instances_reset(instances);
-    PInstanceData* instance_data = pigment_std_instances_alloc(pigment, instances, (uint32_t) instance_count);
-    if(instance_data == NULL)
+    PInstanceData* data = pigment_std_instances_alloc(pigment, instances, (uint32_t) count);
+    if(data == NULL)
     {
-        return;
+        goto ERROR;
     }
-
     uint32_t first_instance = 0;
     for(uint32_t i = 0; i < draw_count; i++)
     {
-        PDrawCall* draw_call = &draws[i];
-        if(draw_call->mesh == NULL || draw_call->instance_count == 0 || draw_call->instances == NULL)
+        const PDrawCall* draw = &draws[i];
+        if(draw->mesh == NULL || draw->instances == NULL || draw->instance_count == 0)
         {
             continue;
         }
 
-        memcpy(instance_data + first_instance, draw_call->instances, (size_t) draw_call->instance_count * sizeof(*instance_data));
-        first_instance += draw_call->instance_count;
+        memcpy(data + first_instance, draw->instances, (size_t) draw->instance_count * sizeof(*data));
+        batch->draws[batch->draw_count++] = (PPreparedDraw) {
+            .mesh             = *draw->mesh,
+            .vertex_reference = pigment_retain_resource((PResource) {.type = P_RESOURCE_TYPE_BUFFER, .buffer = draw->mesh->vertex_buffer}),
+            .index_reference  = pigment_retain_resource((PResource) {.type = P_RESOURCE_TYPE_BUFFER, .buffer = draw->mesh->index_buffer}),
+            .first_instance   = first_instance,
+            .instance_count   = draw->instance_count,
+            .first_index      = draw->first_index,
+            .index_count      = draw->index_count,
+        };
+        first_instance += draw->instance_count;
     }
 
-    uint64_t instance_buffer_address = pigment_std_instances_address(pigment, instances, cmd);
-    if(instance_buffer_address == 0)
+    batch->bindless  = pigment_std_bindless_prepare(pigment, bindless);
+    batch->instances = pigment_std_instances_prepare(pigment, instances);
+    batch->materials = pigment_std_materials_prepare(pigment, materials);
+    batch->lights    = pigment_std_lights_prepare(pigment, lights);
+    batch->camera    = pigment_std_camera_prepare(pigment, camera);
+
+    if(batch->bindless == NULL || batch->instances == NULL
+       || (materials != NULL && batch->materials == NULL)
+       || (lights != NULL && batch->lights == NULL)
+       || (camera != NULL && batch->camera == NULL))
+    {
+        goto ERROR;
+    }
+
+    return batch;
+
+ERROR:
+    pigment_std_release_draws(pigment, batch);
+    return NULL;
+}
+
+PStdDrawBatch* pigment_std_prepare_skybox(Pigment* pigment, PStdBindless* bindless, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
+{
+    if(pigment == NULL || bindless == NULL || camera == NULL)
+    {
+        return NULL;
+    }
+
+    PStdDrawBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
+    if(batch == NULL)
+    {
+        return NULL;
+    }
+
+    batch->type     = P_STD_DRAW_SKYBOX;
+    batch->bindless = pigment_std_bindless_prepare(pigment, bindless);
+    batch->camera   = pigment_std_camera_prepare(pigment, camera);
+    batch->skybox   = (PStdSkyboxPushConstants) {
+        .cubemap_id = cubemap_slot,
+        .sampler_id = sampler_slot,
+    };
+
+    if(batch->bindless == NULL || batch->camera == NULL)
+    {
+        goto ERROR;
+    }
+
+    return batch;
+
+ERROR:
+    pigment_std_release_draws(pigment, batch);
+    return NULL;
+}
+
+PStdDrawBatch* pigment_std_prepare_crt(Pigment* pigment, PStdBindless* bindless, uint32_t width, uint32_t height, uint32_t texture_slot, uint32_t sampler_slot, float time)
+{
+    if(pigment == NULL || bindless == NULL)
+    {
+        return NULL;
+    }
+
+    PStdDrawBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
+    if(batch == NULL)
+    {
+        return NULL;
+    }
+
+    batch->type     = P_STD_DRAW_CRT;
+    batch->bindless = pigment_std_bindless_prepare(pigment, bindless);
+    batch->crt      = (PStdCrtPushConstants) {
+        .texture_id   = texture_slot,
+        .sampler_id   = sampler_slot,
+        .time         = time,
+        .aspect       = height == 0 ? 1.0f : (float) width / (float) height,
+        .resolution_x = (float) width,
+        .resolution_y = (float) height,
+    };
+
+    if(batch->bindless == NULL)
+    {
+        goto ERROR;
+    }
+
+    return batch;
+
+ERROR:
+    pigment_std_release_draws(pigment, batch);
+    return NULL;
+}
+
+PStdDrawBatch* pigment_std_prepare_light_gizmos(Pigment* pigment, PCamera* camera, PLights* lights, const PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
+{
+    if(pigment == NULL
+       || lights == NULL || sphere_mesh == NULL || sphere_mesh->vertex_buffer == NULL
+       || sphere_mesh->index_buffer == NULL || sphere_index_count == 0)
+    {
+        return NULL;
+    }
+
+    PStdDrawBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
+    if(batch == NULL)
+    {
+        return NULL;
+    }
+
+    batch->type        = P_STD_DRAW_LIGHT_GIZMOS;
+    batch->lights      = pigment_std_lights_prepare(pigment, lights);
+    batch->camera      = pigment_std_camera_prepare(pigment, camera);
+    batch->gizmo_scale = scale;
+
+    if(batch->lights == NULL || pigment_std_buffer_version_count(batch->lights) == 0
+       || (camera != NULL && batch->camera == NULL))
+    {
+        goto ERROR;
+    }
+
+    batch->draws = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->draws, 1);
+    if(batch->draws == NULL)
+    {
+        goto ERROR;
+    }
+
+    batch->draws[0] = (PPreparedDraw) {
+        .mesh             = *sphere_mesh,
+        .vertex_reference = pigment_retain_resource((PResource) {.type = P_RESOURCE_TYPE_BUFFER, .buffer = sphere_mesh->vertex_buffer}),
+        .index_reference  = pigment_retain_resource((PResource) {.type = P_RESOURCE_TYPE_BUFFER, .buffer = sphere_mesh->index_buffer}),
+        .instance_count   = pigment_std_buffer_version_count(batch->lights),
+        .index_count      = sphere_index_count,
+    };
+    batch->draw_count = 1;
+
+    return batch;
+
+ERROR:
+    pigment_std_release_draws(pigment, batch);
+    return NULL;
+}
+
+void pigment_std_release_draws(Pigment* pigment, PStdDrawBatch* batch)
+{
+    if(pigment == NULL || batch == NULL)
     {
         return;
     }
 
-    first_instance = 0;
-    for(uint32_t i = 0; i < draw_count; i++)
+    pigment_std_release_bindless_version(pigment, batch->bindless);
+    pigment_std_release_buffer_version(pigment, batch->instances);
+    pigment_std_release_buffer_version(pigment, batch->materials);
+    pigment_std_release_buffer_version(pigment, batch->lights);
+    pigment_std_release_buffer_version(pigment, batch->camera);
+
+    for(uint32_t i = 0; i < batch->draw_count; i++)
     {
-        PDrawCall* draw_call = &draws[i];
-        if(draw_call->mesh == NULL || draw_call->instance_count == 0 || draw_call->instances == NULL)
-        {
-            continue;
-        }
+        pigment_release_resource(pigment, batch->draws[i].vertex_reference);
+        pigment_release_resource(pigment, batch->draws[i].index_reference);
+    }
 
-        pigment_std_mesh_use(pigment, cmd, draw_call->mesh);
+    P_FREE(pigment, batch->draws);
+    P_FREE(pigment, batch);
+}
 
-        PStdPushConstants push = {
-            .vertex_buffer   = pigment_buffer_address(draw_call->mesh->vertex_buffer),
-            .instance_buffer = instance_buffer_address,
-            .camera_buffer   = camera_buffer_address,
-            .material_buffer = material_buffer_address,
-            .light_buffer    = light_buffer_address,
-        };
+void pigment_std_draw(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline)
+{
+    if(pigment == NULL || cmd == NULL || batch == NULL || pipeline == NULL)
+    {
+        return;
+    }
 
-        pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
-        pigment_cmd_draw_indexed(pigment, cmd, draw_call->mesh->index_buffer, draw_call->mesh->index_type, 0, draw_call->first_index, draw_call->index_count, 0, draw_call->instance_count, first_instance);
-        first_instance += draw_call->instance_count;
+    if(batch->bindless != NULL)
+    {
+        PDescriptorSet* set = pigment_std_bindless_version_set(pigment, batch->bindless, cmd);
+        pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &set, 1, NULL, 0);
+    }
+
+    switch(batch->type)
+    {
+        case P_STD_DRAW_MESHES:
+            draw_meshes(pigment, cmd, batch, pipeline);
+            break;
+        case P_STD_DRAW_SKYBOX:
+            draw_skybox(pigment, cmd, batch, pipeline);
+            break;
+        case P_STD_DRAW_CRT:
+            draw_crt(pigment, cmd, batch, pipeline);
+            break;
+        case P_STD_DRAW_LIGHT_GIZMOS:
+            draw_light_gizmos(pigment, cmd, batch, pipeline);
+            break;
     }
 }
 
-void pigment_std_draw_skybox(Pigment* pigment, PCommandBuffer* cmd, PStdBindless* bindless, PPipeline* pipeline, PCamera* camera, uint32_t cubemap_slot, uint32_t sampler_slot)
+static void draw_meshes(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline)
 {
-    if(pigment == NULL || cmd == NULL || bindless == NULL || pipeline == NULL || camera == NULL)
-    {
-        return;
-    }
-
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, cmd);
-    if(bindless_set == NULL)
-    {
-        return;
-    }
-
-    pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &bindless_set, 1, NULL, 0);
-
-    uint64_t camera_address = pigment_std_camera_address(pigment, camera, cmd);
-    if(camera_address == 0)
-    {
-        return;
-    }
-
-    PStdSkyboxPushConstants push = {
-        .camera_buffer = camera_address,
-        .cubemap_id    = cubemap_slot,
-        .sampler_id    = sampler_slot,
+    PStdPushConstants push = {
+        .instance_buffer = pigment_std_buffer_version_address(pigment, batch->instances, cmd),
+        .camera_buffer   = pigment_std_buffer_version_address(pigment, batch->camera, cmd),
+        .material_buffer = pigment_std_buffer_version_address(pigment, batch->materials, cmd),
+        .light_buffer    = pigment_std_buffer_version_address(pigment, batch->lights, cmd),
     };
-    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
 
+    for(uint32_t i = 0; i < batch->draw_count; i++)
+    {
+        const PPreparedDraw* draw = &batch->draws[i];
+        pigment_cmd_use(pigment, cmd, draw->vertex_reference);
+        pigment_cmd_use(pigment, cmd, draw->index_reference);
+        push.vertex_buffer = pigment_buffer_address(draw->mesh.vertex_buffer);
+
+        pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
+        pigment_cmd_draw_indexed(pigment, cmd, draw->mesh.index_buffer, draw->mesh.index_type, 0, draw->first_index, draw->index_count, 0, draw->instance_count, draw->first_instance);
+    }
+}
+
+static void draw_skybox(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline)
+{
+    PStdSkyboxPushConstants push = batch->skybox;
+    push.camera_buffer           = pigment_std_buffer_version_address(pigment, batch->camera, cmd);
+
+    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
     pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_FRONT, P_FRONT_FACE_COUNTER_CLOCKWISE);
     pigment_cmd_set_depth(pigment, cmd, P_TRUE, P_FALSE, P_COMPARE_OP_GREATER_OR_EQUAL);
     pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
 }
 
-void pigment_std_draw_crt(Pigment* pigment, PCommandBuffer* cmd, PWindowRenderer* renderer, PStdBindless* bindless, PPipeline* pipeline, uint32_t texture_slot, uint32_t sampler_slot, float time)
+static void draw_crt(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline)
 {
-    if(pigment == NULL || cmd == NULL || renderer == NULL || bindless == NULL || pipeline == NULL)
-    {
-        return;
-    }
-
-    uint32_t w = 0;
-    uint32_t h = 0;
-    pigment_get_swapchain_size(renderer, &w, &h);
-
-    PDescriptorSet* bindless_set = pigment_std_bindless_set(pigment, bindless, cmd);
-    if(bindless_set == NULL)
-    {
-        return;
-    }
-
-    pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &bindless_set, 1, NULL, 0);
-
-    PStdCrtPushConstants push = {
-        .texture_id   = texture_slot,
-        .sampler_id   = sampler_slot,
-        .time         = time,
-        .aspect       = (h == 0) ? 1.0f : (float) w / (float) h,
-        .resolution_x = (float) w,
-        .resolution_y = (float) h,
-    };
-    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
-
+    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(batch->crt), &batch->crt);
     pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_NONE, P_FRONT_FACE_COUNTER_CLOCKWISE);
     pigment_cmd_set_depth(pigment, cmd, P_FALSE, P_FALSE, P_COMPARE_OP_ALWAYS);
     pigment_cmd_draw(pigment, cmd, 3, 1, 0, 0);
+}
+
+static void draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline)
+{
+    const PPreparedDraw* draw = &batch->draws[0];
+    pigment_cmd_use(pigment, cmd, draw->vertex_reference);
+    pigment_cmd_use(pigment, cmd, draw->index_reference);
+
+    PStdGizmoPushConstants push = {
+        .vertex_buffer = pigment_buffer_address(draw->mesh.vertex_buffer),
+        .camera_buffer = pigment_std_buffer_version_address(pigment, batch->camera, cmd),
+        .light_buffer  = pigment_std_buffer_version_address(pigment, batch->lights, cmd),
+        .scale         = batch->gizmo_scale,
+    };
+
+    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
+    pigment_cmd_draw_indexed(pigment, cmd, draw->mesh.index_buffer, draw->mesh.index_type, 0, 0, draw->index_count, 0, draw->instance_count, 0);
 }

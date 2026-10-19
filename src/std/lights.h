@@ -21,9 +21,8 @@
 extern "C" {
 #endif
 
-#include "camera.h"
-#include "mesh.h"
 #include "types.h"
+#include "buffer_version.h"
 
 #include "pigment/defines.h"
 
@@ -60,22 +59,18 @@ PIGMENT_API void pigment_std_light_update(Pigment* pigment, PLights* lights, uin
 PIGMENT_API void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id);
 
 /**
- * @brief Publish the lights and retain their buffer in a command buffer.
+ * @brief Prepare an immutable GPU version of the lights.
  *
- * The address belongs to this recording. Request it again for each new recording.
- * Unchanged data shares its version. Modified data reuses an idle buffer or allocates one.
- * If publication fails, CPU changes are preserved for the next call.
- * The caller must serialize access to this object.
+ * The caller must serialize access to this object. Failure preserves CPU data for retry.
+ * Release the returned reference with pigment_std_release_buffer_version after recording.
+ * Unchanged data shares its version.
  *
  * @param pigment Pigment instance.
- * @param lights Lights to publish.
- * @param cmd Command buffer that uses the returned address.
+ * @param lights Source object.
  *
- * @return Buffer address, or 0 on invalid input or publication failure.
+ * @return Prepared version, or NULL on invalid input or publication failure.
  */
-PIGMENT_API uint64_t pigment_std_lights_address(Pigment* pigment, PLights* lights, PCommandBuffer* cmd);
-
-PIGMENT_API void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale);
+PIGMENT_API PStdBufferVersion* pigment_std_lights_prepare(Pigment* pigment, PLights* lights);
 
 #ifdef __cplusplus
 }

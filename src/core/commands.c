@@ -863,6 +863,43 @@ void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tr
     }
 }
 
+PResourceTracker* pigment_retain_resource(PResource resource)
+{
+    PResourceTracker* tracker = NULL;
+    switch(resource.type)
+    {
+        case P_RESOURCE_TYPE_BUFFER:
+            tracker = resource.buffer != NULL ? &resource.buffer->tracker : NULL;
+            break;
+        case P_RESOURCE_TYPE_IMAGE:
+            tracker = resource.image != NULL ? resource.image->tracker : NULL;
+            break;
+        case P_RESOURCE_TYPE_SAMPLER:
+            tracker = resource.sampler != NULL ? &resource.sampler->tracker : NULL;
+            break;
+        case P_RESOURCE_TYPE_PIPELINE:
+            tracker = resource.pipeline != NULL ? &resource.pipeline->tracker : NULL;
+            break;
+        default:
+            return NULL;
+    }
+
+    if(tracker != NULL)
+    {
+        resource_tracker_retain(tracker);
+    }
+
+    return tracker;
+}
+
+void pigment_release_resource(Pigment* pigment, PResourceTracker* tracker)
+{
+    if(pigment != NULL && tracker != NULL)
+    {
+        resource_tracker_release(pigment, tracker);
+    }
+}
+
 void pigment_cmd_use_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* buffer)
 {
     if(buffer == NULL)

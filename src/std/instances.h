@@ -21,6 +21,8 @@
 extern "C" {
 #endif
 
+#include "buffer_version.h"
+
 #include "pigment/defines.h"
 
 typedef struct PInstances PInstances;
@@ -71,20 +73,18 @@ PIGMENT_API uint32_t pigment_std_instances_count(PInstances* instances);
 PIGMENT_API void* pigment_std_instances_alloc(Pigment* pigment, PInstances* instances, uint32_t instance_count);
 
 /**
- * @brief Copy CPU instances to a GPU version and retain it in a command buffer.
+ * @brief Prepare an immutable GPU version of the instances.
  *
- * The address belongs to this recording. Request it again for each new recording.
- * Each call copies the data. Later CPU writes leave recorded versions unchanged.
- * If publication fails, CPU instances are preserved for the next call.
- * The caller must serialize access to this object.
+ * The caller must serialize access to this object. Failure preserves CPU data for retry.
+ * Release the returned reference with pigment_std_release_buffer_version after recording.
+ * Each call copies the CPU instances.
  *
  * @param pigment Pigment instance.
- * @param instances Instance storage to publish.
- * @param cmd Command buffer that uses the returned address.
+ * @param instances Source object.
  *
- * @return Buffer address, or 0 on invalid input, empty storage or publication failure.
+ * @return Prepared version, or NULL on invalid input, empty storage or publication failure.
  */
-PIGMENT_API uint64_t pigment_std_instances_address(Pigment* pigment, PInstances* instances, PCommandBuffer* cmd);
+PIGMENT_API PStdBufferVersion* pigment_std_instances_prepare(Pigment* pigment, PInstances* instances);
 
 #ifdef __cplusplus
 }

@@ -83,11 +83,11 @@ void pigment_std_camera_set_projection(PCamera* camera, PMat4 projection)
     camera->dirty = P_TRUE;
 }
 
-uint64_t pigment_std_camera_address(Pigment* pigment, PCamera* camera, PCommandBuffer* cmd)
+PStdBufferVersion* pigment_std_camera_prepare(Pigment* pigment, PCamera* camera)
 {
-    if(pigment == NULL || camera == NULL || cmd == NULL)
+    if(pigment == NULL || camera == NULL)
     {
-        return 0;
+        return NULL;
     }
 
     if(camera->dirty)
@@ -95,14 +95,15 @@ uint64_t pigment_std_camera_address(Pigment* pigment, PCamera* camera, PCommandB
         PBuffer* buffer = acquire_buffer_version(pigment, &camera->buffers, sizeof(camera->data), "pigment_std_camera_version");
         if(buffer == NULL)
         {
-            return 0;
+            return NULL;
         }
 
         memcpy(pigment_buffer_mapped(buffer), &camera->data, sizeof(camera->data));
         pigment_buffer_flush(pigment, buffer, 0, sizeof(camera->data));
 
-        camera->dirty = P_FALSE;
+        camera->buffers.current->count = 1;
+        camera->dirty                  = P_FALSE;
     }
 
-    return buffer_version_address(pigment, &camera->buffers, cmd);
+    return retain_buffer_version(pigment, &camera->buffers);
 }

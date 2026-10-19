@@ -30,7 +30,6 @@ static void destroy_descriptor_set_immediate(Pigment* pigment, void* resource);
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
 static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
-static PResult pool_append_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSet* set);
 static void pool_remove_set(PDescriptorPool* pool, PDescriptorSet* set);
 static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override);
 
@@ -433,6 +432,13 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
         temp_allocated++;
     }
 
+    if((uint64_t) pool->set_count + count > UINT32_MAX / 2
+       || P_ARRAY_RESERVE_OBJECT(pigment, pool->sets, pool->set_count, pool->set_capacity, count, PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY) != PIGMENT_SUCCESS)
+    {
+        status = PIGMENT_ERROR_OUT_OF_MEMORY;
+        goto FREE;
+    }
+
     VkDescriptorSetVariableDescriptorCountAllocateInfo variable_alloc_info = {
         .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
         .descriptorSetCount = count,
@@ -461,19 +467,8 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
         temp_sets[i]->source_pool = pool;
         set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t) vk_sets[i], allocs[i].name);
 
-        if(pool_append_set(pigment, pool, temp_sets[i]) != PIGMENT_SUCCESS)
-        {
-            PLOG_ERROR(pigment, "Failed to append descriptor set to pool");
-            for(uint32_t j = 0; j < i; j++)
-            {
-                pool_remove_set(pool, temp_sets[j]);
-            }
-            vkFreeDescriptorSets(pigment->device->logical_device, pool->pool, count, vk_sets);
-            status = PIGMENT_ERROR_OUT_OF_MEMORY;
-            goto FREE;
-        }
-
-        out_sets[i] = temp_sets[i];
+        pool->sets[pool->set_count++] = temp_sets[i];
+        out_sets[i]                   = temp_sets[i];
     }
 
     for(uint32_t i = 0; i < count; i++)
@@ -506,25 +501,26 @@ PBool pigment_descriptor_set_idle(Pigment* pigment, const PDescriptorSet* set)
     return set != NULL && resource_tracker_idle(pigment, &set->tracker);
 }
 
-void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count)
+PResult pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count)
 {
     if(pigment == NULL)
     {
-        return;
+        return PIGMENT_ERROR;
     }
     if(write_count == 0 && copy_count == 0)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
     if(write_count > 0 && writes == NULL)
     {
-        return;
+        return PIGMENT_ERROR;
     }
     if(copy_count > 0 && copies == NULL)
     {
-        return;
+        return PIGMENT_ERROR;
     }
 
+    PResult result                        = PIGMENT_ERROR_OUT_OF_MEMORY;
     VkWriteDescriptorSet* vk_writes       = (write_count > 0) ? P_NEW_ARRAY_FOR_COMMAND(pigment, vk_writes, write_count) : NULL;
     VkDescriptorImageInfo** image_infos   = (write_count > 0) ? P_NEW_ARRAY_FOR_COMMAND(pigment, image_infos, write_count) : NULL;
     VkDescriptorBufferInfo** buffer_infos = (write_count > 0) ? P_NEW_ARRAY_FOR_COMMAND(pigment, buffer_infos, write_count) : NULL;
@@ -573,10 +569,11 @@ void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes
                         else if(info->image != NULL)
                         {
                             PImageView* view = image_get_or_create_view(pigment, info->image, &(PImageViewDesc) {0});
-                            if(view != NULL)
+                            if(view == NULL)
                             {
-                                vk_view = view->view;
+                                goto FREE;
                             }
+                            vk_view = view->view;
                         }
 
                         image_infos[i][j].imageView   = vk_view;
@@ -630,6 +627,7 @@ void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes
     }
 
     vkUpdateDescriptorSets(pigment->device->logical_device, write_count, vk_writes, copy_count, vk_copies);
+    result = PIGMENT_SUCCESS;
 
 FREE:
     if(image_infos != NULL)
@@ -651,6 +649,7 @@ FREE:
     }
     P_FREE(pigment, vk_writes);
     P_FREE(pigment, vk_copies);
+    return result;
 }
 
 void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t first_set, PDescriptorSet* const* sets, uint32_t set_count, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count)
@@ -740,18 +739,6 @@ static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flag
         out |= VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
     }
     return out;
-}
-
-static PResult pool_append_set(Pigment* pigment, PDescriptorPool* pool, PDescriptorSet* set)
-{
-    PResult res = P_ARRAY_RESERVE_OBJECT(pigment, pool->sets, pool->set_count, pool->set_capacity, 1, PIGMENT_DESCRIPTOR_POOL_INITIAL_CAPACITY);
-    if(res != PIGMENT_SUCCESS)
-    {
-        return res;
-    }
-    pool->sets[pool->set_count++] = set;
-
-    return PIGMENT_SUCCESS;
 }
 
 static void pool_remove_set(PDescriptorPool* pool, PDescriptorSet* set)

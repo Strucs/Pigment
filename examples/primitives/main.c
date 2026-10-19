@@ -501,7 +501,30 @@ int main(void)
             break;
         }
 
-        PCommandBuffer* cmd = frame_cmds[pigment_frame_slot(frame)];
+        PCommandBuffer* cmd         = frame_cmds[pigment_frame_slot(frame)];
+        PStdDrawBatch* draw_batch1  = pigment_std_prepare_draws(pigment, bindless, instance_batch, materials, lights, camera, draw_calls, sizeof(draw_calls) / sizeof(draw_calls[0]));
+        PStdDrawBatch* skybox_batch = pigment_std_prepare_skybox(pigment, bindless, camera, cubemap_slot, 0);
+        uint32_t hud_w = 0, hud_h = 0;
+        pigment_get_swapchain_size(renderer, &hud_w, &hud_h);
+        PStdDrawBatch* crt_batch = pigment_std_prepare_crt(pigment, bindless, hud_w, hud_h, rt_slot, 1, t);
+        pigment_std_canvas_begin(pigment, canvas, hud_w, hud_h, P_BLEND_MODE_ALPHA);
+        float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        pigment_std_canvas_rect_anchor(pigment, canvas, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
+        pigment_std_canvas_rect_anchor(pigment, canvas, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
+
+        float scale_factor        = 0.08f;
+        int32_t captain_h         = (int32_t) (hud_h * scale_factor);
+        int32_t captain_w         = captain_h;
+        const int32_t captain_pad = 16;
+
+        float no_filter[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
+        float team_filter[4] = {0.85f, 0.1f, 0.1f, 1.0f};
+
+        pigment_std_canvas_image_region_anchor(pigment, canvas, P_STD_CANVAS_ANCHOR_TOP_RIGHT, captain_pad, captain_pad, captain_w, captain_h, captain_slot, SPRITE_SAMPLER, 128, 0, CAPTAIN_CELL, CAPTAIN_CELL, no_filter);
+        pigment_std_canvas_image_region_anchor(pigment, canvas, P_STD_CANVAS_ANCHOR_TOP_RIGHT, captain_pad, captain_pad, captain_w, captain_h, captain_slot, SPRITE_SAMPLER, 160, 0, CAPTAIN_CELL, CAPTAIN_CELL, team_filter);
+
+        PStdCanvasBatch* hud_batch = pigment_std_canvas_prepare(pigment, canvas);
+
         pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 
         PAttachmentRef scene_colors[] = {pigment_std_render_target_color_ref(rt, 0)};
@@ -518,10 +541,10 @@ int main(void)
         pigment_begin_render_pass(pigment, cmd, &scene_pass);
 
         pigment_bind_pipeline(pigment, cmd, pipeline);
-        pigment_draw(pigment, cmd, bindless, instance_batch, materials, lights, camera, pipeline, draw_calls, sizeof(draw_calls) / sizeof(draw_calls[0]));
+        pigment_std_draw(pigment, cmd, draw_batch1, pipeline);
 
         pigment_bind_pipeline(pigment, cmd, skybox_pipeline);
-        pigment_std_draw_skybox(pigment, cmd, bindless, skybox_pipeline, camera, cubemap_slot, 0);
+        pigment_std_draw(pigment, cmd, skybox_batch, skybox_pipeline);
 
         pigment_end_render_pass(pigment, cmd, &scene_pass);
 
@@ -534,36 +557,23 @@ int main(void)
         };
         pigment_begin_render_pass(pigment, cmd, &hud_pass);
 
-        uint32_t hud_w = 0, hud_h = 0;
-        pigment_get_swapchain_size(renderer, &hud_w, &hud_h);
-        pigment_std_canvas_begin(pigment, canvas, cmd, hud_w, hud_h, P_BLEND_MODE_ALPHA);
-        float crosshair_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 24, 2, crosshair_color);
-        pigment_std_canvas_rect_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_CENTER, 0, 0, 2, 24, crosshair_color);
-
-        float scale_factor        = 0.08f;
-        int32_t captain_h         = (int32_t) (hud_h * scale_factor);
-        int32_t captain_w         = captain_h;
-        const int32_t captain_pad = 16;
-
-        float no_filter[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
-        float team_filter[4] = {0.85f, 0.1f, 0.1f, 1.0f};
-
-        pigment_std_canvas_image_region_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_TOP_RIGHT, captain_pad, captain_pad, captain_w, captain_h, captain_slot, SPRITE_SAMPLER, 128, 0, CAPTAIN_CELL, CAPTAIN_CELL, no_filter);
-        pigment_std_canvas_image_region_anchor(pigment, canvas, cmd, P_STD_CANVAS_ANCHOR_TOP_RIGHT, captain_pad, captain_pad, captain_w, captain_h, captain_slot, SPRITE_SAMPLER, 160, 0, CAPTAIN_CELL, CAPTAIN_CELL, team_filter);
-
-        pigment_std_canvas_end(pigment, canvas, cmd);
+        pigment_std_draw_canvas(pigment, cmd, hud_batch);
 
         pigment_end_render_pass(pigment, cmd, &hud_pass);
 
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, crt_pipeline);
-        pigment_std_draw_crt(pigment, cmd, renderer, bindless, crt_pipeline, rt_slot, 1, t);
+        pigment_std_draw(pigment, cmd, crt_batch, crt_pipeline);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
         pigment_end_recording(pigment, cmd);
+
+        pigment_std_release_draws(pigment, draw_batch1);
+        pigment_std_release_draws(pigment, skybox_batch);
+        pigment_std_release_draws(pigment, crt_batch);
+        pigment_std_release_canvas_batch(pigment, hud_batch);
 
         PSubmit submit = {
             .cmds           = &cmd,

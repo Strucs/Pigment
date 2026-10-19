@@ -62,6 +62,27 @@ typedef struct PSubmit {
     PBool signal_present;
 } PSubmit;
 
+typedef enum PResourceType {
+    P_RESOURCE_TYPE_BUFFER,
+    P_RESOURCE_TYPE_IMAGE,
+    P_RESOURCE_TYPE_SAMPLER,
+    P_RESOURCE_TYPE_PIPELINE,
+} PResourceType;
+
+/**
+ * @brief Resource pointer tagged with its type.
+ */
+typedef struct PResource {
+    PResourceType type;
+
+    union {
+        PBuffer* buffer;
+        PImage* image;
+        PSampler* sampler;
+        PPipeline* pipeline;
+    };
+} PResource;
+
 /**
  * @brief Inheritance state used to begin recording a SECONDARY command buffer.
  *
@@ -263,13 +284,13 @@ PIGMENT_API void pigment_destroy_resource_tracker(Pigment* pigment, PResourceTra
  *
  * References last until the command buffer is reset or freed, including after submission.
  * Destroy through pigment_defer_destroy_tracked. Synchronize the first recorded use
- * with destruction and stop recording new uses after requesting destruction.
+ * with destruction. A retained CPU reference allows later recordings until its release.
  * For built-in resources, use pigment_cmd_use_buffer, pigment_cmd_use_image or
  * pigment_cmd_use_sampler for indirect accesses such as GPU addresses or bindless indices.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer being recorded.
- * @param tracker Tracker from pigment_create_resource_tracker.
+ * @param tracker Custom tracker or retained resource reference.
  */
 PIGMENT_API void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourceTracker* tracker);
 
@@ -282,6 +303,29 @@ PIGMENT_API void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourc
  * @param tracker Tracker from pigment_create_resource_tracker.
  */
 PIGMENT_API void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker);
+
+/**
+ * @brief Retain a resource for later recordings.
+ *
+ * Serialize with destruction and image resize. Images retain their current allocation.
+ * Record uses with pigment_cmd_use and release with pigment_release_resource.
+ * A pipeline's layout must remain alive until recording is complete.
+ *
+ * @param resource Resource with the union member matching its type.
+ *
+ * @return Retained tracker, or NULL for an invalid type or NULL resource.
+ */
+PIGMENT_API PResourceTracker* pigment_retain_resource(PResource resource);
+
+/**
+ * @brief Release a CPU reference obtained from pigment_retain_resource.
+ *
+ * Recorded references remain retained. Finish recording uses before releasing the last CPU reference.
+ *
+ * @param pigment Pigment instance.
+ * @param tracker Retained tracker, or NULL.
+ */
+PIGMENT_API void pigment_release_resource(Pigment* pigment, PResourceTracker* tracker);
 
 /**
  * @brief Stamp a buffer's tracker at submit time.

@@ -158,7 +158,20 @@ PIGMENT_API void pigment_destroy_descriptor_sets(Pigment* pigment, PDescriptorSe
  */
 PIGMENT_API PBool pigment_descriptor_set_idle(Pigment* pigment, const PDescriptorSet* set);
 
-PIGMENT_API void pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
+/**
+ * @brief Update descriptors after preparing all temporary data.
+ *
+ * On allocation failure, descriptors remain unchanged. Serialize access to the sets.
+ *
+ * @param pigment Pigment instance.
+ * @param writes Descriptor writes.
+ * @param write_count Number of writes.
+ * @param copies Descriptor copies.
+ * @param copy_count Number of copies.
+ *
+ * @return PIGMENT_SUCCESS on success or no-op, an error code otherwise.
+ */
+PIGMENT_API PResult pigment_update_descriptors(Pigment* pigment, const PDescriptorWrite* writes, uint32_t write_count, const PDescriptorCopy* copies, uint32_t copy_count);
 
 PIGMENT_API void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, uint32_t first_set, PDescriptorSet* const* sets, uint32_t set_count, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count);
 

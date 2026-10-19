@@ -132,11 +132,11 @@ void pigment_std_material_destroy(Pigment* pigment, PMaterials* materials, uint3
     materials->free_slots[materials->free_count++] = id;
 }
 
-uint64_t pigment_std_materials_address(Pigment* pigment, PMaterials* materials, PCommandBuffer* cmd)
+PStdBufferVersion* pigment_std_materials_prepare(Pigment* pigment, PMaterials* materials)
 {
-    if(pigment == NULL || materials == NULL || cmd == NULL)
+    if(pigment == NULL || materials == NULL)
     {
-        return 0;
+        return NULL;
     }
 
     if(materials->dirty)
@@ -145,7 +145,7 @@ uint64_t pigment_std_materials_address(Pigment* pigment, PMaterials* materials, 
         PBuffer* buffer = acquire_buffer_version(pigment, &materials->buffers, size, "pigment_std_materials_version");
         if(buffer == NULL)
         {
-            return 0;
+            return NULL;
         }
 
         uint64_t used = (uint64_t) materials->count * sizeof(*materials->data);
@@ -153,8 +153,9 @@ uint64_t pigment_std_materials_address(Pigment* pigment, PMaterials* materials, 
         memcpy(pigment_buffer_mapped(buffer), materials->data, (size_t) used);
         pigment_buffer_flush(pigment, buffer, 0, used);
 
-        materials->dirty = P_FALSE;
+        materials->buffers.current->count = materials->count;
+        materials->dirty                  = P_FALSE;
     }
 
-    return buffer_version_address(pigment, &materials->buffers, cmd);
+    return retain_buffer_version(pigment, &materials->buffers);
 }

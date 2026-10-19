@@ -18,17 +18,13 @@
 
 #include "pigment/pigment.h"
 
-struct PStdBufferVersion {
-    PBuffer* buffer;
-    PStdBufferVersion* next;
-};
-
 PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, uint64_t size, const char* name)
 {
     PStdBufferVersion* version = buffers->versions;
     while(version != NULL)
     {
-        if(pigment_buffer_size(version->buffer) >= size && pigment_buffer_idle(pigment, version->buffer))
+        if(atomic_load_explicit(&version->references, memory_order_acquire) == 1
+           && pigment_buffer_size(version->buffer) >= size && pigment_buffer_idle(pigment, version->buffer))
         {
             break;
         }
@@ -57,6 +53,7 @@ PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, u
             return NULL;
         }
 
+        atomic_init(&version->references, 1);
         version->next     = buffers->versions;
         buffers->versions = version;
     }
@@ -65,18 +62,19 @@ PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, u
     return version->buffer;
 }
 
-uint64_t buffer_version_address(Pigment* pigment, PStdBufferVersions* buffers, PCommandBuffer* cmd)
+PStdBufferVersion* retain_buffer_version(Pigment* pigment, PStdBufferVersions* buffers)
 {
     // Keep the current version and release older buffers once their uses finish.
     PStdBufferVersion** link = &buffers->versions;
     while(*link != NULL)
     {
         PStdBufferVersion* version = *link;
-        if(version != buffers->current && pigment_buffer_idle(pigment, version->buffer))
+        if(version != buffers->current
+           && atomic_load_explicit(&version->references, memory_order_acquire) == 1
+           && pigment_buffer_idle(pigment, version->buffer))
         {
             *link = version->next;
-            pigment_destroy_buffer(pigment, version->buffer);
-            P_FREE(pigment, version);
+            pigment_std_release_buffer_version(pigment, version);
         }
         else
         {
@@ -84,8 +82,8 @@ uint64_t buffer_version_address(Pigment* pigment, PStdBufferVersions* buffers, P
         }
     }
 
-    pigment_cmd_use_buffer(pigment, cmd, buffers->current->buffer);
-    return pigment_buffer_address(buffers->current->buffer);
+    atomic_fetch_add_explicit(&buffers->current->references, 1, memory_order_relaxed);
+    return buffers->current;
 }
 
 void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers)
@@ -94,9 +92,34 @@ void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers)
     while(version != NULL)
     {
         PStdBufferVersion* next = version->next;
-        pigment_destroy_buffer(pigment, version->buffer);
-        P_FREE(pigment, version);
+        pigment_std_release_buffer_version(pigment, version);
         version = next;
     }
     *buffers = (PStdBufferVersions) {0};
+}
+
+uint64_t pigment_std_buffer_version_address(Pigment* pigment, const PStdBufferVersion* version, PCommandBuffer* cmd)
+{
+    if(pigment == NULL || version == NULL || cmd == NULL)
+    {
+        return 0;
+    }
+
+    pigment_cmd_use_buffer(pigment, cmd, version->buffer);
+    return pigment_buffer_address(version->buffer);
+}
+
+uint32_t pigment_std_buffer_version_count(const PStdBufferVersion* version)
+{
+    return version != NULL ? version->count : 0;
+}
+
+void pigment_std_release_buffer_version(Pigment* pigment, PStdBufferVersion* version)
+{
+    if(pigment != NULL && version != NULL
+       && atomic_fetch_sub_explicit(&version->references, 1, memory_order_acq_rel) == 1)
+    {
+        pigment_destroy_buffer(pigment, version->buffer);
+        P_FREE(pigment, version);
+    }
 }

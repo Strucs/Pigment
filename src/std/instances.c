@@ -103,18 +103,18 @@ void* pigment_std_instances_alloc(Pigment* pigment, PInstances* instances, uint3
     return (unsigned char*) instances->data + offset;
 }
 
-uint64_t pigment_std_instances_address(Pigment* pigment, PInstances* instances, PCommandBuffer* cmd)
+PStdBufferVersion* pigment_std_instances_prepare(Pigment* pigment, PInstances* instances)
 {
-    if(pigment == NULL || instances == NULL || cmd == NULL || instances->count == 0)
+    if(pigment == NULL || instances == NULL || instances->count == 0)
     {
-        return 0;
+        return NULL;
     }
 
     uint64_t size   = (uint64_t) instances->block_capacity * sizeof(*instances->data);
     PBuffer* buffer = acquire_buffer_version(pigment, &instances->buffers, size, "pigment_std_instances_version");
     if(buffer == NULL)
     {
-        return 0;
+        return NULL;
     }
 
     // The caller writes through alloc's pointer, so each publication copies the data.
@@ -123,5 +123,6 @@ uint64_t pigment_std_instances_address(Pigment* pigment, PInstances* instances, 
     memcpy(pigment_buffer_mapped(buffer), instances->data, (size_t) used);
     pigment_buffer_flush(pigment, buffer, 0, used);
 
-    return buffer_version_address(pigment, &instances->buffers, cmd);
+    instances->buffers.current->count = instances->count;
+    return retain_buffer_version(pigment, &instances->buffers);
 }

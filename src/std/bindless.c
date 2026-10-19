@@ -62,20 +62,26 @@ typedef struct PTrackedRTList {
     uint32_t capacity;
 } PTrackedRTList;
 
-typedef struct PBindlessVersion {
+struct PStdBindlessVersion {
     PDescriptorPool* pool;
     PDescriptorSet* set;
     PResourceTracker* tracker;
-    // One cache reference, plus one until recorded and GPU uses finish.
-    _Atomic uint32_t references;
-    struct PBindlessVersion* next;
-} PBindlessVersion;
+    // Keeps the allocation alive for the cache and the active publication.
+    _Atomic uint32_t allocation_refs;
+
+    // Keeps the publication alive for the current version and CPU preparations.
+    _Atomic uint32_t publication_refs;
+    PResourceTracker** resources;
+    uint32_t resource_count;
+
+    struct PStdBindlessVersion* next;
+};
 
 struct PStdBindless {
     PDescriptorSetLayout* layout;
     PCommandPool* upload_pool;
-    PBindlessVersion* version;
-    PBindlessVersion* versions;
+    PStdBindlessVersion* version;
+    PStdBindlessVersion* versions;
     uint64_t next_version_id;
     PDescriptorImageInfo* infos;
     uint32_t info_capacity;
@@ -108,8 +114,8 @@ static void image_list_destroy(Pigment* pigment, PImageList* image_list, PBool o
 static PResult tracked_rt_list_append(Pigment* pigment, PTrackedRTList* list, PTrackedRT entry);
 static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless);
 static PResult publish_bindless(Pigment* pigment, PStdBindless* bindless);
-static void release_bindless_version(Pigment* pigment, PBindlessVersion* version);
-static void retire_bindless_version(Pigment* pigment, PBindlessVersion* version);
+static void release_bindless_allocation(Pigment* pigment, PStdBindlessVersion* version);
+static void recycle_bindless_version(Pigment* pigment, void* resource);
 
 /**
  * @brief Describe the same four bindings for queries and creation.
@@ -281,13 +287,13 @@ void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless)
         P_FREE(pigment, bindless->tracked_rts.targets[i].slots);
     }
     P_FREE(pigment, bindless->tracked_rts.targets);
-    retire_bindless_version(pigment, bindless->version);
+    pigment_std_release_bindless_version(pigment, bindless->version);
 
-    PBindlessVersion* version = bindless->versions;
+    PStdBindlessVersion* version = bindless->versions;
     while(version != NULL)
     {
-        PBindlessVersion* next = version->next;
-        release_bindless_version(pigment, version);
+        PStdBindlessVersion* next = version->next;
+        release_bindless_allocation(pigment, version);
         version = next;
     }
 
@@ -667,9 +673,9 @@ PImage* pigment_std_bindless_image(PStdBindless* bindless, uint32_t image_slot)
     return bindless->images.images[image_slot];
 }
 
-PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd)
+PStdBindlessVersion* pigment_std_bindless_prepare(Pigment* pigment, PStdBindless* bindless)
 {
-    if(pigment == NULL || bindless == NULL || cmd == NULL)
+    if(pigment == NULL || bindless == NULL)
     {
         return NULL;
     }
@@ -681,25 +687,33 @@ PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindles
         return NULL;
     }
 
-    pigment_cmd_use(pigment, cmd, bindless->version->tracker);
-    for(uint32_t i = 0; i < bindless->images.count; i++)
+    atomic_fetch_add_explicit(&bindless->version->publication_refs, 1, memory_order_relaxed);
+    return bindless->version;
+}
+
+PDescriptorSet* pigment_std_bindless_version_set(Pigment* pigment, const PStdBindlessVersion* version, PCommandBuffer* cmd)
+{
+    if(pigment == NULL || version == NULL || cmd == NULL)
     {
-        pigment_cmd_use_image(pigment, cmd, bindless->images.images[i]);
-    }
-    for(uint32_t i = 0; i < bindless->cubemaps.count; i++)
-    {
-        pigment_cmd_use_image(pigment, cmd, bindless->cubemaps.images[i]);
-    }
-    for(uint32_t i = 0; i < bindless->render_targets.count; i++)
-    {
-        pigment_cmd_use_image(pigment, cmd, bindless->render_targets.images[i]);
-    }
-    for(uint32_t i = 0; i < bindless->samplers.count; i++)
-    {
-        pigment_cmd_use_sampler(pigment, cmd, bindless->samplers.samplers[i]);
+        return NULL;
     }
 
-    return bindless->version->set;
+    pigment_cmd_use(pigment, cmd, version->tracker);
+    for(uint32_t i = 0; i < version->resource_count; i++)
+    {
+        pigment_cmd_use(pigment, cmd, version->resources[i]);
+    }
+
+    return version->set;
+}
+
+void pigment_std_release_bindless_version(Pigment* pigment, PStdBindlessVersion* version)
+{
+    if(pigment != NULL && version != NULL
+       && atomic_fetch_sub_explicit(&version->publication_refs, 1, memory_order_acq_rel) == 1)
+    {
+        pigment_defer_destroy_tracked(pigment, recycle_bindless_version, version, version->tracker);
+    }
 }
 
 static void image_list_destroy(Pigment* pigment, PImageList* image_list, PBool owns_images)
@@ -893,9 +907,9 @@ static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless)
     }
 }
 
-static void release_bindless_version(Pigment* pigment, PBindlessVersion* version)
+static void release_bindless_allocation(Pigment* pigment, PStdBindlessVersion* version)
 {
-    if(atomic_fetch_sub_explicit(&version->references, 1, memory_order_acq_rel) == 1)
+    if(atomic_fetch_sub_explicit(&version->allocation_refs, 1, memory_order_acq_rel) == 1)
     {
         pigment_destroy_descriptor_pool(pigment, version->pool);
         P_FREE(pigment, version);
@@ -904,30 +918,30 @@ static void release_bindless_version(Pigment* pigment, PBindlessVersion* version
 
 static void recycle_bindless_version(Pigment* pigment, void* resource)
 {
-    PBindlessVersion* version = resource;
+    PStdBindlessVersion* version = resource;
+    for(uint32_t i = 0; i < version->resource_count; i++)
+    {
+        pigment_release_resource(pigment, version->resources[i]);
+    }
+
+    P_FREE(pigment, version->resources);
+    version->resources      = NULL;
+    version->resource_count = 0;
     pigment_destroy_resource_tracker(pigment, version->tracker);
     version->tracker = NULL;
 
     // The cache can reuse this version only after this release.
-    release_bindless_version(pigment, version);
+    release_bindless_allocation(pigment, version);
 }
 
-static void retire_bindless_version(Pigment* pigment, PBindlessVersion* version)
+static PStdBindlessVersion* acquire_bindless_version(Pigment* pigment, PStdBindless* bindless)
 {
-    if(version != NULL)
-    {
-        pigment_defer_destroy_tracked(pigment, recycle_bindless_version, version, version->tracker);
-    }
-}
-
-static PBindlessVersion* acquire_bindless_version(Pigment* pigment, PStdBindless* bindless)
-{
-    PBindlessVersion* available = NULL;
-    PBindlessVersion** link     = &bindless->versions;
+    PStdBindlessVersion* available = NULL;
+    PStdBindlessVersion** link     = &bindless->versions;
     while(*link != NULL)
     {
-        PBindlessVersion* version = *link;
-        if(atomic_load_explicit(&version->references, memory_order_acquire) == 1
+        PStdBindlessVersion* version = *link;
+        if(atomic_load_explicit(&version->allocation_refs, memory_order_acquire) == 1
            && pigment_descriptor_set_idle(pigment, version->set))
         {
             // Reuse the first available version and destroy the other available versions.
@@ -938,7 +952,7 @@ static PBindlessVersion* acquire_bindless_version(Pigment* pigment, PStdBindless
             else
             {
                 *link = version->next;
-                release_bindless_version(pigment, version);
+                release_bindless_allocation(pigment, version);
                 continue;
             }
         }
@@ -950,13 +964,14 @@ static PBindlessVersion* acquire_bindless_version(Pigment* pigment, PStdBindless
         return available;
     }
 
-    PBindlessVersion* version = P_NEW_FOR_OBJECT(pigment, version);
+    PStdBindlessVersion* version = P_NEW_FOR_OBJECT(pigment, version);
     if(version == NULL)
     {
         return NULL;
     }
 
-    atomic_init(&version->references, 1);
+    atomic_init(&version->allocation_refs, 1);
+    atomic_init(&version->publication_refs, 0);
 
     PDescriptorPoolSize sizes[] = {
         {
@@ -1005,7 +1020,7 @@ static PBindlessVersion* acquire_bindless_version(Pigment* pigment, PStdBindless
     return version;
 
 ERROR:
-    release_bindless_version(pigment, version);
+    release_bindless_allocation(pigment, version);
     return NULL;
 }
 
@@ -1019,7 +1034,7 @@ static PResult publish_bindless(Pigment* pigment, PStdBindless* bindless)
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
-    PBindlessVersion* version = acquire_bindless_version(pigment, bindless);
+    PStdBindlessVersion* version = acquire_bindless_version(pigment, bindless);
     if(version == NULL)
     {
         return PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -1028,6 +1043,13 @@ static PResult publish_bindless(Pigment* pigment, PStdBindless* bindless)
     PResourceTracker* tracker = pigment_create_resource_tracker(pigment);
     if(tracker == NULL)
     {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+
+    PResourceTracker** resources = P_NEW_ARRAY_FOR_OBJECT(pigment, resources, (uint32_t) count);
+    if(resources == NULL)
+    {
+        pigment_destroy_resource_tracker(pigment, tracker);
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
@@ -1103,19 +1125,40 @@ static PResult publish_bindless(Pigment* pigment, PStdBindless* bindless)
         }
     }
 
-    pigment_update_descriptors(pigment, bindless->writes, write_count, NULL, 0);
+    for(uint32_t i = 0; i < info_count; i++)
+    {
+        PDescriptorImageInfo* info = &bindless->infos[i];
+        PResource resource         = info->image != NULL
+                                         ? (PResource) {.type = P_RESOURCE_TYPE_IMAGE, .image = info->image}
+                                         : (PResource) {.type = P_RESOURCE_TYPE_SAMPLER, .sampler = info->sampler};
+        resources[i]               = pigment_retain_resource(resource);
+    }
+
+    if(pigment_update_descriptors(pigment, bindless->writes, write_count, NULL, 0) != PIGMENT_SUCCESS)
+    {
+        for(uint32_t i = 0; i < info_count; i++)
+        {
+            pigment_release_resource(pigment, resources[i]);
+        }
+        goto ERROR;
+    }
+
+    version->resources      = resources;
+    version->resource_count = info_count;
+    atomic_store_explicit(&version->publication_refs, 1, memory_order_relaxed);
 
     version->tracker = tracker;
-    atomic_fetch_add_explicit(&version->references, 1, memory_order_relaxed);
+    atomic_fetch_add_explicit(&version->allocation_refs, 1, memory_order_relaxed);
 
-    PBindlessVersion* previous = bindless->version;
-    bindless->version          = version;
-    bindless->dirty            = P_FALSE;
-    retire_bindless_version(pigment, previous);
+    PStdBindlessVersion* previous = bindless->version;
+    bindless->version             = version;
+    bindless->dirty               = P_FALSE;
+    pigment_std_release_bindless_version(pigment, previous);
 
     return PIGMENT_SUCCESS;
 
 ERROR:
+    P_FREE(pigment, resources);
     pigment_destroy_resource_tracker(pigment, tracker);
     return PIGMENT_ERROR_OUT_OF_MEMORY;
 }

@@ -16,7 +16,6 @@
 
 #include "lights.h"
 
-#include "camera.h"
 #include "std_internal.h"
 
 #include "pigment/pigment.h"
@@ -153,11 +152,11 @@ void pigment_std_light_destroy(Pigment* pigment, PLights* lights, uint32_t id)
     lights->dirty                            = P_TRUE;
 }
 
-uint64_t pigment_std_lights_address(Pigment* pigment, PLights* lights, PCommandBuffer* cmd)
+PStdBufferVersion* pigment_std_lights_prepare(Pigment* pigment, PLights* lights)
 {
-    if(pigment == NULL || lights == NULL || cmd == NULL)
+    if(pigment == NULL || lights == NULL)
     {
-        return 0;
+        return NULL;
     }
 
     if(lights->dirty)
@@ -166,7 +165,7 @@ uint64_t pigment_std_lights_address(Pigment* pigment, PLights* lights, PCommandB
         PBuffer* buffer = acquire_buffer_version(pigment, &lights->buffers, size, "pigment_std_lights_version");
         if(buffer == NULL)
         {
-            return 0;
+            return NULL;
         }
 
         uint64_t used = (uint64_t) lights->header.count * sizeof(*lights->data);
@@ -176,35 +175,9 @@ uint64_t pigment_std_lights_address(Pigment* pigment, PLights* lights, PCommandB
         memcpy(mapped + sizeof(lights->header), lights->data, (size_t) used);
         pigment_buffer_flush(pigment, buffer, 0, sizeof(lights->header) + used);
 
-        lights->dirty = P_FALSE;
+        lights->buffers.current->count = lights->header.count;
+        lights->dirty                  = P_FALSE;
     }
 
-    return buffer_version_address(pigment, &lights->buffers, cmd);
-}
-
-void pigment_std_draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline, PCamera* camera, PLights* lights, PMeshBuffers* sphere_mesh, uint32_t sphere_index_count, float scale)
-{
-    if(pigment == NULL || cmd == NULL || pipeline == NULL || lights == NULL || sphere_mesh == NULL || lights->header.count == 0)
-    {
-        return;
-    }
-
-    uint64_t light_address  = pigment_std_lights_address(pigment, lights, cmd);
-    uint64_t camera_address = pigment_std_camera_address(pigment, camera, cmd);
-    if(light_address == 0 || (camera != NULL && camera_address == 0))
-    {
-        return;
-    }
-
-    pigment_std_mesh_use(pigment, cmd, sphere_mesh);
-
-    PStdGizmoPushConstants push = {
-        .vertex_buffer = pigment_buffer_address(sphere_mesh->vertex_buffer),
-        .camera_buffer = camera_address,
-        .light_buffer  = light_address,
-        .scale         = scale,
-    };
-
-    pigment_cmd_push_constants(pigment, cmd, pipeline, 0, sizeof(push), &push);
-    pigment_cmd_draw_indexed(pigment, cmd, sphere_mesh->index_buffer, sphere_mesh->index_type, 0, 0, sphere_index_count, 0, lights->header.count, 0);
+    return retain_buffer_version(pigment, &lights->buffers);
 }

@@ -311,21 +311,27 @@ int main(void)
             break;
         }
 
-        PCommandBuffer* cmd = frame_cmds[pigment_frame_slot(frame)];
+        PCommandBuffer* cmd        = frame_cmds[pigment_frame_slot(frame)];
+        PStdDrawBatch* draw_batch1 = pigment_std_prepare_draws(pigment, bindless, instance_batch, materials, lights, camera, draw_calls, draw_count);
+        PStdDrawBatch* draw_batch2 = pigment_std_prepare_draws(pigment, bindless, instance_batch, materials, lights, camera, draw_calls2, draw_count2);
+
         pigment_begin_recording(pigment, cmd, P_CMD_BUFFER_USAGE_DEFAULT, NULL);
 
         pigment_cmd_begin_swapchain_pass(pigment, cmd, frame, NULL);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[0]);
-        pigment_draw(pigment, cmd, bindless, instance_batch, materials, lights, camera, pipelines[0], draw_calls, draw_count);
+        pigment_std_draw(pigment, cmd, draw_batch1, pipelines[0]);
 
         pigment_bind_pipeline(pigment, cmd, pipelines[1]);
         pigment_cmd_set_depth(pigment, cmd, P_TRUE, P_FALSE, P_COMPARE_OP_GREATER);
-        pigment_draw(pigment, cmd, bindless, instance_batch, materials, lights, camera, pipelines[1], draw_calls2, draw_count2);
+        pigment_std_draw(pigment, cmd, draw_batch2, pipelines[1]);
 
         pigment_cmd_end_swapchain_pass(cmd, frame);
 
         pigment_end_recording(pigment, cmd);
+
+        pigment_std_release_draws(pigment, draw_batch1);
+        pigment_std_release_draws(pigment, draw_batch2);
 
         PSubmit submit = {
             .cmds           = &cmd,

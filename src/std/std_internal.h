@@ -18,10 +18,18 @@
 #define PIGMENT_STD_INTERNAL_H
 
 #include "pigment/defines.h"
+#include "buffer_version.h"
+
+#include <stdatomic.h>
 
 #define PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY 8
 
-typedef struct PStdBufferVersion PStdBufferVersion;
+struct PStdBufferVersion {
+    PBuffer* buffer;
+    uint32_t count;
+    _Atomic uint32_t references;
+    PStdBufferVersion* next;
+};
 
 typedef struct PStdBufferVersions {
     PStdBufferVersion* current;
@@ -42,7 +50,7 @@ struct PInstances {
 };
 
 PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, uint64_t size, const char* name);
-uint64_t buffer_version_address(Pigment* pigment, PStdBufferVersions* buffers, PCommandBuffer* cmd);
+PStdBufferVersion* retain_buffer_version(Pigment* pigment, PStdBufferVersions* buffers);
 void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers);
 
 typedef struct PStdPushConstants {

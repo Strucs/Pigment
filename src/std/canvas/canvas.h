@@ -82,32 +82,56 @@ PIGMENT_API void pigment_std_destroy_canvas(Pigment* pigment, PStdCanvas* canvas
  */
 PIGMENT_API PPipeline* pigment_std_canvas_pipeline(PStdCanvas* canvas, PBlendMode blend_mode);
 
+typedef struct PStdCanvasBatch PStdCanvasBatch;
+
 /**
- * @brief Open a batch of canvas draws for the given blend mode.
+ * @brief Start a new CPU batch for the given blend mode.
  *
- * Starts a new CPU batch, binds the matching pipeline and disables depth test/write.
- * The caller must serialize access to the canvas.
+ * Serialize calls on the same canvas and access to its bindless resources.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
- * @param target_w Width in pixels of the render target being drawn into.
- * @param target_h Height in pixels of the render target being drawn into.
- * @param blend_mode Which blend mode to use for the upcoming draws. Must be one declared at creation.
+ * @param target_w Target width in pixels.
+ * @param target_h Target height in pixels.
+ * @param blend_mode Blend mode declared at canvas creation.
  */
-PIGMENT_API void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, uint32_t target_w, uint32_t target_h, PBlendMode blend_mode);
+PIGMENT_API void pigment_std_canvas_begin(Pigment* pigment, PStdCanvas* canvas, uint32_t target_w, uint32_t target_h, PBlendMode blend_mode);
 
 /**
- * @brief Draw all canvas draws in one batch and close it.
+ * @brief Prepare immutable canvas data and close the CPU batch on success.
+ *
+ * The batch survives later canvas changes or destruction. Failure keeps CPU data for retry.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
+ *
+ * @return Prepared batch, or NULL on invalid input, empty batch or failure.
  */
-PIGMENT_API void pigment_std_canvas_end(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd);
+PIGMENT_API PStdCanvasBatch* pigment_std_canvas_prepare(Pigment* pigment, PStdCanvas* canvas);
 
 /**
- * @brief Draw a filled rectangle in NDC space.
+ * @brief Record a prepared canvas batch, binding its pipeline and disabling depth and culling.
+ *
+ * Workers may share the batch with separate command buffers and pools.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Recording command buffer.
+ * @param batch Prepared batch, kept alive until the call returns.
+ */
+PIGMENT_API void pigment_std_draw_canvas(Pigment* pigment, PCommandBuffer* cmd, const PStdCanvasBatch* batch);
+
+/**
+ * @brief Release a canvas batch after its workers finish recording.
+ *
+ * Command buffers retain their resources until reset or destruction.
+ *
+ * @param pigment Pigment instance.
+ * @param batch Prepared batch, or NULL.
+ */
+PIGMENT_API void pigment_std_release_canvas_batch(Pigment* pigment, PStdCanvasBatch* batch);
+
+/**
+ * @brief Append a filled rectangle in NDC space.
  *
  * - x, y: top-left corner. Both axes go from -1 (top/left) to +1 (bottom/right).
  *
@@ -117,39 +141,36 @@ PIGMENT_API void pigment_std_canvas_end(Pigment* pigment, PStdCanvas* canvas, PC
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param x X coordinate of the rectangle's top-left corner in NDC space.
  * @param y Y coordinate of the rectangle's top-left corner in NDC space.
  * @param w Width of the rectangle in NDC space.
  * @param h Height of the rectangle in NDC space.
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_rect_ndc(Pigment* pigment, PStdCanvas* canvas, float x, float y, float w, float h, const float color[4]);
 
 /**
- * @brief Draw a filled rectangle in pixel coordinates (top-left origin, Y down).
+ * @brief Append a filled rectangle in pixel coordinates (top-left origin, Y down).
  *
  * Pixel coordinates are relative to the target dimensions passed to `begin`.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param x X coordinate of the rectangle's top-left corner in pixel coordinates.
  * @param y Y coordinate of the rectangle's top-left corner in pixel coordinates.
  * @param w Width of the rectangle in pixel coordinates.
  * @param h Height of the rectangle in pixel coordinates.
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* canvas, int32_t x, int32_t y, int32_t w, int32_t h, const float color[4]);
 
 /**
- * @brief Draw a filled rectangle anchored to one of 9 screen positions, offset in pixels.
+ * @brief Append a filled rectangle anchored to one of 9 screen positions, offset in pixels.
  *
  * Positioning is relative to the target dimensions passed to `begin`.
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param anchor anchor point for positioning the rectangle.
  * @param offset_x X offset from the anchor point in pixels.
  * @param offset_y Y offset from the anchor point in pixels.
@@ -157,7 +178,7 @@ PIGMENT_API void pigment_std_canvas_rect_pixel(Pigment* pigment, PStdCanvas* can
  * @param h Height of the rectangle in pixel coordinates.
  * @param color Color of the rectangle as an array of 4 floats (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* canvas, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, const float color[4]);
 
 /**
  * @brief Draw a textured rectangle in NDC space.
@@ -170,7 +191,6 @@ PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* ca
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param x X coordinate of the rectangle's top-left corner in NDC space.
  * @param y Y coordinate of the rectangle's top-left corner in NDC space.
  * @param w Width of the rectangle in NDC space.
@@ -179,7 +199,7 @@ PIGMENT_API void pigment_std_canvas_rect_anchor(Pigment* pigment, PStdCanvas* ca
  * @param sampler_idx Bindless sampler slot to sample with.
  * @param color Tint multiplied with the sampled texel (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
+PIGMENT_API void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canvas, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
 
 /**
  * @brief Draw a textured rectangle in pixel coordinates, sampling a bindless image.
@@ -188,7 +208,6 @@ PIGMENT_API void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canv
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param x X coordinate of the rectangle's top-left corner in pixel coordinates.
  * @param y Y coordinate of the rectangle's top-left corner in pixel coordinates.
  * @param w Width of the rectangle in pixel coordinates.
@@ -197,7 +216,7 @@ PIGMENT_API void pigment_std_canvas_image_ndc(Pigment* pigment, PStdCanvas* canv
  * @param sampler_idx Bindless sampler slot to sample with.
  * @param color Tint multiplied with the sampled texel (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
+PIGMENT_API void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* canvas, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
 
 /**
  * @brief Draw a textured rectangle anchored to one of 9 screen positions, offset in pixels.
@@ -206,7 +225,6 @@ PIGMENT_API void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* ca
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param anchor anchor point for positioning the rectangle.
  * @param offset_x X offset from the anchor point in pixels.
  * @param offset_y Y offset from the anchor point in pixels.
@@ -216,7 +234,7 @@ PIGMENT_API void pigment_std_canvas_image_pixel(Pigment* pigment, PStdCanvas* ca
  * @param sampler_idx Bindless sampler slot to sample with.
  * @param color Tint multiplied with the sampled texel (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
+PIGMENT_API void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* canvas, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, const float color[4]);
 
 /**
  * @brief Draw a textured rectangle from a sub-region of an image in NDC space.
@@ -229,7 +247,6 @@ PIGMENT_API void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* c
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param x X coordinate of the rectangle's top-left corner in NDC space.
  * @param y Y coordinate of the rectangle's top-left corner in NDC space.
  * @param w Width of the rectangle in NDC space.
@@ -242,7 +259,7 @@ PIGMENT_API void pigment_std_canvas_image_anchor(Pigment* pigment, PStdCanvas* c
  * @param src_h Source sub-region height, in image pixels.
  * @param color Tint multiplied with the sampled texel (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanvas* canvas, float x, float y, float w, float h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
 
 /**
  * @brief Draw a textured rectangle from a sub-region of an image in pixel coordinates.
@@ -251,7 +268,6 @@ PIGMENT_API void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanva
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param x X coordinate of the rectangle's top-left corner in pixel coordinates.
  * @param y Y coordinate of the rectangle's top-left corner in pixel coordinates.
  * @param w Width of the rectangle in pixel coordinates.
@@ -264,7 +280,7 @@ PIGMENT_API void pigment_std_canvas_image_region_ndc(Pigment* pigment, PStdCanva
  * @param src_h Source sub-region height, in image pixels.
  * @param color Tint multiplied with the sampled texel (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_image_region_pixel(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_image_region_pixel(Pigment* pigment, PStdCanvas* canvas, int32_t x, int32_t y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
 
 /**
  * @brief Draw a textured rectangle from a sub-region of an image anchored to one of 9 screen positions, offset in pixels.
@@ -273,7 +289,6 @@ PIGMENT_API void pigment_std_canvas_image_region_pixel(Pigment* pigment, PStdCan
  *
  * @param pigment Pigment instance.
  * @param canvas Canvas context.
- * @param cmd Command buffer to record into.
  * @param anchor anchor point for positioning the rectangle.
  * @param offset_x X offset from the anchor point in pixels.
  * @param offset_y Y offset from the anchor point in pixels.
@@ -287,7 +302,7 @@ PIGMENT_API void pigment_std_canvas_image_region_pixel(Pigment* pigment, PStdCan
  * @param src_h Source sub-region height, in image pixels.
  * @param color Tint multiplied with the sampled texel (RGBA).
  */
-PIGMENT_API void pigment_std_canvas_image_region_anchor(Pigment* pigment, PStdCanvas* canvas, PCommandBuffer* cmd, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
+PIGMENT_API void pigment_std_canvas_image_region_anchor(Pigment* pigment, PStdCanvas* canvas, PStdCanvasAnchor anchor, int32_t offset_x, int32_t offset_y, int32_t w, int32_t h, uint32_t image_idx, uint32_t sampler_idx, int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h, const float color[4]);
 
 #ifdef __cplusplus
 }

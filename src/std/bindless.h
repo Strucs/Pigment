@@ -39,6 +39,7 @@ extern "C" {
  * Upload helpers also require exclusive access to the default graphics queue during submission.
  */
 typedef struct PStdBindless PStdBindless;
+typedef struct PStdBindlessVersion PStdBindlessVersion;
 typedef struct PStdPipelineLayouts PStdPipelineLayouts;
 
 /**
@@ -69,7 +70,7 @@ PIGMENT_API uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless*
 /**
  * @brief Register an already-created image into the bindless image array.
  *
- * Ownership transfers on success. Changes are published by pigment_std_bindless_set.
+ * Ownership transfers on success. Changes are published by pigment_std_bindless_prepare.
  * The caller must order sampling after upload completion through submission waits.
  *
  * @param pigment Pigment instance.
@@ -147,20 +148,40 @@ PIGMENT_API PDescriptorSetLayout* pigment_std_bindless_layout(PStdBindless* bind
 PIGMENT_API PImage* pigment_std_bindless_image(PStdBindless* bindless, uint32_t image_slot);
 
 /**
- * @brief Publish pending changes and retain the resulting descriptors for cmd.
+ * @brief Prepare immutable descriptors and retain their resources.
  *
- * Each immutable version shares one set across frames.
- * Old versions and their resources survive recorded and GPU uses.
- * Released pools and sets are reused for later versions.
- * Get a set through this function for each command buffer using it. Never update the returned set.
+ * Serialize access to bindless and registered render targets during preparation.
+ * The returned version survives later changes, image resizes and bindless destruction.
+ * Release it after its workers finish recording. Command buffers retain their own references.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
- * @param cmd Recording command buffer, required to retain the descriptors and resources.
  *
- * @return Descriptor set, or NULL on invalid input or allocation failure.
+ * @return Prepared version, or NULL on failure.
  */
-PIGMENT_API PDescriptorSet* pigment_std_bindless_set(Pigment* pigment, PStdBindless* bindless, PCommandBuffer* cmd);
+PIGMENT_API PStdBindlessVersion* pigment_std_bindless_prepare(Pigment* pigment, PStdBindless* bindless);
+
+/**
+ * @brief Retain prepared descriptors and their resources for a recording.
+ *
+ * Concurrent calls are allowed with separate command buffers and pools.
+ * Never update the returned set. Keep the prepared reference until the call returns.
+ *
+ * @param pigment Pigment instance.
+ * @param version Prepared version.
+ * @param cmd Recording command buffer.
+ *
+ * @return Descriptor set, or NULL on invalid input.
+ */
+PIGMENT_API PDescriptorSet* pigment_std_bindless_version_set(Pigment* pigment, const PStdBindlessVersion* version, PCommandBuffer* cmd);
+
+/**
+ * @brief Release one prepared reference without waiting for the GPU.
+ *
+ * @param pigment Pigment instance.
+ * @param version Prepared version, or NULL.
+ */
+PIGMENT_API void pigment_std_release_bindless_version(Pigment* pigment, PStdBindlessVersion* version);
 
 #ifdef __cplusplus
 }
