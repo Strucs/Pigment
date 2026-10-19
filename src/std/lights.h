@@ -49,7 +49,21 @@ typedef struct PIGMENT_ALIGN(16) PLightDesc {
     float outer_cone_cos;
 } PLightDesc;
 
-PIGMENT_API PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size);
+typedef struct PLightsDesc {
+    uint32_t initial_capacity;
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses the buffers.
+    uint32_t shared_queue_count;
+} PLightsDesc;
+
+/**
+ * @brief Create CPU lights data with reusable GPU versions.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Initial capacity and shared queues.
+ *
+ * @return Created object, or NULL on invalid input or failure.
+ */
+PIGMENT_API PLights* pigment_std_create_lights(Pigment* pigment, const PLightsDesc* desc);
 PIGMENT_API void pigment_std_destroy_lights(Pigment* pigment, PLights* lights);
 
 PIGMENT_API void pigment_std_set_ambient(Pigment* pigment, PLights* lights, PVec3 color);

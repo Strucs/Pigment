@@ -112,7 +112,7 @@ static PResult sampler_list_init(Pigment* pigment, PSamplerList* sampler_list, u
 static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list);
 static void image_list_destroy(Pigment* pigment, PImageList* image_list, PBool owns_images);
 static PResult tracked_rt_list_append(Pigment* pigment, PTrackedRTList* list, PTrackedRT entry);
-static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless);
+static void sync_tracked_rts(PStdBindless* bindless);
 static PResult publish_bindless(Pigment* pigment, PStdBindless* bindless);
 static void release_bindless_allocation(Pigment* pigment, PStdBindlessVersion* version);
 static void recycle_bindless_version(Pigment* pigment, void* resource);
@@ -680,7 +680,7 @@ PStdBindlessVersion* pigment_std_bindless_prepare(Pigment* pigment, PStdBindless
         return NULL;
     }
 
-    sync_tracked_rts(pigment, bindless);
+    sync_tracked_rts(bindless);
 
     if(bindless->dirty && publish_bindless(pigment, bindless) != PIGMENT_SUCCESS)
     {
@@ -878,7 +878,7 @@ static PResult tracked_rt_list_append(Pigment* pigment, PTrackedRTList* list, PT
     return PIGMENT_SUCCESS;
 }
 
-static void sync_tracked_rts(Pigment* pigment, PStdBindless* bindless)
+static void sync_tracked_rts(PStdBindless* bindless)
 {
     for(uint32_t i = 0; i < bindless->tracked_rts.count; i++)
     {

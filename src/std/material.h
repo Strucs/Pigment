@@ -55,7 +55,21 @@ typedef struct PIGMENT_ALIGN(16) PMaterialDesc {
     int32_t occlusion_sampler;
 } PMaterialDesc;
 
-PIGMENT_API PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size);
+typedef struct PMaterialsDesc {
+    uint32_t initial_capacity;
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses the buffers.
+    uint32_t shared_queue_count;
+} PMaterialsDesc;
+
+/**
+ * @brief Create CPU materials data with reusable GPU versions.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Initial capacity and shared queues.
+ *
+ * @return Created object, or NULL on invalid input or failure.
+ */
+PIGMENT_API PMaterials* pigment_std_create_materials(Pigment* pigment, const PMaterialsDesc* desc);
 PIGMENT_API void pigment_std_destroy_materials(Pigment* pigment, PMaterials* materials);
 
 PIGMENT_API uint32_t pigment_std_material_create(Pigment* pigment, PMaterials* materials, const PMaterialDesc* desc);

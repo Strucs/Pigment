@@ -27,18 +27,24 @@ extern "C" {
 
 typedef struct PInstances PInstances;
 
+typedef struct PInstancesDesc {
+    uint32_t instance_size;
+    uint32_t initial_capacity;
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses the buffers.
+    uint32_t shared_queue_count;
+} PInstancesDesc;
+
 /**
  * @brief Create CPU instance storage with reusable GPU versions.
  *
  * The caller must serialize access to this object. Storage grows as needed.
  *
  * @param pigment Pigment instance.
- * @param instance_size Size of one instance in bytes.
- * @param initial_capacity Initial number of instances.
+ * @param desc Instance size, initial capacity and shared queues.
  *
  * @return Instance storage, or NULL on failure.
  */
-PIGMENT_API PInstances* pigment_std_create_instances(Pigment* pigment, uint32_t instance_size, uint32_t initial_capacity);
+PIGMENT_API PInstances* pigment_std_create_instances(Pigment* pigment, const PInstancesDesc* desc);
 
 PIGMENT_API void pigment_std_destroy_instances(Pigment* pigment, PInstances* instances);
 

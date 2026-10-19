@@ -35,9 +35,9 @@ struct PMaterials {
     uint32_t free_capacity;
 };
 
-PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size)
+PMaterials* pigment_std_create_materials(Pigment* pigment, const PMaterialsDesc* desc)
 {
-    if(pigment == NULL || initial_size == 0)
+    if(pigment == NULL || desc == NULL || desc->initial_capacity == 0)
     {
         return NULL;
     }
@@ -48,14 +48,20 @@ PMaterials* pigment_std_create_materials(Pigment* pigment, uint32_t initial_size
         return NULL;
     }
 
-    materials->data = P_NEW_ARRAY_FOR_OBJECT(pigment, materials->data, initial_size);
-    if(materials->data == NULL)
+    if(init_buffer_versions(pigment, &materials->buffers, desc->shared_queues, desc->shared_queue_count) != PIGMENT_SUCCESS)
     {
-        P_FREE(pigment, materials);
+        pigment_std_destroy_materials(pigment, materials);
         return NULL;
     }
 
-    materials->capacity = initial_size;
+    materials->data = P_NEW_ARRAY_FOR_OBJECT(pigment, materials->data, desc->initial_capacity);
+    if(materials->data == NULL)
+    {
+        pigment_std_destroy_materials(pigment, materials);
+        return NULL;
+    }
+
+    materials->capacity = desc->initial_capacity;
     materials->dirty    = P_TRUE;
     return materials;
 }

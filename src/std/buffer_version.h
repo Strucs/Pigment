@@ -36,6 +36,8 @@ typedef struct PStdBufferVersion PStdBufferVersion;
  * @brief Retain a prepared buffer in cmd and return its GPU address.
  *
  * Concurrent calls are allowed with separate command buffers and pools.
+ * For use across queue families, declare them when creating the source object.
+ * Queue sharing does not synchronize GPU accesses.
  *
  * @param pigment Pigment instance.
  * @param version Prepared version, or NULL.

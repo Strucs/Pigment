@@ -39,9 +39,9 @@ struct PLights {
     uint32_t free_capacity;
 };
 
-PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size)
+PLights* pigment_std_create_lights(Pigment* pigment, const PLightsDesc* desc)
 {
-    if(pigment == NULL || initial_size == 0)
+    if(pigment == NULL || desc == NULL || desc->initial_capacity == 0)
     {
         return NULL;
     }
@@ -52,14 +52,20 @@ PLights* pigment_std_create_lights(Pigment* pigment, uint32_t initial_size)
         return NULL;
     }
 
-    lights->data = P_NEW_ARRAY_FOR_OBJECT(pigment, lights->data, initial_size);
-    if(lights->data == NULL)
+    if(init_buffer_versions(pigment, &lights->buffers, desc->shared_queues, desc->shared_queue_count) != PIGMENT_SUCCESS)
     {
-        P_FREE(pigment, lights);
+        pigment_std_destroy_lights(pigment, lights);
         return NULL;
     }
 
-    lights->capacity = initial_size;
+    lights->data = P_NEW_ARRAY_FOR_OBJECT(pigment, lights->data, desc->initial_capacity);
+    if(lights->data == NULL)
+    {
+        pigment_std_destroy_lights(pigment, lights);
+        return NULL;
+    }
+
+    lights->capacity = desc->initial_capacity;
     lights->dirty    = P_TRUE;
     lights->header   = (PLightsHeader) {
         .ambient_color = {0.05f, 0.05f, 0.05f}

@@ -28,7 +28,20 @@ extern "C" {
 
 typedef struct PCamera PCamera;
 
-PIGMENT_API PCamera* pigment_std_create_camera(Pigment* pigment);
+typedef struct PCameraDesc {
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses the buffers.
+    uint32_t shared_queue_count;
+} PCameraDesc;
+
+/**
+ * @brief Create CPU camera data with reusable GPU versions.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Shared queues, or NULL for exclusive buffers.
+ *
+ * @return Created object, or NULL on invalid input or failure.
+ */
+PIGMENT_API PCamera* pigment_std_create_camera(Pigment* pigment, const PCameraDesc* desc);
 PIGMENT_API void pigment_std_destroy_camera(Pigment* pigment, PCamera* camera);
 
 PIGMENT_API void pigment_std_camera_set_view(PCamera* camera, PMat4 view);

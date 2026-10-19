@@ -18,6 +18,51 @@
 
 #include "pigment/pigment.h"
 
+#include <string.h>
+
+PResult init_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count)
+{
+    if(shared_queue_count == 0)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    if(shared_queues == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    uint32_t queue_count = pigment_get_queue_count(pigment);
+    for(uint32_t i = 0; i < shared_queue_count; i++)
+    {
+        PBool found = P_FALSE;
+        for(uint32_t j = 0; j < queue_count; j++)
+        {
+            if(shared_queues[i] == pigment_get_queue_at(pigment, j))
+            {
+                found = P_TRUE;
+                break;
+            }
+        }
+
+        if(!found)
+        {
+            return PIGMENT_ERROR;
+        }
+    }
+
+    buffers->shared_queues = P_NEW_ARRAY_FOR_OBJECT(pigment, buffers->shared_queues, shared_queue_count);
+    if(buffers->shared_queues == NULL)
+    {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+
+    memcpy(buffers->shared_queues, shared_queues, (size_t) shared_queue_count * sizeof(*shared_queues));
+    buffers->shared_queue_count = shared_queue_count;
+
+    return PIGMENT_SUCCESS;
+}
+
 PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, uint64_t size, const char* name)
 {
     PStdBufferVersion* version = buffers->versions;
@@ -40,10 +85,12 @@ PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, u
         }
 
         PBufferDesc desc = {
-            .size   = size,
-            .usage  = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
-            .memory = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
-            .name   = name,
+            .size               = size,
+            .usage              = P_BUFFER_USAGE_STORAGE | P_BUFFER_USAGE_SHADER_ADDRESS,
+            .memory             = {.required = P_MEMORY_HOST_VISIBLE_BIT, .preferred = P_MEMORY_HOST_COHERENT_BIT | P_MEMORY_DEVICE_LOCAL_BIT},
+            .name               = name,
+            .shared_queues      = buffers->shared_queues,
+            .shared_queue_count = buffers->shared_queue_count,
         };
 
         version->buffer = pigment_create_buffer(pigment, &desc);
@@ -95,6 +142,8 @@ void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers)
         pigment_std_release_buffer_version(pigment, version);
         version = next;
     }
+
+    P_FREE(pigment, buffers->shared_queues);
     *buffers = (PStdBufferVersions) {0};
 }
 

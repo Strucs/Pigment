@@ -141,21 +141,21 @@ int main(void)
         goto FREE;
     }
 
-    instance_batch = pigment_std_create_instances(pigment, sizeof(PInstanceData), 4096);
+    instance_batch = pigment_std_create_instances(pigment, &(PInstancesDesc) {.instance_size = sizeof(PInstanceData), .initial_capacity = 4096});
     if(instance_batch == NULL)
     {
         fprintf(stderr, "Failed to create instance storage!\n");
         goto FREE;
     }
 
-    materials = pigment_std_create_materials(pigment, 64);
+    materials = pigment_std_create_materials(pigment, &(PMaterialsDesc) {.initial_capacity = 64});
     if(materials == NULL)
     {
         fprintf(stderr, "Failed to create materials!\n");
         goto FREE;
     }
 
-    lights = pigment_std_create_lights(pigment, 16);
+    lights = pigment_std_create_lights(pigment, &(PLightsDesc) {.initial_capacity = 16});
     if(lights == NULL)
     {
         fprintf(stderr, "Failed to create lights!\n");
@@ -189,7 +189,7 @@ int main(void)
     }
 
     PVec3 camera_position = {0.0f, 1.5f, 6.0f};
-    camera                = pigment_std_create_camera(pigment);
+    camera                = pigment_std_create_camera(pigment, NULL);
     if(camera == NULL)
     {
         fprintf(stderr, "Failed to create camera!\n");

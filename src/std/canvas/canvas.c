@@ -178,7 +178,14 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
             goto FREE;
         }
 
-        PInstances* instances = pigment_std_create_instances(pigment, sizeof(PStdCanvasInstance), initial_instances);
+        PInstancesDesc instances_desc = {
+            .instance_size      = sizeof(PStdCanvasInstance),
+            .initial_capacity   = initial_instances,
+            .shared_queues      = config->shared_queues,
+            .shared_queue_count = config->shared_queue_count,
+        };
+
+        PInstances* instances = pigment_std_create_instances(pigment, &instances_desc);
         if(instances == NULL)
         {
             pigment_destroy_pipeline(pigment, pipeline);

@@ -34,6 +34,8 @@ struct PStdBufferVersion {
 typedef struct PStdBufferVersions {
     PStdBufferVersion* current;
     PStdBufferVersion* versions;
+    PDeviceQueue** shared_queues;
+    uint32_t shared_queue_count;
 } PStdBufferVersions;
 
 // Keep CPU instance storage aligned for shader data while using the array macros.
@@ -49,6 +51,7 @@ struct PInstances {
     PStdBufferVersions buffers;
 };
 
+PResult init_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count);
 PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, uint64_t size, const char* name);
 PStdBufferVersion* retain_buffer_version(Pigment* pigment, PStdBufferVersions* buffers);
 void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers);

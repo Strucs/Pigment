@@ -44,12 +44,14 @@ typedef enum PStdCanvasAnchor {
  * @brief Configuration for creating a 2D canvas.
  */
 typedef struct PStdCanvasConfig {
-    PFormat color_format;                // Format of the color attachment of the target. Required.
-    PSampleCount samples;                // Sample count of the target. 0 defaults to P_SAMPLE_COUNT_1.
-    const PBlendMode* blend_modes;       // Blend modes to support. NULL defaults to a single P_BLEND_MODE_ALPHA pipeline.
-    uint32_t blend_mode_count;           // Number of entries in blend_modes. Ignored when blend_modes is NULL.
-    uint32_t initial_instances;          // Initial instance capacity per blend mode. 0 defaults to 4096.
-    PStdBindless* bindless;              // Bindless image table sampled by textured draws. Required.
+    PFormat color_format;                  // Format of the color attachment of the target. Required.
+    PSampleCount samples;                  // Sample count of the target. 0 defaults to P_SAMPLE_COUNT_1.
+    const PBlendMode* blend_modes;         // Blend modes to support. NULL defaults to a single P_BLEND_MODE_ALPHA pipeline.
+    uint32_t blend_mode_count;             // Number of entries in blend_modes. Ignored when blend_modes is NULL.
+    uint32_t initial_instances;            // Initial instance capacity per blend mode. 0 defaults to 4096.
+    PStdBindless* bindless;                // Bindless image table sampled by textured draws. Required.
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses the instance buffers.
+    uint32_t shared_queue_count;
 } PStdCanvasConfig;
 
 /**

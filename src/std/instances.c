@@ -22,14 +22,14 @@
 
 #include <string.h>
 
-PInstances* pigment_std_create_instances(Pigment* pigment, uint32_t instance_size, uint32_t initial_capacity)
+PInstances* pigment_std_create_instances(Pigment* pigment, const PInstancesDesc* desc)
 {
-    if(pigment == NULL || instance_size == 0 || initial_capacity == 0)
+    if(pigment == NULL || desc == NULL || desc->instance_size == 0 || desc->initial_capacity == 0)
     {
         return NULL;
     }
 
-    uint64_t size   = (uint64_t) instance_size * initial_capacity;
+    uint64_t size   = (uint64_t) desc->instance_size * desc->initial_capacity;
     uint64_t blocks = size / sizeof(PInstanceBlock) + (size % sizeof(PInstanceBlock) != 0);
     if(blocks > UINT32_MAX)
     {
@@ -42,15 +42,21 @@ PInstances* pigment_std_create_instances(Pigment* pigment, uint32_t instance_siz
         return NULL;
     }
 
+    if(init_buffer_versions(pigment, &instances->buffers, desc->shared_queues, desc->shared_queue_count) != PIGMENT_SUCCESS)
+    {
+        pigment_std_destroy_instances(pigment, instances);
+        return NULL;
+    }
+
     instances->data = P_NEW_ARRAY_FOR_OBJECT(pigment, instances->data, (uint32_t) blocks);
     if(instances->data == NULL)
     {
-        P_FREE(pigment, instances);
+        pigment_std_destroy_instances(pigment, instances);
         return NULL;
     }
 
     instances->block_capacity = (uint32_t) blocks;
-    instances->instance_size  = instance_size;
+    instances->instance_size  = desc->instance_size;
     return instances;
 }
 

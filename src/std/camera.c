@@ -33,7 +33,7 @@ struct PCamera {
     PBool dirty;
 };
 
-PCamera* pigment_std_create_camera(Pigment* pigment)
+PCamera* pigment_std_create_camera(Pigment* pigment, const PCameraDesc* desc)
 {
     if(pigment == NULL)
     {
@@ -43,6 +43,12 @@ PCamera* pigment_std_create_camera(Pigment* pigment)
     PCamera* camera = P_NEW_FOR_OBJECT(pigment, camera);
     if(camera == NULL)
     {
+        return NULL;
+    }
+
+    if(init_buffer_versions(pigment, &camera->buffers, desc != NULL ? desc->shared_queues : NULL, desc != NULL ? desc->shared_queue_count : 0) != PIGMENT_SUCCESS)
+    {
+        pigment_std_destroy_camera(pigment, camera);
         return NULL;
     }
 
