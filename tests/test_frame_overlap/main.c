@@ -167,8 +167,8 @@ static int watchdog(void* arg)
 
 int main(void)
 {
-    CHECK(SDL_setenv_unsafe("VK_VALIDATION_VALIDATE_SYNC", "true", 1) == 0);
-    CHECK(SDL_setenv_unsafe("VK_VALIDATION_THREAD_SAFETY", "true", 1) == 0);
+    CHECK(SDL_setenv_unsafe("VK_LAYER_VALIDATE_SYNC", "1", 1) == 0);
+    CHECK(SDL_setenv_unsafe("VK_LAYER_THREAD_SAFETY", "1", 1) == 0);
     CHECK(SDL_Init(SDL_INIT_VIDEO));
 
     SDL_Window* window = SDL_CreateWindow("test_frame_overlap", 320, 240, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);

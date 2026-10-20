@@ -417,8 +417,8 @@ static void test_resize_failure(Pigment* pigment)
 
 int main(void)
 {
-    assert(SDL_setenv_unsafe("VK_VALIDATION_VALIDATE_SYNC", "true", 1) == 0);
-    assert(SDL_setenv_unsafe("VK_VALIDATION_THREAD_SAFETY", "true", 1) == 0);
+    assert(SDL_setenv_unsafe("VK_LAYER_VALIDATE_SYNC", "1", 1) == 0);
+    assert(SDL_setenv_unsafe("VK_LAYER_THREAD_SAFETY", "1", 1) == 0);
     assert(SDL_Init(0));
 
     PAppInfo app = {

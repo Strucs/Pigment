@@ -529,8 +529,8 @@ static int watchdog(void* arg)
 int main(void)
 {
     // Set the native environment before SDL or Vulkan can start any threads.
-    CHECK(SDL_setenv_unsafe("VK_VALIDATION_VALIDATE_SYNC", "true", 1) == 0);
-    CHECK(SDL_setenv_unsafe("VK_VALIDATION_THREAD_SAFETY", "true", 1) == 0);
+    CHECK(SDL_setenv_unsafe("VK_LAYER_VALIDATE_SYNC", "1", 1) == 0);
+    CHECK(SDL_setenv_unsafe("VK_LAYER_THREAD_SAFETY", "1", 1) == 0);
     CHECK(SDL_Init(SDL_INIT_VIDEO));
 
     uint32_t frame_count = env_count("PIGMENT_TEST_FRAMES", 10000, 10000000);
