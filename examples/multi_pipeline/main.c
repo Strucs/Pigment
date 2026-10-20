@@ -189,14 +189,19 @@ int main(void)
         goto FREE;
     }
 
-    gpu_mesh = pigment_std_upload_mesh(
-        pigment,
-        pool,
-        asset->vertices,
-        asset->vertex_count * sizeof(PVertex),
-        asset->indices,
-        asset->index_count
-    );
+    PMeshUploadDesc mesh_upload = {
+        .vertices      = asset->vertices,
+        .vertices_size = (size_t) asset->vertex_count * sizeof(*asset->vertices),
+        .indices       = asset->indices,
+        .index_count   = asset->index_count,
+    };
+
+    gpu_mesh = pigment_std_upload_mesh(pigment, pool, NULL, &mesh_upload, NULL);
+    if(gpu_mesh == NULL)
+    {
+        fprintf(stderr, "Failed to upload mesh!\n");
+        goto FREE;
+    }
 
     uint32_t draw_count = asset->surface_count;
     draw_calls          = calloc(draw_count, sizeof(PDrawCall));
@@ -236,14 +241,19 @@ int main(void)
         goto FREE;
     }
 
-    gpu_mesh2 = pigment_std_upload_mesh(
-        pigment,
-        pool,
-        asset2->vertices,
-        asset2->vertex_count * sizeof(PVertex),
-        asset2->indices,
-        asset2->index_count
-    );
+    PMeshUploadDesc mesh_upload2 = {
+        .vertices      = asset2->vertices,
+        .vertices_size = (size_t) asset2->vertex_count * sizeof(*asset2->vertices),
+        .indices       = asset2->indices,
+        .index_count   = asset2->index_count,
+    };
+
+    gpu_mesh2 = pigment_std_upload_mesh(pigment, pool, NULL, &mesh_upload2, NULL);
+    if(gpu_mesh2 == NULL)
+    {
+        fprintf(stderr, "Failed to upload mesh!\n");
+        goto FREE;
+    }
 
     uint32_t draw_count2 = asset2->surface_count;
     draw_calls2          = calloc(draw_count2, sizeof(PDrawCall));

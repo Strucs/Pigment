@@ -265,11 +265,45 @@ void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh)
     mesh->index_count  = 0;
 }
 
-PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data)
+PMeshBuffers* pigment_cmd_upload_mesh_data(Pigment* pigment, PCommandBuffer* cmd, const PMeshData* data, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count)
 {
-    if(data == NULL || data->vertices == NULL || data->indices == NULL)
+    if(data == NULL)
     {
         return NULL;
     }
-    return pigment_std_upload_mesh(pigment, pool, data->vertices, data->vertex_count * sizeof(PVertex), data->indices, data->index_count);
+
+    PMeshUploadDesc desc = {
+        .vertices           = data->vertices,
+        .vertices_size      = (size_t) data->vertex_count * sizeof(*data->vertices),
+        .indices            = data->indices,
+        .index_count        = data->index_count,
+        .shared_queues      = shared_queues,
+        .shared_queue_count = shared_queue_count,
+    };
+
+    return pigment_std_cmd_upload_mesh(pigment, cmd, &desc);
+}
+
+PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PMeshData* data, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count, PSubmitHandle* out_handle)
+{
+    if(out_handle != NULL)
+    {
+        *out_handle = (PSubmitHandle) {0};
+    }
+
+    if(data == NULL)
+    {
+        return NULL;
+    }
+
+    PMeshUploadDesc desc = {
+        .vertices           = data->vertices,
+        .vertices_size      = (size_t) data->vertex_count * sizeof(*data->vertices),
+        .indices            = data->indices,
+        .index_count        = data->index_count,
+        .shared_queues      = shared_queues,
+        .shared_queue_count = shared_queue_count,
+    };
+
+    return pigment_std_upload_mesh(pigment, pool, queue, &desc, out_handle);
 }

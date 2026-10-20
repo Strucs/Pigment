@@ -355,22 +355,22 @@ int main(void)
 
     PMeshData cube    = pigment_cube_mesh(pigment);
     uint32_t cube_idx = cube.index_count;
-    gpu_cube          = pigment_upload_mesh_data(pigment, pool, &cube);
+    gpu_cube          = pigment_upload_mesh_data(pigment, pool, NULL, &cube, NULL, 0, NULL);
     pigment_free_mesh_data(pigment, &cube);
 
     PMeshData sphere    = pigment_sphere_mesh(pigment, 32, 32);
     uint32_t sphere_idx = sphere.index_count;
-    gpu_sphere          = pigment_upload_mesh_data(pigment, pool, &sphere);
+    gpu_sphere          = pigment_upload_mesh_data(pigment, pool, NULL, &sphere, NULL, 0, NULL);
     pigment_free_mesh_data(pigment, &sphere);
 
     PMeshData plane    = pigment_plane_mesh(pigment, 8);
     uint32_t plane_idx = plane.index_count;
-    gpu_plane          = pigment_upload_mesh_data(pigment, pool, &plane);
+    gpu_plane          = pigment_upload_mesh_data(pigment, pool, NULL, &plane, NULL, 0, NULL);
     pigment_free_mesh_data(pigment, &plane);
 
     PMeshData quad    = pigment_quad_mesh(pigment);
     uint32_t quad_idx = quad.index_count;
-    gpu_quad          = pigment_upload_mesh_data(pigment, pool, &quad);
+    gpu_quad          = pigment_upload_mesh_data(pigment, pool, NULL, &quad, NULL, 0, NULL);
     pigment_free_mesh_data(pigment, &quad);
 
     if(gpu_cube == NULL || gpu_sphere == NULL || gpu_plane == NULL || gpu_quad == NULL)

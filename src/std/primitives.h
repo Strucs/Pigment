@@ -40,7 +40,41 @@ PIGMENT_API PMeshData pigment_sphere_mesh(Pigment* pigment, uint32_t lat_segment
 
 PIGMENT_API void pigment_free_mesh_data(Pigment* pigment, PMeshData* mesh);
 
-PIGMENT_API PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, const PMeshData* data);
+/**
+ * @brief Create mesh buffers and record their upload without submitting.
+ *
+ * `cmd` must be recording. All copies use staging. CPU data can be freed on return.
+ * List all accessing queues in shared_queues and supply waits between dependent submissions.
+ * On failure, the mesh is destroyed. Discard the recording.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer for the copies.
+ * @param data CPU mesh data, copied before returning.
+ * @param shared_queues Accessing queues, or NULL for exclusive buffers.
+ * @param shared_queue_count Number of shared queues.
+ *
+ * @return Created mesh, or NULL on failure.
+ */
+PIGMENT_API PMeshBuffers* pigment_cmd_upload_mesh_data(Pigment* pigment, PCommandBuffer* cmd, const PMeshData* data, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count);
+
+/**
+ * @brief Create mesh buffers and submit their upload.
+ *
+ * Convenience helper that records and submits on the calling thread without waiting for the GPU.
+ * All copies use staging. CPU data can be freed on return. The pool must belong to the
+ * family of `queue`. Sync `out_handle` before using the mesh on another queue.
+ *
+ * @param pigment Pigment instance.
+ * @param pool Pool for the transfer command buffer.
+ * @param queue Queue to submit on, or NULL for the default graphics queue.
+ * @param data CPU mesh data, copied before returning.
+ * @param shared_queues Accessing queues, or NULL for exclusive buffers.
+ * @param shared_queue_count Number of shared queues.
+ * @param out_handle Optional, receives the submit handle. Cleared on failure.
+ *
+ * @return Created mesh, or NULL on failure.
+ */
+PIGMENT_API PMeshBuffers* pigment_upload_mesh_data(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PMeshData* data, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count, PSubmitHandle* out_handle);
 
 #ifdef __cplusplus
 }

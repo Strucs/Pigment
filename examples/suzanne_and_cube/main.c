@@ -181,7 +181,7 @@ int main(void)
 
     PMeshData sphere_data = pigment_sphere_mesh(pigment, 16, 16);
     gizmo_sphere_indices  = sphere_data.index_count;
-    gizmo_sphere          = pigment_upload_mesh_data(pigment, pool, &sphere_data);
+    gizmo_sphere          = pigment_upload_mesh_data(pigment, pool, NULL, &sphere_data, NULL, 0, NULL);
     pigment_free_mesh_data(pigment, &sphere_data);
     if(gizmo_sphere == NULL)
     {
@@ -204,14 +204,18 @@ int main(void)
         goto FREE;
     }
 
-    gpu_mesh = pigment_std_upload_mesh(
-        pigment,
-        pool,
-        asset->vertices,
-        asset->vertex_count * sizeof(PVertex),
-        asset->indices,
-        asset->index_count
-    );
+    PMeshUploadDesc mesh_upload = {
+        .vertices      = asset->vertices,
+        .vertices_size = (size_t) asset->vertex_count * sizeof(*asset->vertices),
+        .indices       = asset->indices,
+        .index_count   = asset->index_count,
+    };
+    gpu_mesh = pigment_std_upload_mesh(pigment, pool, NULL, &mesh_upload, NULL);
+    if(gpu_mesh == NULL)
+    {
+        fprintf(stderr, "Failed to upload mesh!\n");
+        goto FREE;
+    }
 
     uint32_t draw_count = asset->surface_count;
     draw_calls          = calloc(draw_count, sizeof(PDrawCall));
@@ -253,7 +257,7 @@ int main(void)
 
     PMeshData cube_data = pigment_cube_mesh(pigment);
     uint32_t cube_idx   = cube_data.index_count;
-    gpu_mesh2           = pigment_upload_mesh_data(pigment, pool, &cube_data);
+    gpu_mesh2           = pigment_upload_mesh_data(pigment, pool, NULL, &cube_data, NULL, 0, NULL);
     pigment_free_mesh_data(pigment, &cube_data);
     if(gpu_mesh2 == NULL)
     {
