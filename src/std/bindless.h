@@ -140,13 +140,27 @@ PIGMENT_API void pigment_std_unregister_sampler(Pigment* pigment, PStdBindless* 
 PIGMENT_API uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
 
 /**
+ * @brief Register an already-created cubemap into the bindless cubemap array.
+ *
+ * Ownership transfers on success. Changes are published by pigment_std_bindless_prepare.
+ * The caller must order sampling after upload completion through submission waits.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param image Cubemap to register, already uploaded and in a sampleable layout.
+ *
+ * @return Cubemap slot, or UINT32_MAX on failure.
+ */
+PIGMENT_API uint32_t pigment_std_register_cubemap(Pigment* pigment, PStdBindless* bindless, PImage* image);
+
+/**
  * @brief Remove a cubemap from future descriptor versions.
  *
  * Recorded commands keep their old descriptors and image.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
- * @param slot Cubemap slot returned by pigment_std_add_cubemap.
+ * @param slot Cubemap slot returned by pigment_std_register_cubemap or pigment_std_add_cubemap.
  */
 PIGMENT_API void pigment_std_unregister_cubemap(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
 

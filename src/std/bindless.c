@@ -634,10 +634,24 @@ uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const
         return UINT32_MAX;
     }
 
-    uint32_t slot = image_list_put(pigment, &bindless->cubemaps, image);
+    uint32_t slot = pigment_std_register_cubemap(pigment, bindless, image);
     if(slot == UINT32_MAX)
     {
         pigment_destroy_image(pigment, image);
+    }
+    return slot;
+}
+
+uint32_t pigment_std_register_cubemap(Pigment* pigment, PStdBindless* bindless, PImage* image)
+{
+    if(pigment == NULL || bindless == NULL || image == NULL)
+    {
+        return UINT32_MAX;
+    }
+
+    uint32_t slot = image_list_put(pigment, &bindless->cubemaps, image);
+    if(slot == UINT32_MAX)
+    {
         return UINT32_MAX;
     }
 
