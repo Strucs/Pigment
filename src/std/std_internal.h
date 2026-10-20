@@ -18,6 +18,7 @@
 #define PIGMENT_STD_INTERNAL_H
 
 #include "pigment/defines.h"
+#include "pigment/queue.h"
 #include "buffer_version.h"
 
 #include <stdatomic.h>
@@ -92,6 +93,33 @@ struct PStdPipelineLayouts {
     PLayout* skybox_layout;
     PLayout* crt_layout;
 };
+
+static inline PBool shared_queues_valid(Pigment* pigment, PDeviceQueue* const* shared_queues, uint32_t shared_queue_count)
+{
+    if(shared_queue_count > 0 && shared_queues == NULL)
+    {
+        return P_FALSE;
+    }
+
+    uint32_t queue_count = pigment_get_queue_count(pigment);
+    for(uint32_t i = 0; i < shared_queue_count; i++)
+    {
+        PBool found = P_FALSE;
+        for(uint32_t j = 0; j < queue_count; j++)
+        {
+            if(shared_queues[i] == pigment_get_queue_at(pigment, j))
+            {
+                found = P_TRUE;
+                break;
+            }
+        }
+        if(!found)
+        {
+            return P_FALSE;
+        }
+    }
+    return P_TRUE;
+}
 
 static inline uint32_t block_align(uint32_t value, uint32_t block)
 {

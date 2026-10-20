@@ -429,7 +429,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             }
             if(cmd->recording_failed)
             {
-                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] has incomplete resource tracking.", i, j);
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].cmds[%u] has a failed recording.", i, j);
                 return PIGMENT_ERROR;
             }
             if(cmd->source_pool->queue_family_index != queue->family_index)

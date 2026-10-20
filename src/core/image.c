@@ -44,6 +44,7 @@ static PImageViewType derive_view_type(PImage* image, uint32_t layer_count);
 static VkImageAspectFlags aspect_to_vk(PImageAspect aspect, PImage* image);
 static VkImageViewType view_type_to_vk(PImageViewType type);
 static const char* resolve_view_name(const PImageViewDesc* view_desc, const PImage* image, char* buffer, size_t buffer_size);
+static PBool command_buffer_has_graphics(Pigment* pigment, PCommandBuffer* cmd);
 
 VkImage pigment_vk_image(PImage* image)
 {
@@ -359,6 +360,14 @@ void pigment_cmd_blit_image(Pigment* pigment, PCommandBuffer* cmd, PImage* src, 
     {
         return;
     }
+
+    if(!command_buffer_has_graphics(pigment, cmd))
+    {
+        PLOG_ERROR(pigment, "Image blits require a graphics queue family.");
+        cmd->recording_failed = P_TRUE;
+        return;
+    }
+
     pigment_cmd_use_image(pigment, cmd, src);
     pigment_cmd_use_image(pigment, cmd, dst);
 
@@ -389,6 +398,13 @@ void pigment_cmd_generate_mipmaps(Pigment* pigment, PCommandBuffer* cmd, PImage*
 {
     if(pigment == NULL || cmd == NULL || image == NULL || image->mip_levels == 0 || layer_count == 0)
     {
+        return;
+    }
+
+    if(!command_buffer_has_graphics(pigment, cmd))
+    {
+        PLOG_ERROR(pigment, "Mipmap generation requires a graphics queue family.");
+        cmd->recording_failed = P_TRUE;
         return;
     }
 
@@ -1375,4 +1391,24 @@ static const char* resolve_view_name(const PImageViewDesc* view_desc, const PIma
 
     snprintf(buffer, buffer_size, "%s:view%s%s", image->name, mip_part, layer_part);
     return buffer;
+}
+
+static PBool command_buffer_has_graphics(Pigment* pigment, PCommandBuffer* cmd)
+{
+    if(cmd->source_pool == NULL)
+    {
+        return P_FALSE;
+    }
+
+    PDevice* device = pigment->device;
+    for(uint32_t i = 0; i < device->queue_count; i++)
+    {
+        PDeviceQueue* queue = &device->queues[i];
+        if(queue->family_index == cmd->source_pool->queue_family_index && (queue->flags & P_QUEUE_GRAPHICS_BIT) != 0)
+        {
+            return P_TRUE;
+        }
+    }
+
+    return P_FALSE;
 }

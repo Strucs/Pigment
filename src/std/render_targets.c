@@ -15,6 +15,7 @@
  */
 
 #include "render_targets.h"
+#include "std_internal.h"
 
 #include "pigment/pigment.h"
 
@@ -35,8 +36,8 @@ struct PRenderTarget {
     uint32_t recreate_handle;
 };
 
-static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
-static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h);
+static PImage* create_attachment(Pigment* pigment, const PRenderTargetDesc* target_desc, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
+static PImage* create_resolve_attachment(Pigment* pigment, const PRenderTargetDesc* target_desc, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h);
 static void on_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data);
 static void resize_attachment(Pigment* pigment, PImage* image, float scale, float aspect_ratio, uint32_t base_w, uint32_t base_h);
 static void compute_attachment_size(float scale, uint32_t base_w, uint32_t base_h, float aspect_ratio, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h);
@@ -44,7 +45,8 @@ static PBool any_attachment_tracked(const PRenderTargetDesc* desc);
 
 PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderTargetDesc* desc)
 {
-    if(pigment == NULL || desc == NULL)
+    if(pigment == NULL || desc == NULL
+       || !shared_queues_valid(pigment, desc->shared_queues, desc->shared_queue_count))
     {
         return NULL;
     }
@@ -83,7 +85,7 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
             uint32_t w = 0;
             uint32_t h = 0;
 
-            target->colors[i]              = create_attachment(pigment, &desc->colors[i], P_IMAGE_USAGE_RENDER_COLOR, base_w, base_h, &w, &h);
+            target->colors[i]              = create_attachment(pigment, desc, &desc->colors[i], P_IMAGE_USAGE_RENDER_COLOR, base_w, base_h, &w, &h);
             target->color_scales[i]        = desc->colors[i].scale;
             target->color_aspect_ratios[i] = desc->colors[i].aspect_ratio;
             if(target->colors[i] == NULL)
@@ -91,7 +93,8 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
                 goto ERROR;
             }
 
-            target->color_resolves[i] = create_resolve_attachment(pigment, &desc->colors[i], P_IMAGE_USAGE_RENDER_COLOR, w, h);
+            target->color_count++;
+            target->color_resolves[i] = create_resolve_attachment(pigment, desc, &desc->colors[i], P_IMAGE_USAGE_RENDER_COLOR, w, h);
             if(desc->colors[i].samples > P_SAMPLE_COUNT_1 && target->color_resolves[i] == NULL)
             {
                 goto ERROR;
@@ -102,8 +105,6 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
                 target->width  = w;
                 target->height = h;
             }
-
-            target->color_count++;
         }
     }
 
@@ -111,13 +112,13 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
     {
         uint32_t w    = 0;
         uint32_t h    = 0;
-        target->depth = create_attachment(pigment, &desc->depth, P_IMAGE_USAGE_RENDER_DEPTH, base_w, base_h, &w, &h);
+        target->depth = create_attachment(pigment, desc, &desc->depth, P_IMAGE_USAGE_RENDER_DEPTH, base_w, base_h, &w, &h);
         if(target->depth == NULL)
         {
             goto ERROR;
         }
 
-        target->depth_resolve = create_resolve_attachment(pigment, &desc->depth, P_IMAGE_USAGE_RENDER_DEPTH, w, h);
+        target->depth_resolve = create_resolve_attachment(pigment, desc, &desc->depth, P_IMAGE_USAGE_RENDER_DEPTH, w, h);
         if(desc->depth.samples > P_SAMPLE_COUNT_1 && target->depth_resolve == NULL)
         {
             goto ERROR;
@@ -163,11 +164,12 @@ void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target)
                 pigment_destroy_image(pigment, target->color_resolves[i]);
             }
         }
-        P_FREE(pigment, target->colors);
-        P_FREE(pigment, target->color_resolves);
-        P_FREE(pigment, target->color_scales);
-        P_FREE(pigment, target->color_aspect_ratios);
     }
+
+    P_FREE(pigment, target->colors);
+    P_FREE(pigment, target->color_resolves);
+    P_FREE(pigment, target->color_scales);
+    P_FREE(pigment, target->color_aspect_ratios);
 
     pigment_destroy_image(pigment, target->depth);
     pigment_destroy_image(pigment, target->depth_resolve);
@@ -305,7 +307,7 @@ static void compute_attachment_size(float scale, uint32_t base_w, uint32_t base_
     *out_h = h;
 }
 
-static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h)
+static PImage* create_attachment(Pigment* pigment, const PRenderTargetDesc* target_desc, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t fallback_w, uint32_t fallback_h, uint32_t* out_w, uint32_t* out_h)
 {
     compute_attachment_size(desc->scale, desc->width, desc->height, desc->aspect_ratio, fallback_w, fallback_h, out_w, out_h);
 
@@ -317,11 +319,13 @@ static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, 
     }
 
     PImageDesc image_desc = {
-        .width   = *out_w,
-        .height  = *out_h,
-        .format  = desc->format,
-        .usage   = usage,
-        .samples = desc->samples,
+        .width              = *out_w,
+        .height             = *out_h,
+        .format             = desc->format,
+        .usage              = usage,
+        .samples            = desc->samples,
+        .shared_queues      = target_desc->shared_queues,
+        .shared_queue_count = target_desc->shared_queue_count,
     };
 
     PImage* image = pigment_create_image(pigment, &image_desc);
@@ -333,7 +337,7 @@ static PImage* create_attachment(Pigment* pigment, const PAttachmentDesc* desc, 
     return image;
 }
 
-static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h)
+static PImage* create_resolve_attachment(Pigment* pigment, const PRenderTargetDesc* target_desc, const PAttachmentDesc* desc, PImageUsage attachment_usage, uint32_t w, uint32_t h)
 {
     if(desc->samples <= P_SAMPLE_COUNT_1)
     {
@@ -347,11 +351,13 @@ static PImage* create_resolve_attachment(Pigment* pigment, const PAttachmentDesc
     }
 
     PImageDesc image_desc = {
-        .width   = w,
-        .height  = h,
-        .format  = desc->format,
-        .usage   = usage,
-        .samples = P_SAMPLE_COUNT_1,
+        .width              = w,
+        .height             = h,
+        .format             = desc->format,
+        .usage              = usage,
+        .samples            = P_SAMPLE_COUNT_1,
+        .shared_queues      = target_desc->shared_queues,
+        .shared_queue_count = target_desc->shared_queue_count,
     };
 
     return pigment_create_image(pigment, &image_desc);

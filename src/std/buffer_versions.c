@@ -27,28 +27,9 @@ PResult init_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers, PDev
         return PIGMENT_SUCCESS;
     }
 
-    if(shared_queues == NULL)
+    if(!shared_queues_valid(pigment, shared_queues, shared_queue_count))
     {
         return PIGMENT_ERROR;
-    }
-
-    uint32_t queue_count = pigment_get_queue_count(pigment);
-    for(uint32_t i = 0; i < shared_queue_count; i++)
-    {
-        PBool found = P_FALSE;
-        for(uint32_t j = 0; j < queue_count; j++)
-        {
-            if(shared_queues[i] == pigment_get_queue_at(pigment, j))
-            {
-                found = P_TRUE;
-                break;
-            }
-        }
-
-        if(!found)
-        {
-            return PIGMENT_ERROR;
-        }
     }
 
     buffers->shared_queues = P_NEW_ARRAY_FOR_OBJECT(pigment, buffers->shared_queues, shared_queue_count);

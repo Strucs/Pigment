@@ -80,6 +80,8 @@ struct PStdBindlessVersion {
 struct PStdBindless {
     PDescriptorSetLayout* layout;
     PCommandPool* upload_pool;
+    PDeviceQueue** shared_queues;
+    uint32_t shared_queue_count;
     PStdBindlessVersion* version;
     PStdBindlessVersion* versions;
     uint64_t next_version_id;
@@ -194,11 +196,51 @@ PBool pigment_std_bindless_supported(Pigment* pigment, uint32_t max_images, uint
     return pigment_descriptor_set_layout_supported(pigment, &desc);
 }
 
-PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets)
+PStdBindless* pigment_std_create_bindless(Pigment* pigment, const PStdBindlessDesc* desc)
 {
+    const PStdBindlessDesc defaults = {
+        .max_images         = PIGMENT_DEFAULT_MAX_IMAGES,
+        .max_samplers       = PIGMENT_DEFAULT_MAX_SAMPLERS,
+        .max_cubemaps       = PIGMENT_DEFAULT_MAX_CUBEMAPS,
+        .max_render_targets = PIGMENT_DEFAULT_MAX_RENDER_TARGETS,
+    };
+    if(desc == NULL)
+    {
+        desc = &defaults;
+    }
+
+    uint32_t max_images         = desc->max_images;
+    uint32_t max_samplers       = desc->max_samplers;
+    uint32_t max_cubemaps       = desc->max_cubemaps;
+    uint32_t max_render_targets = desc->max_render_targets;
     if(pigment == NULL || max_images == 0 || max_samplers < 2)
     {
         return NULL;
+    }
+
+    if(!shared_queues_valid(pigment, desc->shared_queues, desc->shared_queue_count))
+    {
+        return NULL;
+    }
+
+    PDeviceQueue* graphics = pigment_get_queue(pigment, P_QUEUE_GRAPHICS_BIT);
+    if(graphics == NULL)
+    {
+        return NULL;
+    }
+
+    if(desc->shared_queue_count > 0)
+    {
+        PBool includes_graphics = P_FALSE;
+        for(uint32_t i = 0; i < desc->shared_queue_count; i++)
+        {
+            includes_graphics |= pigment_queue_family(desc->shared_queues[i]) == pigment_queue_family(graphics);
+        }
+        if(!includes_graphics)
+        {
+            PLOG_ERROR(pigment, "Bindless shared queues must include the default graphics family for uploads.");
+            return NULL;
+        }
     }
 
     uint32_t cubemaps      = (max_cubemaps == 0) ? 1 : max_cubemaps;
@@ -224,6 +266,18 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
         return NULL;
     }
 
+    if(desc->shared_queue_count > 0)
+    {
+        bindless->shared_queues = P_NEW_ARRAY_FOR_OBJECT(pigment, bindless->shared_queues, desc->shared_queue_count);
+        if(bindless->shared_queues == NULL)
+        {
+            goto ERROR;
+        }
+
+        memcpy(bindless->shared_queues, desc->shared_queues, (size_t) desc->shared_queue_count * sizeof(*desc->shared_queues));
+        bindless->shared_queue_count = desc->shared_queue_count;
+    }
+
     PDescriptorBinding bindings[4];
     bindless_bindings(bindings, max_images, max_samplers, max_cubemaps, max_render_targets);
 
@@ -240,7 +294,7 @@ PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images,
     }
 
     PCommandPoolDesc upload_pool_desc = {
-        .queue_family = pigment_queue_family(pigment_get_queue(pigment, P_QUEUE_GRAPHICS_BIT)),
+        .queue_family = pigment_queue_family(graphics),
         .flags        = P_COMMAND_POOL_FLAG_TRANSIENT,
         .name         = "pigment_std_bindless_upload_pool",
     };
@@ -301,6 +355,7 @@ void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless)
     P_FREE(pigment, bindless->writes);
     pigment_destroy_descriptor_set_layout(pigment, bindless->layout);
     pigment_destroy_command_pool(pigment, bindless->upload_pool);
+    P_FREE(pigment, bindless->shared_queues);
     if(bindless->pipeline_layouts != NULL)
     {
         pigment_destroy_layout(pigment, bindless->pipeline_layouts->default_layout);
@@ -396,7 +451,15 @@ uint32_t pigment_std_add_image_batch(Pigment* pigment, PStdBindless* bindless, c
 
     for(uint32_t i = 0; i < count; i++)
     {
-        descs[i] = (PImageUploadDesc) {.layers = &pixels[i], .width = widths[i], .height = heights[i], .format = formats[i], .flags = P_IMAGE_GENERATE_MIPMAPS};
+        descs[i] = (PImageUploadDesc) {
+            .layers             = &pixels[i],
+            .width              = widths[i],
+            .height             = heights[i],
+            .format             = formats[i],
+            .flags              = P_IMAGE_GENERATE_MIPMAPS,
+            .shared_queues      = bindless->shared_queues,
+            .shared_queue_count = bindless->shared_queue_count,
+        };
     }
 
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, descs, count, new_images, NULL) != PIGMENT_SUCCESS)
@@ -475,14 +538,17 @@ uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const
     }
 
     PImageUploadDesc desc = {
-        .layers      = faces,
-        .layer_count = 6,
-        .width       = face_width,
-        .height      = face_height,
-        .format      = format,
-        .type        = P_IMAGE_TYPE_CUBE,
-        .flags       = P_IMAGE_GENERATE_MIPMAPS,
+        .layers             = faces,
+        .layer_count        = 6,
+        .width              = face_width,
+        .height             = face_height,
+        .format             = format,
+        .type               = P_IMAGE_TYPE_CUBE,
+        .flags              = P_IMAGE_GENERATE_MIPMAPS,
+        .shared_queues      = bindless->shared_queues,
+        .shared_queue_count = bindless->shared_queue_count,
     };
+
     PImage* image = NULL;
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {
@@ -817,8 +883,17 @@ static void sampler_list_destroy(Pigment* pigment, PSamplerList* sampler_list)
 
 static PImage* add_image_from_pixels(Pigment* pigment, PStdBindless* bindless, const unsigned char* pixels, uint32_t width, uint32_t height, PFormat format)
 {
-    PImageUploadDesc desc = {.layers = &pixels, .width = width, .height = height, .format = format, .flags = P_IMAGE_GENERATE_MIPMAPS};
-    PImage* image         = NULL;
+    PImageUploadDesc desc = {
+        .layers             = &pixels,
+        .width              = width,
+        .height             = height,
+        .format             = format,
+        .flags              = P_IMAGE_GENERATE_MIPMAPS,
+        .shared_queues      = bindless->shared_queues,
+        .shared_queue_count = bindless->shared_queue_count,
+    };
+
+    PImage* image = NULL;
 
     if(pigment_std_image_upload(pigment, bindless->upload_pool, NULL, &desc, 1, &image, NULL) != PIGMENT_SUCCESS)
     {

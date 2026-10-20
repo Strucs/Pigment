@@ -57,9 +57,21 @@ typedef struct PRenderTargetDesc {
     PWindowRenderer* renderer;
     const PAttachmentDesc* colors;    // NULL allowed if color_count == 0
     uint32_t color_count;
-    PAttachmentDesc depth;    // depth.format == 0 -> no depth target
+    PAttachmentDesc depth;                 // depth.format == 0 -> no depth target
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses the images.
+    uint32_t shared_queue_count;
 } PRenderTargetDesc;
 
+/**
+ * @brief Create color and depth attachments with optional MSAA resolves.
+ *
+ * Shared queues must belong to this Pigment instance. Sharing is preserved on resize.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Attachments and shared queues.
+ *
+ * @return Render target, or NULL on invalid input or failure.
+ */
 PIGMENT_API PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderTargetDesc* desc);
 PIGMENT_API void pigment_std_destroy_render_target(Pigment* pigment, PRenderTarget* target);
 

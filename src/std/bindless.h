@@ -59,7 +59,27 @@ typedef struct PStdPipelineLayouts PStdPipelineLayouts;
  */
 PIGMENT_API PBool pigment_std_bindless_supported(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
 
-PIGMENT_API PStdBindless* pigment_std_create_bindless(Pigment* pigment, uint32_t max_images, uint32_t max_samplers, uint32_t max_cubemaps, uint32_t max_render_targets);
+typedef struct PStdBindlessDesc {
+    uint32_t max_images;
+    uint32_t max_samplers;
+    uint32_t max_cubemaps;
+    uint32_t max_render_targets;
+    PDeviceQueue* const* shared_queues;    // NULL = EXCLUSIVE. Copied list. Include every queue family that accesses created images.
+    uint32_t shared_queue_count;
+} PStdBindlessDesc;
+
+/**
+ * @brief Create a bindless context with default samplers and a white image.
+ *
+ * Shared queues must belong to this Pigment instance and include the default graphics family.
+ * The list applies only to images created by bindless. Registered images keep their own sharing.
+ *
+ * @param pigment Pigment instance.
+ * @param desc Capacities and shared queues, or NULL for default capacities and exclusive images.
+ *
+ * @return Bindless context, or NULL on invalid input or failure.
+ */
+PIGMENT_API PStdBindless* pigment_std_create_bindless(Pigment* pigment, const PStdBindlessDesc* desc);
 PIGMENT_API void pigment_std_destroy_bindless(Pigment* pigment, PStdBindless* bindless);
 
 PIGMENT_API PStdPipelineLayouts** pigment_std_bindless_pipeline_layouts_slot(PStdBindless* bindless);
