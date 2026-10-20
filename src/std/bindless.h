@@ -105,6 +105,7 @@ PIGMENT_API uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* 
  * @brief Remove an image from future descriptor versions.
  *
  * The index can be reused in a new version. Recorded commands keep their old descriptors and image.
+ * The default image at slot 0 cannot be removed.
  *
  * @param pigment Pigment instance.
  * @param bindless Bindless context.
@@ -112,7 +113,28 @@ PIGMENT_API uint32_t pigment_std_register_image(Pigment* pigment, PStdBindless* 
  */
 PIGMENT_API void pigment_std_unregister_image(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
 
+/**
+ * @brief Add a sampler or return an existing identical sampler.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param desc Sampler description.
+ *
+ * @return Sampler slot, or UINT32_MAX on failure.
+ */
 PIGMENT_API uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const PSamplerDesc* desc);
+
+/**
+ * @brief Remove a sampler from future descriptor versions.
+ *
+ * The index can be reused in a new version. Recorded commands keep their old descriptors and sampler.
+ * Default samplers at slots 0 and 1 cannot be removed.
+ *
+ * @param pigment Pigment instance.
+ * @param bindless Bindless context.
+ * @param slot Sampler slot returned by pigment_std_add_sampler.
+ */
+PIGMENT_API void pigment_std_unregister_sampler(Pigment* pigment, PStdBindless* bindless, uint32_t slot);
 
 // 6 face buffers in the order: +X, -X, +Y, -Y, +Z, -Z. All faces must share width/height/format.
 PIGMENT_API uint32_t pigment_std_add_cubemap(Pigment* pigment, PStdBindless* bindless, const unsigned char* faces[6], uint32_t face_width, uint32_t face_height, PFormat format);
