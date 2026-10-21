@@ -45,8 +45,6 @@ static SwapChainSupportDetails* query_swapchain_support(Pigment* pigment, VkPhys
 static void destroy_support_details(Pigment* pigment, SwapChainSupportDetails* details);
 static void destroy_surface(Pigment* pigment, PSurface* surface);
 static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
-static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain);
-static void retire_swapchain(Pigment* pigment, void* resource);
 static void release_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer);
 
@@ -212,6 +210,11 @@ void pigment_renderer_destroy(Pigment* pigment, PWindowRenderer* renderer)
     PSwapchain* swapchain = renderer->swapchain;
     renderer->swapchain   = NULL;
     release_swapchain(pigment, swapchain);
+    if(renderer->tracker.last_used == NULL)
+    {
+        destroy_renderer_internal(pigment, renderer);
+        return;
+    }
     pigment_defer_destroy_tracked(pigment, destroy_renderer_immediate, renderer, &renderer->tracker);
 }
 
@@ -821,6 +824,8 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
+    prepare_swapchain_deletion(swapchain);
+
     P_FREE(pigment, shared_families);
     destroy_support_details(pigment, support_details);
 
@@ -833,8 +838,9 @@ ERROR:
     return NULL;
 }
 
-static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
+void destroy_swapchain(Pigment* pigment, void* resource)
 {
+    PSwapchain* swapchain = resource;
     if(swapchain != NULL)
     {
         PDevice* device = pigment->device;
@@ -853,14 +859,6 @@ static void destroy_swapchain(Pigment* pigment, PSwapchain* swapchain)
     }
 }
 
-static void destroy_swapchain_immediate(Pigment* pigment, void* resource)
-{
-    PSwapchain* swapchain = resource;
-    // Shutdown drains deletion callbacks without polling their wait targets.
-    vkWaitForFences(pigment->device->logical_device, pigment->config.max_frames_in_flight, swapchain->sync->present_fences, VK_TRUE, UINT64_MAX);
-    destroy_swapchain(pigment, swapchain);
-}
-
 static void release_swapchain(Pigment* pigment, PSwapchain* swapchain)
 {
     if(swapchain == NULL)
@@ -875,27 +873,7 @@ static void release_swapchain(Pigment* pigment, PSwapchain* swapchain)
     }
 
     destroy_swapchain_image_wrappers(pigment, swapchain);
-    pigment_defer_destroy_tracked(pigment, retire_swapchain, swapchain, &swapchain->tracker);
-}
-
-static void retire_swapchain(Pigment* pigment, void* resource)
-{
-    PSwapchain* swapchain = resource;
-    if(swapchain->renderer == NULL)
-    {
-        destroy_swapchain(pigment, swapchain);
-        return;
-    }
-
-    const VkFence* fences = swapchain->sync->present_fences;
-    if(fences == NULL)
-    {
-        device_wait_idle(pigment);
-        destroy_swapchain(pigment, swapchain);
-        return;
-    }
-
-    defer_destroy_swapchain(pigment, destroy_swapchain_immediate, swapchain, fences, pigment->config.max_frames_in_flight);
+    pigment_defer_destroy_tracked(pigment, destroy_swapchain, swapchain, &swapchain->tracker);
 }
 
 static PFormat pick_depth_format(Pigment* pigment)

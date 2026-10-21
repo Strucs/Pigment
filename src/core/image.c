@@ -799,14 +799,14 @@ void pigment_image_invalidate(Pigment* pigment, PImage* image)
     alloc->invalidate(alloc->user_data, image->image_allocation, 0, VK_WHOLE_SIZE);
 }
 
-void pigment_image_wait(Pigment* pigment, PImage* image)
+PResult pigment_image_wait(Pigment* pigment, PImage* image)
 {
     if(image == NULL)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
 
-    pigment_resource_tracker_wait(pigment, image->tracker);
+    return pigment_resource_tracker_wait(pigment, image->tracker);
 }
 
 void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, const PHostImageCopy* regions, uint32_t region_count)

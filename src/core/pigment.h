@@ -40,8 +40,27 @@ extern "C" {
 #include "swapchain_event.h"
 
 PIGMENT_API Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config);
+
+/**
+ * @brief Wait for pending destruction and release the instance.
+ *
+ * Stop other callers and release owned resources before destruction.
+ * No resource may outlive the instance.
+ *
+ * @param pigment Pigment instance.
+ */
 PIGMENT_API void destroy_pigment(Pigment* pigment);
-PIGMENT_API void pigment_wait_idle(Pigment* pigment);
+
+/**
+ * @brief Wait for submitted GPU work, then collect ready deferred destructions.
+ *
+ * Recorded references remain retained. On failure, pending destructions are left queued.
+ *
+ * @param pigment Pigment instance.
+ *
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise PIGMENT_ERROR_VULKAN.
+ */
+PIGMENT_API PResult pigment_wait_idle(Pigment* pigment);
 
 PIGMENT_API PBool pigment_supports(Pigment* pigment, PFeature feature);
 

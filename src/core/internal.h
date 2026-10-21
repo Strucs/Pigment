@@ -229,7 +229,7 @@ void destroy_device(Pigment* pigment);
 PBool find_graphics_family(Pigment* pigment, VkPhysicalDevice device, uint32_t* out_family);
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
 PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required);
-void device_wait_idle(Pigment* pigment);
+PResult device_wait_idle(Pigment* pigment);
 
 static inline uint64_t device_queue_acquire_value(PDeviceQueue* queue)
 {
@@ -238,7 +238,7 @@ static inline uint64_t device_queue_acquire_value(PDeviceQueue* queue)
 
 static inline uint64_t device_queue_current_value(PDeviceQueue* queue)
 {
-    return atomic_load_explicit(&queue->next_value, memory_order_relaxed);
+    return atomic_load_explicit(&queue->submitted_value, memory_order_relaxed);
 }
 
 static inline PBool pigment_has_swapchain_maintenance1(Pigment* pigment)
@@ -270,6 +270,12 @@ VkImageLayout image_layout_to_vk(PImageLayout layout);
 void image_destroy_view_cache(Pigment* pigment, PImage* image);
 PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
 
+// surface.c
+void destroy_swapchain(Pigment* pigment, void* resource);
+
+// synchronization.c
+PResult wait_acquisition(Pigment* pigment, PSync* sync, uint32_t slot, uint64_t timeout_ns);
+
 // swapchain_event.c
 PSwapchainCallbackList* create_swapchain_callback_list(Pigment* pigment);
 void destroy_swapchain_callback_list(Pigment* pigment, PSwapchainCallbackList* list);
@@ -279,7 +285,14 @@ void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent
 PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
 void drain_deletion_queue(Pigment* pigment);
-void defer_destroy_swapchain(Pigment* pigment, void (*destroy_fn)(Pigment*, void*), void* resource, const VkFence* present_fences, uint32_t fence_count);
+PDeletionNode* create_tracker_deletion(Pigment* pigment);
+PDeletionNode* create_resource_deletion(Pigment* pigment);
+void defer_destroy_node(Pigment* pigment, PDeletionNode* node, PDestroyFn destroy_fn, void* resource);
+void prepare_swapchain_deletion(PSwapchain* swapchain);
+
+// allocator.c
+PResult init_gpu_allocator(Pigment* pigment);
+void destroy_gpu_allocator(Pigment* pigment);
 
 // log.c
 PResult pigment_log_init(Pigment* pigment);

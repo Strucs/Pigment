@@ -105,7 +105,10 @@ typedef struct PTrackedResource {
     struct PTrackedResource* next;
 } PTrackedResource;
 
+typedef struct PDeletionNode PDeletionNode;
+
 struct PResourceTracker {
+    PDeletionNode* deletion;
     _Atomic uint64_t* last_used;
     _Atomic uint32_t references;
     _Atomic(PTrackedResource*) dependents;
@@ -176,6 +179,7 @@ struct PDeviceQueue {
     PQueueFlags flags;
     VkSemaphore timeline;
     _Atomic uint64_t next_value;
+    _Atomic uint64_t submitted_value;
 };
 
 typedef struct PQueueRange {
@@ -236,6 +240,7 @@ struct PPipeline {
 };
 
 struct PLayout {
+    PDeletionNode* deletion;
     VkPipelineLayout layout;
     uint32_t push_size;
     VkShaderStageFlags push_stages;
@@ -277,9 +282,8 @@ struct PPipelineBuild {
     const char* name;
 };
 
-typedef struct PCommandBufferBatch PCommandBufferBatch;
-
 struct PCommandPool {
+    PDeletionNode* deletion;
     VkCommandPool pool;
     uint32_t queue_family_index;
     PCommandPoolFlags flags;
@@ -287,7 +291,7 @@ struct PCommandPool {
     uint32_t buffer_count;
     uint32_t buffer_capacity;
 
-    _Atomic(PCommandBufferBatch*) retired_batches;
+    _Atomic(PCommandBuffer*) retired_buffers;
 
     // Retained by the owner and pending buffer callbacks.
     _Atomic uint32_t references;
@@ -300,10 +304,18 @@ struct PCommandBuffer {
     uint32_t use_count;
     uint32_t use_capacity;
     PBool recording_failed;
+
+    PCommandBuffer* next_retired;
 };
 
+typedef struct PAcquireSync {
+    VkSemaphore semaphore;
+    VkFence fence;
+    PBool pending;
+} PAcquireSync;
+
 struct PSync {
-    VkSemaphore* image_available_semaphores;
+    PAcquireSync* acquisitions;
     VkSemaphore* render_finished_semaphores;
     VkFence* present_fences;
 };

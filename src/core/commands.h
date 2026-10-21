@@ -161,8 +161,10 @@ PIGMENT_API PResult pigment_create_command_buffers(Pigment* pigment, PCommandPoo
 /**
  * @brief Retire command buffers after their GPU work completes.
  *
- * Deferred callbacks release recorded resources. Vulkan buffers are freed during
- * pool collection or destruction. The caller must synchronize host access to the pool.
+ * NULL entries and consecutive duplicates are ignored.
+ * Other duplicates and previously destroyed buffers cause undefined behavior.
+ * Buffers may come from different pools. Synchronize host access to every affected pool.
+ * Completed buffers can be reclaimed with pigment_collect_command_pool.
  *
  * @param pigment Pigment instance.
  * @param cmds Array of command buffers to destroy.
@@ -250,8 +252,10 @@ PIGMENT_API PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle
  *
  * @param pigment Pigment instance.
  * @param handle Submit handle returned by pigment_queue_submit.
+ *
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise PIGMENT_ERROR_VULKAN.
  */
-PIGMENT_API void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
+PIGMENT_API PResult pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
 
 PIGMENT_API void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
 PIGMENT_API void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
@@ -301,8 +305,10 @@ PIGMENT_API void pigment_cmd_use(Pigment* pigment, PCommandBuffer* cmd, PResourc
  *
  * @param pigment Pigment instance.
  * @param tracker Tracker from pigment_create_resource_tracker.
+ *
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise an error code.
  */
-PIGMENT_API void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker);
+PIGMENT_API PResult pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker);
 
 /**
  * @brief Retain a resource for later recordings.

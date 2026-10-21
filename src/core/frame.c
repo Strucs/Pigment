@@ -21,17 +21,23 @@
 #include "deletion.h"
 #include "image.h"
 #include "surface.h"
+#include "synchronization.h"
 
 #include "internal.h"
 
-void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot)
+PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot)
 {
-    if(pigment == NULL || renderer == NULL || slot >= pigment->config.max_frames_in_flight)
+    if(pigment == NULL || renderer == NULL)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
 
-    pigment_resource_tracker_wait(pigment, &renderer->per_slot_trackers[slot]);
+    if(slot >= pigment->config.max_frames_in_flight)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    return pigment_resource_tracker_wait(pigment, &renderer->per_slot_trackers[slot]);
 }
 
 PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot, uint64_t timeout_ns, PFrame** out_frame)
@@ -75,7 +81,22 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
     PDevice* device      = pigment->device;
     uint32_t image_index = 0;
 
-    VkResult result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, renderer->swapchain->sync->image_available_semaphores[slot], VK_NULL_HANDLE, &image_index);
+    PSync* sync         = renderer->swapchain->sync;
+    PResult acquisition = wait_acquisition(pigment, sync, slot, timeout_ns);
+    if(acquisition != PIGMENT_SUCCESS)
+    {
+        return acquisition;
+    }
+
+    VkFence acquire_fence = sync->acquisitions[slot].fence;
+    VkResult result       = vkResetFences(device->logical_device, 1, &acquire_fence);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to reset acquisition fence (result: %d)", result);
+        return PIGMENT_ERROR_VULKAN;
+    }
+
+    result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, sync->acquisitions[slot].semaphore, acquire_fence, &image_index);
 
     if(result == VK_NOT_READY)
     {
@@ -98,6 +119,8 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         PLOG_ERROR(pigment, "Failed to acquire swapchain image (result: %d)", result);
         return PIGMENT_ERROR_VULKAN;
     }
+
+    sync->acquisitions[slot].pending = P_TRUE;
 
     // SUBOPTIMAL still acquires a usable image.
     if(result == VK_SUBOPTIMAL_KHR)
@@ -824,6 +847,36 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
 
     frame->active = P_FALSE;
     resource_tracker_release(pigment, &frame->swapchain->tracker);
+}
+
+PResult pigment_cancel_frame(Pigment* pigment, PFrame* frame)
+{
+    if(pigment == NULL || frame == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+    if(!frame->active)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    PResult result = wait_acquisition(pigment, frame->sync, frame->slot, UINT64_MAX);
+    if(result != PIGMENT_SUCCESS)
+    {
+        return result;
+    }
+
+    // Its binary semaphores will be destroyed with this generation, without reuse.
+    frame->swapchain->out_of_date = P_TRUE;
+    if(frame->swapchain == frame->renderer->swapchain)
+    {
+        frame->renderer->needs_recreate = P_TRUE;
+    }
+    frame->active = P_FALSE;
+
+    resource_tracker_release(pigment, &frame->swapchain->tracker);
+
+    return PIGMENT_SUCCESS;
 }
 
 void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op)

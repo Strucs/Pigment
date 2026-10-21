@@ -33,8 +33,8 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
         goto ERROR;
     }
 
-    sync->image_available_semaphores = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->image_available_semaphores, max_frame);
-    if(sync->image_available_semaphores == NULL)
+    sync->acquisitions = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->acquisitions, max_frame);
+    if(sync->acquisitions == NULL)
     {
         goto ERROR;
     }
@@ -56,9 +56,16 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 
     for(size_t i = 0; i < max_frame; i++)
     {
-        sync->image_available_semaphores[i] = create_semaphore(pigment);
+        sync->acquisitions[i].semaphore = create_semaphore(pigment);
 
-        if(sync->image_available_semaphores[i] == NULL)
+        if(sync->acquisitions[i].semaphore == NULL)
+        {
+            PLOG_ERROR(pigment, "Failed to create synchronization objects");
+            goto ERROR;
+        }
+
+        sync->acquisitions[i].fence = create_fence(pigment);
+        if(sync->acquisitions[i].fence == NULL)
         {
             PLOG_ERROR(pigment, "Failed to create synchronization objects");
             goto ERROR;
@@ -91,11 +98,12 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 ERROR:
     if(sync != NULL)
     {
-        if(sync->image_available_semaphores != NULL)
+        if(sync->acquisitions != NULL)
         {
             for(size_t i = 0; i < max_frame; i++)
             {
-                vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], &pigment->vk_alloc);
+                vkDestroySemaphore(device->logical_device, sync->acquisitions[i].semaphore, &pigment->vk_alloc);
+                vkDestroyFence(device->logical_device, sync->acquisitions[i].fence, &pigment->vk_alloc);
             }
         }
         if(sync->render_finished_semaphores != NULL)
@@ -118,7 +126,7 @@ ERROR:
         }
 
         P_FREE(pigment, sync->render_finished_semaphores);
-        P_FREE(pigment, sync->image_available_semaphores);
+        P_FREE(pigment, sync->acquisitions);
         P_FREE(pigment, sync);
     }
     return NULL;
@@ -134,7 +142,8 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
 
     for(size_t i = 0; i < max_frame; i++)
     {
-        vkDestroySemaphore(device->logical_device, sync->image_available_semaphores[i], &pigment->vk_alloc);
+        vkDestroySemaphore(device->logical_device, sync->acquisitions[i].semaphore, &pigment->vk_alloc);
+        vkDestroyFence(device->logical_device, sync->acquisitions[i].fence, &pigment->vk_alloc);
         if(sync->present_fences != NULL)
         {
             vkDestroyFence(device->logical_device, sync->present_fences[i], &pigment->vk_alloc);
@@ -148,8 +157,32 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
 
     P_FREE(pigment, sync->present_fences);
     P_FREE(pigment, sync->render_finished_semaphores);
-    P_FREE(pigment, sync->image_available_semaphores);
+    P_FREE(pigment, sync->acquisitions);
     P_FREE(pigment, sync);
+}
+
+PResult wait_acquisition(Pigment* pigment, PSync* sync, uint32_t slot, uint64_t timeout_ns)
+{
+    PAcquireSync* acquisition = &sync->acquisitions[slot];
+    if(!acquisition->pending)
+    {
+        return PIGMENT_SUCCESS;
+    }
+
+    VkResult result = vkWaitForFences(pigment->device->logical_device, 1, &acquisition->fence, VK_TRUE, timeout_ns);
+    if(result == VK_TIMEOUT)
+    {
+        return timeout_ns == 0 ? PIGMENT_NOT_READY : PIGMENT_TIMEOUT;
+    }
+
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to wait for acquisition (result: %d)", result);
+        return PIGMENT_ERROR_VULKAN;
+    }
+
+    acquisition->pending = P_FALSE;
+    return PIGMENT_SUCCESS;
 }
 
 static VkSemaphore create_semaphore(Pigment* pigment)

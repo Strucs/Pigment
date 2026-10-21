@@ -783,6 +783,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         queue->slot         = r;
         queue->flags        = vk_to_pigment_queue_flags(queue_families[resolved[r].family].queueFlags & QUEUE_USEFUL_FLAGS);
         atomic_store_explicit(&queue->next_value, 0, memory_order_relaxed);
+        atomic_store_explicit(&queue->submitted_value, 0, memory_order_relaxed);
         vkGetDeviceQueue(device->logical_device, resolved[r].family, resolved[r].queue_index_in_family, &queue->queue);
 
         VkSemaphoreTypeCreateInfo type_info = {
@@ -1005,14 +1006,21 @@ void destroy_device(Pigment* pigment)
     P_FREE(pigment, device);
 }
 
-void device_wait_idle(Pigment* pigment)
+PResult device_wait_idle(Pigment* pigment)
 {
     if(pigment == NULL || pigment->device == NULL)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
-    vkDeviceWaitIdle(pigment->device->logical_device);
-    drain_deletion_queue(pigment);
+
+    VkResult result = vkDeviceWaitIdle(pigment->device->logical_device);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to wait for device (result: %d)", result);
+        return PIGMENT_ERROR_VULKAN;
+    }
+
+    return PIGMENT_SUCCESS;
 }
 
 VkInstance pigment_vk_instance(Pigment* pigment)
@@ -1043,4 +1051,32 @@ uint32_t pigment_queue_family(PDeviceQueue* queue)
 PQueueFlags pigment_queue_flags(PDeviceQueue* queue)
 {
     return (queue != NULL) ? queue->flags : 0;
+}
+
+PSampleCount pigment_get_max_sample_count(Pigment* pigment)
+{
+    if(pigment == NULL)
+    {
+        return P_SAMPLE_COUNT_1;
+    }
+
+    VkSampleCountFlags supported = supported_sample_counts(pigment);
+    for(VkSampleCountFlagBits bit = VK_SAMPLE_COUNT_64_BIT; bit > VK_SAMPLE_COUNT_1_BIT; bit >>= 1)
+    {
+        if(supported & bit)
+        {
+            return (PSampleCount) bit;
+        }
+    }
+
+    return P_SAMPLE_COUNT_1;
+}
+
+PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples)
+{
+    if(pigment == NULL || samples == 0 || samples == P_SAMPLE_COUNT_1)
+    {
+        return P_TRUE;
+    }
+    return (supported_sample_counts(pigment) & (VkSampleCountFlagBits) samples) ? P_TRUE : P_FALSE;
 }

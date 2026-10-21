@@ -91,8 +91,10 @@ PIGMENT_API PBool pigment_buffer_idle(Pigment* pigment, const PBuffer* buffer);
  *
  * @param pigment Pigment instance.
  * @param buffer Buffer to wait on.
+ *
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise an error code.
  */
-PIGMENT_API void pigment_buffer_wait(Pigment* pigment, const PBuffer* buffer);
+PIGMENT_API PResult pigment_buffer_wait(Pigment* pigment, const PBuffer* buffer);
 
 PIGMENT_API void pigment_cmd_copy_buffer(Pigment* pigment, PCommandBuffer* cmd, PBuffer* src, PBuffer* dst, const PBufferCopy* regions, uint32_t region_count);
 

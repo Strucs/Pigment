@@ -773,3 +773,44 @@ static void default_destroy(void* user_data)
     pigment_rwlock_destroy(&alloc->lock);
     P_FREE(alloc->pigment, alloc);
 }
+
+PResult init_gpu_allocator(Pigment* pigment)
+{
+    const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
+    if(vk_init != NULL && vk_init->allocator != NULL)
+    {
+        pigment->gpu_allocator = vk_init->allocator;
+    }
+    else
+    {
+        pigment->gpu_allocator = pigment_vk_create_default_allocator(pigment, NULL);
+    }
+
+    if(pigment->gpu_allocator == NULL)
+    {
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+
+    if(pigment->gpu_allocator->init != NULL)
+    {
+        VkResult init_result = pigment->gpu_allocator->init(
+            pigment->gpu_allocator->user_data,
+            pigment->instance->vulkan_instance,
+            pigment->device->physical_device,
+            pigment->device->logical_device
+        );
+
+        if(init_result != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Custom PVkAllocator init failed (result=%d)", init_result);
+            return PIGMENT_ERROR_VULKAN;
+        }
+    }
+
+    return PIGMENT_SUCCESS;
+}
+
+void destroy_gpu_allocator(Pigment* pigment)
+{
+    pigment_vk_destroy_allocator(pigment->gpu_allocator);
+}

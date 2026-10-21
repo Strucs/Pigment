@@ -932,6 +932,14 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
         return NULL;
     }
 
+    layout->deletion = create_resource_deletion(pigment);
+    if(layout->deletion == NULL)
+    {
+        vkDestroyPipelineLayout(pigment->device->logical_device, vk_layout, &pigment->vk_alloc);
+        P_FREE(pigment, layout);
+        return NULL;
+    }
+
     layout->layout      = vk_layout;
     layout->push_size   = desc->push_size;
     layout->push_stages = vk_stages;
@@ -948,7 +956,7 @@ void pigment_destroy_layout(Pigment* pigment, PLayout* layout)
         return;
     }
 
-    pigment_defer_destroy(pigment, destroy_layout_immediate, layout);
+    defer_destroy_node(pigment, layout->deletion, destroy_layout_immediate, layout);
 }
 
 VkPipeline pigment_vk_pipeline(PPipeline* pipeline)
@@ -973,5 +981,6 @@ static void destroy_layout_immediate(Pigment* pigment, void* resource)
     {
         vkDestroyPipelineLayout(pigment->device->logical_device, layout->layout, &pigment->vk_alloc);
     }
+    P_FREE(pigment, layout->deletion);
     P_FREE(pigment, layout);
 }

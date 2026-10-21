@@ -34,7 +34,6 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
     }
     memset(pigment, 0, sizeof(*pigment));
     pigment->cpu_allocator = cpu_alloc;
-    pigment_vk_build_allocation_callbacks(&pigment->cpu_allocator, &pigment->vk_alloc);
 
     if(pigment_log_init(pigment) != PIGMENT_SUCCESS)
     {
@@ -71,35 +70,9 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         goto ERROR;
     }
 
-    const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
-    if(vk_init != NULL && vk_init->allocator != NULL)
-    {
-        pigment->gpu_allocator = vk_init->allocator;
-    }
-    else
-    {
-        pigment->gpu_allocator = pigment_vk_create_default_allocator(pigment, NULL);
-    }
-
-    if(pigment->gpu_allocator == NULL)
+    if(init_gpu_allocator(pigment) != PIGMENT_SUCCESS)
     {
         goto ERROR;
-    }
-
-    if(pigment->gpu_allocator->init != NULL)
-    {
-        VkResult init_result = pigment->gpu_allocator->init(
-            pigment->gpu_allocator->user_data,
-            pigment->instance->vulkan_instance,
-            pigment->device->physical_device,
-            pigment->device->logical_device
-        );
-
-        if(init_result != VK_SUCCESS)
-        {
-            PLOG_ERROR(pigment, "Custom PVkAllocator init failed (result=%d)", init_result);
-            goto ERROR;
-        }
     }
 
     pigment->swapchain_callbacks = create_swapchain_callback_list(pigment);
@@ -129,12 +102,16 @@ void destroy_pigment(Pigment* pigment)
         return;
     }
 
-    device_wait_idle(pigment);
+    PResult result = device_wait_idle(pigment);
+    if(result != PIGMENT_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Device wait idle failed during destroy (result: %d). Continuing.", result);
+    }
 
     destroy_deletion_queue(pigment, pigment->deletions);
 
     destroy_swapchain_callback_list(pigment, pigment->swapchain_callbacks);
-    pigment_vk_destroy_allocator(pigment->gpu_allocator);
+    destroy_gpu_allocator(pigment);
     destroy_device(pigment);
     destroy_instance(pigment);
 
@@ -144,14 +121,15 @@ void destroy_pigment(Pigment* pigment)
     cpu_alloc.free(cpu_alloc.user_data, pigment);
 }
 
-void pigment_wait_idle(Pigment* pigment)
+PResult pigment_wait_idle(Pigment* pigment)
 {
-    if(pigment == NULL)
+    PResult result = device_wait_idle(pigment);
+    if(result != PIGMENT_SUCCESS)
     {
-        return;
+        return result;
     }
-
-    device_wait_idle(pigment);
+    drain_deletion_queue(pigment);
+    return PIGMENT_SUCCESS;
 }
 
 PBool pigment_supports(Pigment* pigment, PFeature feature)
@@ -165,32 +143,4 @@ PBool pigment_supports(Pigment* pigment, PFeature feature)
         return P_FALSE;
     }
     return pigment->device->features[feature];
-}
-
-PSampleCount pigment_get_max_sample_count(Pigment* pigment)
-{
-    if(pigment == NULL)
-    {
-        return P_SAMPLE_COUNT_1;
-    }
-
-    VkSampleCountFlags supported = supported_sample_counts(pigment);
-    for(VkSampleCountFlagBits bit = VK_SAMPLE_COUNT_64_BIT; bit > VK_SAMPLE_COUNT_1_BIT; bit >>= 1)
-    {
-        if(supported & bit)
-        {
-            return (PSampleCount) bit;
-        }
-    }
-
-    return P_SAMPLE_COUNT_1;
-}
-
-PBool pigment_supports_sample_count(Pigment* pigment, PSampleCount samples)
-{
-    if(pigment == NULL || samples == 0 || samples == P_SAMPLE_COUNT_1)
-    {
-        return P_TRUE;
-    }
-    return (supported_sample_counts(pigment) & (VkSampleCountFlagBits) samples) ? P_TRUE : P_FALSE;
 }

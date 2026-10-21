@@ -33,14 +33,7 @@ static void pool_remove_buffer(PCommandPool* pool, PCommandBuffer* cmd);
 
 #define PIGMENT_POOL_BUFFERS_INITIAL_CAPACITY 4
 #define PIGMENT_CMD_USES_INITIAL_CAPACITY 16
-
-struct PCommandBufferBatch {
-    PCommandPool* pool;
-    VkCommandBuffer* vk_buffers;
-    PCommandBuffer** wrappers;
-    uint32_t count;
-    PCommandBufferBatch* next;
-};
+#define PIGMENT_FREE_COMMAND_BUFFER_BATCH_SIZE 64
 
 PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* desc)
 {
@@ -72,8 +65,14 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
     command_pool->queue_family_index = queue_family_index;
     command_pool->flags              = desc->flags;
 
+    command_pool->deletion = create_resource_deletion(pigment);
+    if(command_pool->deletion == NULL)
+    {
+        goto ERROR;
+    }
+
     atomic_init(&command_pool->references, 1);
-    atomic_init(&command_pool->retired_batches, NULL);
+    atomic_init(&command_pool->retired_buffers, NULL);
 
     set_object_name(device->logical_device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) pool, desc->name);
 
@@ -84,6 +83,7 @@ ERROR:
     {
         vkDestroyCommandPool(device->logical_device, pool, &pigment->vk_alloc);
     }
+    P_FREE(pigment, command_pool);
     return NULL;
 }
 
@@ -94,7 +94,7 @@ void pigment_destroy_command_pool(Pigment* pigment, PCommandPool* pool)
         return;
     }
 
-    pigment_defer_destroy(pigment, release_command_pool, pool);
+    defer_destroy_node(pigment, pool->deletion, release_command_pool, pool);
 }
 
 static void release_command_pool(Pigment* pigment, void* resource)
@@ -117,16 +117,17 @@ static void destroy_command_pool_immediate(Pigment* pigment, void* resource)
         P_FREE(pigment, pool->buffers[i]);
     }
 
-    PCommandBufferBatch* batch = atomic_load_explicit(&pool->retired_batches, memory_order_acquire);
-    while(batch != NULL)
+    PCommandBuffer* cmd = atomic_load_explicit(&pool->retired_buffers, memory_order_acquire);
+    while(cmd != NULL)
     {
-        PCommandBufferBatch* next = batch->next;
-        P_FREE(pigment, batch->vk_buffers);
-        P_FREE(pigment, batch);
-        batch = next;
+        PCommandBuffer* next = cmd->next_retired;
+        P_FREE(pigment, cmd->uses);
+        P_FREE(pigment, cmd);
+        cmd = next;
     }
 
     P_FREE(pigment, pool->buffers);
+    P_FREE(pigment, pool->deletion);
     P_FREE(pigment, pool);
 }
 
@@ -137,14 +138,27 @@ void pigment_collect_command_pool(Pigment* pigment, PCommandPool* pool)
         return;
     }
 
-    PCommandBufferBatch* batch = atomic_exchange_explicit(&pool->retired_batches, NULL, memory_order_acquire);
-    while(batch != NULL)
+    PCommandBuffer* cmd = atomic_exchange_explicit(&pool->retired_buffers, NULL, memory_order_acquire);
+    while(cmd != NULL)
     {
-        PCommandBufferBatch* next = batch->next;
-        vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, batch->count, batch->vk_buffers);
-        P_FREE(pigment, batch->vk_buffers);
-        P_FREE(pigment, batch);
-        batch = next;
+        VkCommandBuffer buffers[PIGMENT_FREE_COMMAND_BUFFER_BATCH_SIZE];
+        PCommandBuffer* wrappers[PIGMENT_FREE_COMMAND_BUFFER_BATCH_SIZE];
+        uint32_t count = 0;
+        while(cmd != NULL && count < sizeof(buffers) / sizeof(buffers[0]))
+        {
+            buffers[count]  = cmd->buffer;
+            wrappers[count] = cmd;
+            count++;
+            cmd = cmd->next_retired;
+        }
+
+        vkFreeCommandBuffers(pigment->device->logical_device, pool->pool, count, buffers);
+
+        for(uint32_t i = 0; i < count; i++)
+        {
+            P_FREE(pigment, wrappers[i]->uses);
+            P_FREE(pigment, wrappers[i]);
+        }
     }
 }
 
@@ -546,7 +560,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             PPipelineStage stage              = submits[i].acquire_stage;
             waits[wait_offset + wait_count++] = (VkSemaphoreSubmitInfo) {
                 .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .semaphore = frame->sync->image_available_semaphores[frame->slot],
+                .semaphore = frame->sync->acquisitions[frame->slot].semaphore,
                 .stageMask = stage != P_PIPELINE_STAGE_NONE ? pipeline_stage_to_vk(stage) : VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
             };
         }
@@ -601,6 +615,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
             break;
         }
 
+        atomic_store_explicit(&queue->submitted_value, handles[end - 1].value, memory_order_relaxed);
         for(uint32_t j = i; j < end; j++)
         {
             PSubmitHandle handle = handles[j];
@@ -660,16 +675,16 @@ PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle)
     return current >= handle.value;
 }
 
-void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle)
+PResult pigment_submit_wait(Pigment* pigment, PSubmitHandle handle)
 {
     if(pigment == NULL || handle.queue == NULL || handle.value == 0)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
 
     if(handle.queue->timeline == VK_NULL_HANDLE)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
 
     VkSemaphoreWaitInfo wait_info = {
@@ -678,81 +693,86 @@ void pigment_submit_wait(Pigment* pigment, PSubmitHandle handle)
         .pSemaphores    = &handle.queue->timeline,
         .pValues        = &handle.value,
     };
-    vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
+
+    VkResult result = vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to wait for submit (result: %d)", result);
+        return PIGMENT_ERROR_VULKAN;
+    }
+
+    return PIGMENT_SUCCESS;
 }
 
 static void retire_command_buffers(Pigment* pigment, void* resource)
 {
-    PCommandBufferBatch* batch = (PCommandBufferBatch*) resource;
-    PCommandPool* pool         = batch->pool;
-    for(uint32_t i = 0; i < batch->count; i++)
+    PCommandBuffer* first = resource;
+    PCommandPool* pool    = first->source_pool;
+    PCommandBuffer* tail  = first;
+    for(PCommandBuffer* cmd = first; cmd != NULL; cmd = cmd->next_retired)
     {
-        cmd_release_uses(pigment, batch->wrappers[i]);
-        P_FREE(pigment, batch->wrappers[i]->uses);
-        P_FREE(pigment, batch->wrappers[i]);
+        cmd_release_uses(pigment, cmd);
+        tail = cmd;
     }
-    P_FREE(pigment, batch->wrappers);
-    batch->wrappers = NULL;
 
     // Only the pool's caller frees Vulkan buffers, under its host synchronization.
-    PCommandBufferBatch* head = atomic_load_explicit(&pool->retired_batches, memory_order_relaxed);
+    PCommandBuffer* head = atomic_load_explicit(&pool->retired_buffers, memory_order_relaxed);
     do
     {
-        batch->next = head;
+        tail->next_retired = head;
     }
-    while(!atomic_compare_exchange_weak_explicit(&pool->retired_batches, &head, batch, memory_order_release, memory_order_relaxed));
+    while(!atomic_compare_exchange_weak_explicit(&pool->retired_buffers, &head, first, memory_order_release, memory_order_relaxed));
 
-    // Collection may already have freed batch.
+    // Collection may already have freed the wrappers.
     release_command_pool(pigment, pool);
 }
 
 void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, uint32_t count)
 {
-    if(pigment == NULL || cmds == NULL || count == 0 || cmds[0] == NULL)
+    if(pigment == NULL || cmds == NULL || count == 0)
     {
         return;
     }
 
-    PCommandPool* pool = cmds[0]->source_pool;
-    for(uint32_t i = 0; i < count; i++)
+    uint32_t i = 0;
+    while(i < count)
     {
-        if(cmds[i] == NULL || cmds[i]->source_pool != pool)
+        if(cmds[i] == NULL)
         {
-            PLOG_ERROR(pigment, "pigment_destroy_command_buffers: all command buffers must come from the same pool.");
-            return;
+            i++;
+            continue;
         }
+
+        PCommandBuffer* first = cmds[i++];
+        PCommandBuffer* tail  = first;
+        PCommandPool* pool    = first->source_pool;
+        pigment_collect_command_pool(pigment, pool);
+        pool_remove_buffer(pool, first);
+
+        while(i < count)
+        {
+            PCommandBuffer* cmd = cmds[i];
+            if(cmd == NULL || cmd == tail)
+            {
+                i++;
+                continue;
+            }
+
+            if(cmd->source_pool != pool)
+            {
+                break;
+            }
+
+            pool_remove_buffer(pool, cmd);
+            tail->next_retired = cmd;
+            tail               = cmd;
+            i++;
+        }
+        tail->next_retired = NULL;
+
+        atomic_fetch_add_explicit(&pool->references, 1, memory_order_relaxed);
+        pigment_defer_destroy(pigment, retire_command_buffers, first);
     }
-
-    pigment_collect_command_pool(pigment, pool);
-
-    PCommandBufferBatch* batch = P_NEW_FOR_OBJECT(pigment, batch);
-    if(batch == NULL)
-    {
-        return;
-    }
-
-    batch->vk_buffers = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->vk_buffers, count);
-    batch->wrappers   = P_NEW_ARRAY_FOR_OBJECT(pigment, batch->wrappers, count);
-    if(batch->vk_buffers == NULL || batch->wrappers == NULL)
-    {
-        P_FREE(pigment, batch->vk_buffers);
-        P_FREE(pigment, batch->wrappers);
-        P_FREE(pigment, batch);
-        return;
-    }
-
-    batch->pool  = pool;
-    batch->count = count;
-
-    for(uint32_t i = 0; i < count; i++)
-    {
-        batch->vk_buffers[i] = cmds[i]->buffer;
-        batch->wrappers[i]   = cmds[i];
-        pool_remove_buffer(pool, cmds[i]);
-    }
-
-    atomic_fetch_add_explicit(&pool->references, 1, memory_order_relaxed);
-    pigment_defer_destroy(pigment, retire_command_buffers, batch);
 }
 
 void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name)
@@ -999,6 +1019,14 @@ PResult pigment_resource_tracker_init(Pigment* pigment, PResourceTracker* tracke
         return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
+    tracker->deletion = create_tracker_deletion(pigment);
+    if(tracker->deletion == NULL)
+    {
+        P_FREE(pigment, (void*) tracker->last_used);
+        tracker->last_used = NULL;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
+    }
+
     atomic_init(&tracker->references, 1);
     atomic_init(&tracker->dependents, NULL);
     return PIGMENT_SUCCESS;
@@ -1011,6 +1039,8 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
         return;
     }
 
+    P_FREE(pigment, tracker->deletion);
+    tracker->deletion = NULL;
     P_FREE(pigment, (void*) tracker->last_used);
     tracker->last_used = NULL;
 }
@@ -1038,11 +1068,11 @@ PBool resource_tracker_idle(Pigment* pigment, const PResourceTracker* tracker)
     return P_TRUE;
 }
 
-void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker)
+PResult pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tracker)
 {
     if(pigment == NULL || tracker == NULL || pigment->device == NULL || tracker->last_used == NULL)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
 
     PDevice* device = pigment->device;
@@ -1053,23 +1083,25 @@ void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tra
     {
         P_STACK_OR_HEAP_FREE(pigment, semaphores);
         P_STACK_OR_HEAP_FREE(pigment, values);
-        return;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
     uint32_t count = 0;
     for(uint32_t q = 0; q < device->queue_count; q++)
     {
-        uint64_t value = atomic_load_explicit(&tracker->last_used[q], memory_order_relaxed);
-        if(value == 0 || device->queues[q].timeline == VK_NULL_HANDLE)
+        PDeviceQueue* queue = &device->queues[q];
+        uint64_t value      = atomic_load_explicit(&tracker->last_used[queue->slot], memory_order_relaxed);
+        if(value == 0 || queue->timeline == VK_NULL_HANDLE)
         {
             continue;
         }
 
-        semaphores[count] = device->queues[q].timeline;
+        semaphores[count] = queue->timeline;
         values[count]     = value;
         count++;
     }
 
+    VkResult result = VK_SUCCESS;
     if(count > 0)
     {
         VkSemaphoreWaitInfo wait_info = {
@@ -1078,11 +1110,20 @@ void pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* tra
             .pSemaphores    = semaphores,
             .pValues        = values,
         };
-        vkWaitSemaphores(device->logical_device, &wait_info, UINT64_MAX);
+
+        result = vkWaitSemaphores(device->logical_device, &wait_info, UINT64_MAX);
     }
 
     P_STACK_OR_HEAP_FREE(pigment, semaphores);
     P_STACK_OR_HEAP_FREE(pigment, values);
+
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to wait for tracked submissions (result: %d)", result);
+        return PIGMENT_ERROR_VULKAN;
+    }
+
+    return PIGMENT_SUCCESS;
 }
 
 PResourceTracker* pigment_create_resource_tracker(Pigment* pigment)

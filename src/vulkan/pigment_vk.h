@@ -181,7 +181,11 @@ PIGMENT_API VkCommandBuffer pigment_vk_command_buffer(PCommandBuffer* cmd);
 PIGMENT_API VkCommandPool pigment_vk_command_pool(PCommandPool* pool);
 
 /**
- * @brief Same as pigment_defer_destroy, but gated on a custom VkFence.
+ * @brief Destroy a custom resource after a fence signals.
+ *
+ * Keep the resource and fence alive until the callback. May block and invoke it before returning.
+ * Serialize this call with submissions and presentation on all queues.
+ * Wait errors are logged and do not cancel the request.
  *
  * @param pigment Pigment instance.
  * @param destroy_fn The function to call to destroy the resource.

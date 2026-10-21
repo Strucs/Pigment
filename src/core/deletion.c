@@ -41,41 +41,50 @@ typedef struct PWaitTarget {
 
 typedef struct PDeletionEntry {
     PDestroyFn destroy_fn;
+    PBool (*ready_fn)(Pigment* pigment, void* resource);
     void* resource;
-    PWaitTarget* targets;
-    uint32_t target_count;
+    PResourceTracker* tracker;
+    void* ready_resource;
+    VkFence fence;
+    PBool owned;
 } PDeletionEntry;
 
-typedef struct PDeletionNode {
+struct PDeletionNode {
     PDeletionEntry entry;
     struct PDeletionNode* next;
-} PDeletionNode;
+    uint64_t timeline_values[];
+};
 
 typedef struct PDeletionChunk {
-    PDeletionNode nodes[PIGMENT_DELETION_CHUNK_NODES];
     struct PDeletionChunk* next;
+    _Alignas(PDeletionNode) unsigned char nodes[];
 } PDeletionChunk;
 
 typedef struct PDeletionTsd {
-    Pigment* pigment;
+    PDeletionQueue* queue;
     PDeletionNode* private_free;
+    struct PDeletionTsd* next;
 } PDeletionTsd;
 
 struct PDeletionQueue {
     _Atomic(PDeletionNode*) head;
     _Atomic(PDeletionNode*) shared_free;
     _Atomic(PDeletionChunk*) chunks;
-
+    _Atomic(PDeletionTsd*) tsds;
     pigment_tsd_t tsd;
+    uint64_t node_stride;
 };
 
-static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_targets, uint32_t* out_count);
-static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
-static PResult push_node(Pigment* pigment, PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count);
+static PBool swapchain_ready(Pigment* pigment, void* resource);
+static PBool entry_ready(Pigment* pigment, const PDeletionNode* node);
+static void collect_active_targets(Pigment* pigment, PDeletionNode* node);
 static void prepend_chain(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
 static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
 static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue);
+static PDeletionNode* allocate_chunk(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
+static void wait_device_for_destruction(Pigment* pigment);
+static void wait_submitted(Pigment* pigment);
 static PBool target_signaled(VkDevice device, const PWaitTarget* target);
 static PBool wait_target(Pigment* pigment, const PWaitTarget* target);
 static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker);
@@ -89,11 +98,29 @@ PDeletionQueue* create_deletion_queue(Pigment* pigment)
         return NULL;
     }
 
+    uint64_t alignment = _Alignof(PDeletionNode);
+    uint64_t size      = sizeof(PDeletionNode) + sizeof(uint64_t) * pigment->device->queue_count;
+    queue->node_stride = (size + alignment - 1) / alignment * alignment;
+    atomic_init(&queue->head, NULL);
+    atomic_init(&queue->shared_free, NULL);
+    atomic_init(&queue->chunks, NULL);
+    atomic_init(&queue->tsds, NULL);
+
     if(pigment_tsd_init(&queue->tsd, tsd_destructor) != 0)
     {
         P_FREE(pigment, queue);
         return NULL;
     }
+
+    PDeletionNode* first = allocate_chunk(pigment, queue);
+    if(first == NULL)
+    {
+        pigment_tsd_destroy(queue->tsd);
+        P_FREE(pigment, queue);
+        return NULL;
+    }
+    prepend_shared_free(queue, first, first);
+
     return queue;
 }
 
@@ -103,8 +130,6 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
     {
         return;
     }
-
-    pigment->deletions = NULL;
 
     for(;;)
     {
@@ -128,9 +153,19 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
         {
             PDeletionNode* next = node->next;
             node->entry.destroy_fn(pigment, node->entry.resource);
-            P_FREE(pigment, node->entry.targets);
             node = next;
         }
+    }
+
+    pigment_tsd_destroy(queue->tsd);
+
+    PDeletionTsd* tsd = atomic_load_explicit(&queue->tsds, memory_order_acquire);
+    while(tsd != NULL)
+    {
+        PDeletionTsd* next = tsd->next;
+        tsd_destructor(tsd);
+        P_FREE(pigment, tsd);
+        tsd = next;
     }
 
     PDeletionChunk* chunk = atomic_load_explicit(&queue->chunks, memory_order_relaxed);
@@ -140,9 +175,8 @@ void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue)
         P_FREE(pigment, chunk);
         chunk = next;
     }
-
-    pigment_tsd_destroy(queue->tsd);
     P_FREE(pigment, queue);
+    pigment->deletions = NULL;
 }
 
 void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource)
@@ -158,39 +192,15 @@ void pigment_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resour
         return;
     }
 
-    PWaitTarget* targets = NULL;
-    uint32_t count       = 0;
-    if(collect_active_targets(pigment, &targets, &count) != PIGMENT_SUCCESS)
+    PDeletionNode* node = node_acquire(pigment, pigment->deletions);
+    if(node == NULL)
     {
-        PLOG_ERROR(pigment, "Failed to collect deferred destroy targets. Waiting for GPU completion.");
-
-        PDevice* device = pigment->device;
-        for(uint32_t i = 0; i < device->queue_count; i++)
-        {
-            PDeviceQueue* queue = &device->queues[i];
-            uint64_t value      = device_queue_current_value(queue);
-            if(queue->timeline == VK_NULL_HANDLE || value == 0)
-            {
-                continue;
-            }
-
-            PWaitTarget target = {
-                .kind     = P_WAIT_TIMELINE,
-                .timeline = {.semaphore = queue->timeline, .value = value},
-            };
-
-            if(!wait_target(pigment, &target))
-            {
-                return;
-            }
-        }
-
+        wait_submitted(pigment);
         destroy_fn(pigment, resource);
         return;
     }
 
-    enqueue_or_destroy(pigment, destroy_fn, resource, targets, count);
-    P_FREE(pigment, targets);
+    defer_destroy_node(pigment, node, destroy_fn, resource);
 }
 
 void resource_tracker_retain(PResourceTracker* tracker)
@@ -239,9 +249,15 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
         return;
     }
 
-    if(tracker == NULL || tracker->last_used == NULL)
+    if(tracker == NULL)
     {
         pigment_defer_destroy(pigment, destroy_fn, resource);
+        return;
+    }
+
+    if(tracker->last_used == NULL)
+    {
+        PLOG_ERROR(pigment, "Uninitialized resource tracker in destruction request.");
         return;
     }
 
@@ -252,117 +268,123 @@ void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn destroy_fn, void
 
 static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker)
 {
-    PDestroyFn destroy_fn = destroy_tracked_resources;
-    void* resource        = tracker;
-
-    if(pigment->deletions == NULL || pigment->device == NULL || pigment->device->queues == NULL)
+    if(pigment->deletions == NULL)
     {
-        destroy_fn(pigment, resource);
+        destroy_tracked_resources(pigment, tracker);
         return;
     }
 
-    PDevice* device      = pigment->device;
-    uint32_t queue_count = device->queue_count;
-    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, queue_count);
-    if(targets == NULL)
+    PDeletionNode* node    = tracker->deletion;
+    node->entry.destroy_fn = destroy_tracked_resources;
+    node->entry.resource   = tracker;
+    node->entry.tracker    = tracker;
+
+    // The final reference fixes the submit values for the rest of this lifetime.
+    PBool submitted = P_FALSE;
+    for(uint32_t i = 0; i < pigment->device->queue_count; i++)
     {
-        goto WAIT;
+        submitted |= atomic_load_explicit(&tracker->last_used[i], memory_order_relaxed) != 0;
     }
 
-    uint32_t target_count = 0;
-    for(uint32_t i = 0; i < queue_count; i++)
+    if(!submitted && node->entry.ready_fn == NULL)
     {
-        PDeviceQueue* queue = &device->queues[i];
-        if(queue->timeline == VK_NULL_HANDLE)
-        {
-            continue;
-        }
-        uint64_t value = atomic_load_explicit(&tracker->last_used[queue->slot], memory_order_relaxed);
-        if(value == 0)
-        {
-            continue;
-        }
-        targets[target_count++] = (PWaitTarget) {
-            .kind     = P_WAIT_TIMELINE,
-            .timeline = {.semaphore = queue->timeline, .value = value},
-        };
+        destroy_tracked_resources(pigment, tracker);
+        return;
     }
 
-    if(target_count == 0)
-    {
-        destroy_fn(pigment, resource);
-    }
-    else if(push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count) != PIGMENT_SUCCESS)
-    {
-        P_FREE(pigment, targets);
-        goto WAIT;
-    }
-    P_FREE(pigment, targets);
-    return;
-
-WAIT:
-    // No recorded references remain, so the submit values cannot change.
-    for(uint32_t i = 0; i < queue_count; i++)
-    {
-        PSubmitHandle handle = {
-            .queue = &device->queues[i],
-            .value = atomic_load_explicit(&tracker->last_used[i], memory_order_relaxed),
-        };
-        pigment_submit_wait(pigment, handle);
-    }
-
-    destroy_fn(pigment, resource);
+    prepend_chain(pigment->deletions, node, node);
 }
 
-void defer_destroy_swapchain(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const VkFence* present_fences, uint32_t fence_count)
+// These nodes have no timeline_values storage
+// Never pass them to defer_destroy_node or collect_active_targets
+PDeletionNode* create_tracker_deletion(Pigment* pigment)
 {
-    if(pigment == NULL || destroy_fn == NULL || resource == NULL)
+    PDeletionNode* node = P_NEW_FOR_OBJECT(pigment, node);
+    if(node != NULL)
     {
-        return;
+        node->entry.owned = P_TRUE;
     }
 
+    return node;
+}
+
+PDeletionNode* create_resource_deletion(Pigment* pigment)
+{
+    uint64_t size = sizeof(PDeletionNode) + sizeof(uint64_t) * pigment->device->queue_count;
+    if(size > SIZE_MAX)
+    {
+        return NULL;
+    }
+
+    PDeletionNode* node = P_CALLOC_OBJECT(pigment, 1, size, _Alignof(PDeletionNode));
+    if(node != NULL)
+    {
+        node->entry.owned = P_TRUE;
+    }
+
+    return node;
+}
+
+void defer_destroy_node(Pigment* pigment, PDeletionNode* node, PDestroyFn destroy_fn, void* resource)
+{
     if(pigment->deletions == NULL)
     {
         destroy_fn(pigment, resource);
         return;
     }
 
-    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, fence_count);
-    if(targets == NULL)
-    {
-        goto WAIT;
-    }
+    node->entry.destroy_fn = destroy_fn;
+    node->entry.resource   = resource;
+    collect_active_targets(pigment, node);
+    prepend_chain(pigment->deletions, node, node);
+}
 
-    uint32_t target_count = 0;
+void prepare_swapchain_deletion(PSwapchain* swapchain)
+{
+    PDeletionNode* node        = swapchain->tracker.deletion;
+    node->entry.ready_fn       = swapchain_ready;
+    node->entry.ready_resource = swapchain;
+}
 
-    for(uint32_t i = 0; i < fence_count; i++)
+static PBool swapchain_ready(Pigment* pigment, void* resource)
+{
+    const PSwapchain* swapchain = resource;
+    VkDevice device             = pigment->device->logical_device;
+    PSync* sync                 = swapchain->sync;
+
+    for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
     {
-        targets[target_count++] = (PWaitTarget) {
-            .kind  = P_WAIT_FENCE,
-            .fence = present_fences[i],
+        VkFence fences[] = {
+            sync->acquisitions[i].pending ? sync->acquisitions[i].fence : VK_NULL_HANDLE,
+            sync->present_fences != NULL ? sync->present_fences[i] : VK_NULL_HANDLE,
         };
+
+        for(uint32_t f = 0; f < sizeof(fences) / sizeof(fences[0]); f++)
+        {
+            if(fences[f] == VK_NULL_HANDLE)
+            {
+                continue;
+            }
+
+            if(vkGetFenceStatus(device, fences[f]) != VK_SUCCESS)
+            {
+                return P_FALSE;
+            }
+        }
     }
 
-    if(target_count == 0)
+    if(sync->present_fences == NULL)
     {
-        destroy_fn(pigment, resource);
-    }
-    else if(push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count) != PIGMENT_SUCCESS)
-    {
-        goto WAIT;
-    }
-
-    P_FREE(pigment, targets);
-    return;
-
-WAIT:
-    P_FREE(pigment, targets);
-    if(fence_count != 0)
-    {
-        vkWaitForFences(pigment->device->logical_device, fence_count, present_fences, VK_TRUE, UINT64_MAX);
+        // Without presentation fences, wait for the device before destruction.
+        VkResult result = vkDeviceWaitIdle(device);
+        if(result != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Failed to wait for swapchain destruction (result: %d)", result);
+            return P_FALSE;
+        }
     }
 
-    destroy_fn(pigment, resource);
+    return P_TRUE;
 }
 
 void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence)
@@ -378,18 +400,22 @@ void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, voi
         return;
     }
 
-    if(fence != VK_NULL_HANDLE)
+    PDeletionNode* node = node_acquire(pigment, pigment->deletions);
+    if(node == NULL)
     {
-        PWaitTarget target = {
-            .kind  = P_WAIT_FENCE,
-            .fence = fence,
-        };
-        enqueue_or_destroy(pigment, destroy_fn, resource, &target, 1);
+        PWaitTarget target = {.kind = P_WAIT_FENCE, .fence = fence};
+        if(fence != VK_NULL_HANDLE && !wait_target(pigment, &target))
+        {
+            wait_device_for_destruction(pigment);
+        }
+        destroy_fn(pigment, resource);
+        return;
     }
-    else
-    {
-        enqueue_or_destroy(pigment, destroy_fn, resource, NULL, 0);
-    }
+
+    node->entry.destroy_fn = destroy_fn;
+    node->entry.resource   = resource;
+    node->entry.fence      = fence;
+    prepend_chain(pigment->deletions, node, node);
 }
 
 void pigment_drain_pending(Pigment* pigment)
@@ -405,7 +431,6 @@ void drain_deletion_queue(Pigment* pigment)
     }
 
     PDeletionQueue* queue = pigment->deletions;
-    VkDevice device       = pigment->device->logical_device;
 
     PDeletionNode* node = atomic_exchange_explicit(&queue->head, NULL, memory_order_acquire);
 
@@ -430,26 +455,20 @@ void drain_deletion_queue(Pigment* pigment)
     {
         PDeletionNode* next = node->next;
 
-        // Check if all targets for this node are signaled. If so, we can destroy it immediately. Otherwise, we need to keep it in the queue.
-        PBool ready = P_TRUE;
-        for(uint32_t i = 0; i < node->entry.target_count; i++)
-        {
-            if(!target_signaled(device, &node->entry.targets[i]))
-            {
-                ready = P_FALSE;
-                break;
-            }
-        }
+        PBool ready = entry_ready(pigment, node);
 
         if(ready)
         {
+            PBool owned = node->entry.owned;
             node->entry.destroy_fn(pigment, node->entry.resource);
-            P_FREE(pigment, node->entry.targets);
-            node->next = ready_head;
-            ready_head = node;
-            if(ready_tail == NULL)
+            if(!owned)
             {
-                ready_tail = node;
+                node->next = ready_head;
+                ready_head = node;
+                if(ready_tail == NULL)
+                {
+                    ready_tail = node;
+                }
             }
         }
         else
@@ -474,61 +493,6 @@ void drain_deletion_queue(Pigment* pigment)
     {
         prepend_shared_free(queue, ready_head, ready_tail);
     }
-}
-
-static void enqueue_or_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count)
-{
-    PResult result = push_node(pigment, pigment->deletions, destroy_fn, resource, targets, target_count);
-    if(result != PIGMENT_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to enqueue deferred destroy. Waiting for GPU completion.");
-        for(uint32_t i = 0; i < target_count; i++)
-        {
-            if(!wait_target(pigment, &targets[i]))
-            {
-                return;
-            }
-        }
-
-        destroy_fn(pigment, resource);
-    }
-}
-
-static PResult push_node(Pigment* pigment, PDeletionQueue* queue, PDestroyFn destroy_fn, void* resource, const PWaitTarget* targets, uint32_t target_count)
-{
-    PWaitTarget* targets_copy = NULL;
-    if(target_count > 0)
-    {
-        targets_copy = P_NEW_ARRAY_FOR_OBJECT(pigment, targets_copy, target_count);
-        if(targets_copy == NULL)
-        {
-            return PIGMENT_ERROR_OUT_OF_MEMORY;
-        }
-        memcpy(targets_copy, targets, target_count * sizeof(*targets_copy));
-    }
-
-    PDeletionNode* node = node_acquire(pigment, queue);
-    if(node == NULL)
-    {
-        P_FREE(pigment, targets_copy);
-        return PIGMENT_ERROR_OUT_OF_MEMORY;
-    }
-
-    node->entry = (PDeletionEntry) {
-        .destroy_fn   = destroy_fn,
-        .resource     = resource,
-        .targets      = targets_copy,
-        .target_count = target_count,
-    };
-
-    PDeletionNode* old_head = atomic_load_explicit(&queue->head, memory_order_relaxed);
-    do
-    {
-        node->next = old_head;
-    }
-    while(!atomic_compare_exchange_weak_explicit(&queue->head, &old_head, node, memory_order_release, memory_order_relaxed));
-
-    return PIGMENT_SUCCESS;
 }
 
 static void prepend_chain(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail)
@@ -557,120 +521,196 @@ static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue)
     if(tsd == NULL)
     {
         tsd = P_NEW_FOR_INSTANCE(pigment, tsd);
-        if(tsd == NULL)
+        if(tsd != NULL)
         {
-            return NULL;
-        }
-        tsd->pigment = pigment;
-        if(pigment_tsd_set(queue->tsd, tsd) != 0)
-        {
-            P_FREE(pigment, tsd);
-            return NULL;
+            tsd->queue = queue;
+            if(pigment_tsd_set(queue->tsd, tsd) != 0)
+            {
+                P_FREE(pigment, tsd);
+                tsd = NULL;
+            }
+            else
+            {
+                PDeletionTsd* head = atomic_load_explicit(&queue->tsds, memory_order_relaxed);
+                do
+                {
+                    tsd->next = head;
+                }
+                while(!atomic_compare_exchange_weak_explicit(&queue->tsds, &head, tsd, memory_order_release, memory_order_relaxed));
+            }
         }
     }
 
     // Try to acquire a node from the thread-local private free list first.
-    if(tsd->private_free != NULL)
+    if(tsd != NULL && tsd->private_free != NULL)
     {
         PDeletionNode* node = tsd->private_free;
         tsd->private_free   = node->next;
+        memset(node, 0, (size_t) queue->node_stride);
         return node;
     }
 
     // Try to acquire a node from the shared free list and cache it in the thread-local private free list.
-    PDeletionNode* shared_free = atomic_exchange_explicit(&queue->shared_free, NULL, memory_order_acquire);
-    if(shared_free != NULL)
+    PDeletionNode* node = atomic_exchange_explicit(&queue->shared_free, NULL, memory_order_acquire);
+    if(node == NULL)
     {
-        tsd->private_free = shared_free->next;
-        return shared_free;
+        return allocate_chunk(pigment, queue);
     }
 
-    // If the shared free list is empty, Allocate a new chunk of nodes and add them to the shared free list, then acquire one for the caller.
-    PDeletionChunk* chunk = P_NEW_FOR_INSTANCE(pigment, chunk);
+    PDeletionNode* rest = node->next;
+    if(tsd != NULL)
+    {
+        tsd->private_free = rest;
+    }
+    else if(rest != NULL)
+    {
+        PDeletionNode* tail = rest;
+        while(tail->next != NULL)
+        {
+            tail = tail->next;
+        }
+        prepend_shared_free(queue, rest, tail);
+    }
+    memset(node, 0, (size_t) queue->node_stride);
+
+    return node;
+}
+
+static void tsd_destructor(void* ptr)
+{
+    PDeletionTsd* tsd = ptr;
+    if(tsd == NULL)
+    {
+        return;
+    }
+
+    if(tsd->private_free != NULL)
+    {
+        PDeletionNode* tail = tsd->private_free;
+        while(tail->next != NULL)
+        {
+            tail = tail->next;
+        }
+        prepend_shared_free(tsd->queue, tsd->private_free, tail);
+        tsd->private_free = NULL;
+    }
+}
+
+static PDeletionNode* allocate_chunk(Pigment* pigment, PDeletionQueue* queue)
+{
+    uint64_t size = sizeof(PDeletionChunk) + queue->node_stride * PIGMENT_DELETION_CHUNK_NODES;
+    if(size > SIZE_MAX)
+    {
+        return NULL;
+    }
+
+    PDeletionChunk* chunk = P_CALLOC_INSTANCE(pigment, 1, size, _Alignof(PDeletionChunk));
     if(chunk == NULL)
     {
         return NULL;
     }
 
-    PDeletionChunk* old_chunks = atomic_load_explicit(&queue->chunks, memory_order_relaxed);
+    PDeletionChunk* head = atomic_load_explicit(&queue->chunks, memory_order_relaxed);
     do
     {
-        chunk->next = old_chunks;
+        chunk->next = head;
     }
-    while(!atomic_compare_exchange_weak_explicit(&queue->chunks, &old_chunks, chunk, memory_order_release, memory_order_relaxed));
+    while(!atomic_compare_exchange_weak_explicit(&queue->chunks, &head, chunk, memory_order_release, memory_order_relaxed));
 
-    for(uint32_t i = 1; i < PIGMENT_DELETION_CHUNK_NODES - 1; i++)
+    for(uint32_t i = 0; i < PIGMENT_DELETION_CHUNK_NODES - 1; i++)
     {
-        chunk->nodes[i].next = &chunk->nodes[i + 1];
+        PDeletionNode* node = (PDeletionNode*) (chunk->nodes + queue->node_stride * i);
+        node->next          = (PDeletionNode*) (chunk->nodes + queue->node_stride * (i + 1));
     }
-    chunk->nodes[PIGMENT_DELETION_CHUNK_NODES - 1].next = NULL;
 
-    tsd->private_free = &chunk->nodes[1];
+    PDeletionNode* first = (PDeletionNode*) chunk->nodes;
+    PDeletionNode* tail  = (PDeletionNode*) (chunk->nodes + queue->node_stride * (PIGMENT_DELETION_CHUNK_NODES - 1));
+    prepend_shared_free(queue, first->next, tail);
+    first->next = NULL;
 
-    return &chunk->nodes[0];
+    return first;
 }
 
-static void tsd_destructor(void* ptr)
+static void collect_active_targets(Pigment* pigment, PDeletionNode* node)
 {
-    if(ptr == NULL)
+    for(uint32_t i = 0; i < pigment->device->queue_count; i++)
     {
-        return;
+        PDeviceQueue* queue                = &pigment->device->queues[i];
+        node->timeline_values[queue->slot] = device_queue_current_value(queue);
     }
-    PDeletionTsd* tsd = (PDeletionTsd*) ptr;
-    P_FREE(tsd->pigment, tsd);
 }
 
-static PResult collect_active_targets(Pigment* pigment, PWaitTarget** out_targets, uint32_t* out_count)
+static void wait_device_for_destruction(Pigment* pigment)
 {
-    *out_targets = NULL;
-    *out_count   = 0;
-
-    PDevice* device = pigment->device;
-    if(device == NULL || device->queues == NULL || device->queue_count == 0)
+    PResult result = device_wait_idle(pigment);
+    if(result != PIGMENT_SUCCESS)
     {
-        return PIGMENT_SUCCESS;
+        PLOG_ERROR(pigment, "Device wait idle failed during deferred destruction (result: %d). Continuing.", result);
     }
+}
 
-    uint32_t active = 0;
-    for(uint32_t i = 0; i < device->queue_count; i++)
+static void wait_submitted(Pigment* pigment)
+{
+    for(uint32_t i = 0; i < pigment->device->queue_count; i++)
     {
-        PDeviceQueue* queue = &device->queues[i];
-        if(queue->timeline != VK_NULL_HANDLE && device_queue_current_value(queue) > 0)
-        {
-            active++;
-        }
-    }
-
-    if(active == 0)
-    {
-        return PIGMENT_SUCCESS;
-    }
-
-    PWaitTarget* targets = P_NEW_ARRAY_FOR_COMMAND(pigment, targets, device->queue_count);
-    if(targets == NULL)
-    {
-        return PIGMENT_ERROR_OUT_OF_MEMORY;
-    }
-
-    uint32_t fill = 0;
-    for(uint32_t i = 0; i < device->queue_count; i++)
-    {
-        PDeviceQueue* queue    = &device->queues[i];
-        uint64_t current_value = device_queue_current_value(queue);
-        if(queue->timeline == VK_NULL_HANDLE || current_value == 0)
+        PDeviceQueue* queue = &pigment->device->queues[i];
+        uint64_t value      = device_queue_current_value(queue);
+        if(queue->timeline == VK_NULL_HANDLE || value == 0)
         {
             continue;
         }
 
-        targets[fill++] = (PWaitTarget) {
+        PWaitTarget target = {
             .kind     = P_WAIT_TIMELINE,
-            .timeline = {.semaphore = queue->timeline, .value = current_value},
+            .timeline = {.semaphore = queue->timeline, .value = value},
         };
+
+        if(!wait_target(pigment, &target))
+        {
+            wait_device_for_destruction(pigment);
+            return;
+        }
+    }
+}
+
+static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
+{
+    VkDevice device             = pigment->device->logical_device;
+    const PDeletionEntry* entry = &node->entry;
+    if(entry->fence != VK_NULL_HANDLE)
+    {
+        PWaitTarget target = {.kind = P_WAIT_FENCE, .fence = entry->fence};
+        if(!target_signaled(device, &target))
+        {
+            return P_FALSE;
+        }
     }
 
-    *out_targets = targets;
-    *out_count   = fill;
-    return PIGMENT_SUCCESS;
+    for(uint32_t i = 0; i < pigment->device->queue_count; i++)
+    {
+        PDeviceQueue* queue = &pigment->device->queues[i];
+
+        uint64_t value = entry->tracker != NULL
+                             ? atomic_load_explicit(&entry->tracker->last_used[queue->slot], memory_order_relaxed)
+                             : node->timeline_values[queue->slot];
+
+        if(queue->timeline == VK_NULL_HANDLE || value == 0)
+        {
+            continue;
+        }
+
+        PWaitTarget target = {
+            .kind     = P_WAIT_TIMELINE,
+            .timeline = {.semaphore = queue->timeline, .value = value},
+        };
+
+        if(!target_signaled(device, &target))
+        {
+            return P_FALSE;
+        }
+    }
+
+    return entry->ready_fn == NULL || entry->ready_fn(pigment, entry->ready_resource);
 }
 
 static PBool target_signaled(VkDevice device, const PWaitTarget* target)
@@ -711,7 +751,7 @@ static PBool wait_target(Pigment* pigment, const PWaitTarget* target)
 
     if(result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Deferred destroy wait failed (result: %d). Resource not destroyed.", result);
+        PLOG_ERROR(pigment, "Deferred destroy wait failed (result: %d)", result);
         return P_FALSE;
     }
 

@@ -102,20 +102,22 @@ struct PRenderPassDesc {
  * @param pigment Pigment instance.
  * @param renderer Frame owner.
  * @param slot Slot index below max_frames_in_flight.
+ *
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise an error code.
  */
-PIGMENT_API void pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot);
+PIGMENT_API PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot);
 
 /**
  * @brief Acquire a frame and drain pending deletions.
  *
  * The caller must wait for prior GPU use of the slot and synchronize renderer, frame and queue access.
- * Contexts survive swapchain recreation. Close them with pigment_present_frame before destroying the renderer.
+ * Contexts survive swapchain recreation. Present or cancel them before destroying the renderer.
  *
  * @param pigment Pigment instance.
  * @param renderer Frame owner.
  * @param slot Slot index below max_frames_in_flight.
  * @param timeout_ns Image acquisition timeout in nanoseconds. Zero polls, UINT64_MAX requests an indefinite wait.
- * @param out_frame Context valid until present, or NULL on failure.
+ * @param out_frame Context valid until present or cancellation, or NULL on failure.
  *
  * @return PIGMENT_SUCCESS (including suboptimal), PIGMENT_NOT_READY, PIGMENT_TIMEOUT, PIGMENT_RECREATE_REQUIRED or an error.
  * NOT_READY also covers an active slot or an indefinite acquisition requiring pending frames to be presented first.
@@ -173,6 +175,20 @@ PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFram
  * @param frame Submitted frame.
  */
 PIGMENT_API void pigment_present_frame(Pigment* pigment, PFrame* frame);
+
+/**
+ * @brief Cancel a frame without submitting or presenting.
+ *
+ * Waits for acquisition and disables presentation for this swapchain generation.
+ * Recreate it before acquiring again if it is still current.
+ * Recorded and submitted resources remain retained. Caller must synchronize frame and renderer access.
+ *
+ * @param pigment Pigment instance.
+ * @param frame Acquired frame.
+ *
+ * @return PIGMENT_SUCCESS on cancellation or an inactive frame, or an error.
+ */
+PIGMENT_API PResult pigment_cancel_frame(Pigment* pigment, PFrame* frame);
 
 /**
  * @brief Return the number of frames the renderer keeps in flight.

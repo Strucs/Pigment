@@ -37,6 +37,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 
 PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 {
+    pigment_vk_build_allocation_callbacks(&pigment->cpu_allocator, &pigment->vk_alloc);
+
     PInstance* instance                         = NULL;
     VkLayerProperties* available_layers         = NULL;
     VkExtensionProperties* available_extensions = NULL;

@@ -258,8 +258,10 @@ PIGMENT_API void pigment_image_invalidate(Pigment* pigment, PImage* image);
  *
  * @param pigment Pigment instance.
  * @param image Image to wait on.
+ *
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise an error code.
  */
-PIGMENT_API void pigment_image_wait(Pigment* pigment, PImage* image);
+PIGMENT_API PResult pigment_image_wait(Pigment* pigment, PImage* image);
 
 /**
  * Require P_FEATURE_HOST_IMAGE_COPY, on an image created with P_IMAGE_USAGE_HOST_TRANSFER.

@@ -190,14 +190,14 @@ PBool pigment_buffer_idle(Pigment* pigment, const PBuffer* buffer)
     return buffer != NULL && resource_tracker_idle(pigment, &buffer->tracker);
 }
 
-void pigment_buffer_wait(Pigment* pigment, const PBuffer* buffer)
+PResult pigment_buffer_wait(Pigment* pigment, const PBuffer* buffer)
 {
     if(buffer == NULL)
     {
-        return;
+        return PIGMENT_SUCCESS;
     }
 
-    pigment_resource_tracker_wait(pigment, &buffer->tracker);
+    return pigment_resource_tracker_wait(pigment, &buffer->tracker);
 }
 
 VkBuffer pigment_vk_buffer(PBuffer* buffer)
