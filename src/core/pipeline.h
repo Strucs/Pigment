@@ -199,7 +199,7 @@ PIGMENT_API void pigment_destroy_layout(Pigment* pigment, PLayout* layout);
  * @param size Size of initial_data in bytes (0 if NULL).
  * @param out Receives the created cache.
  *
- * @return PIGMENT_SUCCESS, PIGMENT_ERROR_OUT_OF_MEMORY, or PIGMENT_ERROR_VULKAN.
+ * @return PIGMENT_SUCCESS on success, otherwise an error code.
  */
 PIGMENT_API PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data, uint64_t size, PPipelineCache** out);
 
@@ -223,7 +223,7 @@ PIGMENT_API void pigment_destroy_pipeline_cache(Pigment* pigment, PPipelineCache
  * @param out_size In: capacity of out_data (ignored if out_data is NULL). Out: required size if
  *                 out_data was NULL, otherwise bytes actually written.
  *
- * @return PIGMENT_SUCCESS or PIGMENT_ERROR_VULKAN.
+ * @return PIGMENT_SUCCESS on success, otherwise an error code.
  */
 PIGMENT_API PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache, void* out_data, uint64_t* out_size);
 

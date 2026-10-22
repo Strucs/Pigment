@@ -85,7 +85,7 @@ static PDeletionNode* allocate_chunk(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
 static void wait_device_for_destruction(Pigment* pigment);
 static void wait_submitted(Pigment* pigment);
-static PBool target_signaled(VkDevice device, const PWaitTarget* target);
+static PBool target_signaled(Pigment* pigment, const PWaitTarget* target);
 static PBool wait_target(Pigment* pigment, const PWaitTarget* target);
 static void destroy_tracked(Pigment* pigment, PResourceTracker* tracker);
 static void destroy_tracked_resources(Pigment* pigment, void* resource);
@@ -356,7 +356,7 @@ static PBool swapchain_ready(Pigment* pigment, void* resource)
     {
         VkFence fences[] = {
             sync->acquisitions[i].pending ? sync->acquisitions[i].fence : VK_NULL_HANDLE,
-            sync->present_fences != NULL ? sync->present_fences[i] : VK_NULL_HANDLE,
+            sync->presentations != NULL && sync->presentations[i].pending ? sync->presentations[i].fence : VK_NULL_HANDLE,
         };
 
         for(uint32_t f = 0; f < sizeof(fences) / sizeof(fences[0]); f++)
@@ -366,18 +366,20 @@ static PBool swapchain_ready(Pigment* pigment, void* resource)
                 continue;
             }
 
-            if(vkGetFenceStatus(device, fences[f]) != VK_SUCCESS)
+            PWaitTarget target = {.kind = P_WAIT_FENCE, .fence = fences[f]};
+            if(!target_signaled(pigment, &target))
             {
                 return P_FALSE;
             }
         }
     }
 
-    if(sync->present_fences == NULL)
+    if(sync->presentations == NULL)
     {
         // Without presentation fences, wait for the device before destruction.
         VkResult result = vkDeviceWaitIdle(device);
-        if(result != VK_SUCCESS)
+        device_record_loss(pigment, result);
+        if(result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST)
         {
             PLOG_ERROR(pigment, "Failed to wait for swapchain destruction (result: %d)", result);
             return P_FALSE;
@@ -643,7 +645,7 @@ static void collect_active_targets(Pigment* pigment, PDeletionNode* node)
 static void wait_device_for_destruction(Pigment* pigment)
 {
     PResult result = device_wait_idle(pigment);
-    if(result != PIGMENT_SUCCESS)
+    if(result != PIGMENT_SUCCESS && result != PIGMENT_ERROR_DEVICE_LOST)
     {
         PLOG_ERROR(pigment, "Device wait idle failed during deferred destruction (result: %d). Continuing.", result);
     }
@@ -675,12 +677,11 @@ static void wait_submitted(Pigment* pigment)
 
 static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
 {
-    VkDevice device             = pigment->device->logical_device;
     const PDeletionEntry* entry = &node->entry;
     if(entry->fence != VK_NULL_HANDLE)
     {
         PWaitTarget target = {.kind = P_WAIT_FENCE, .fence = entry->fence};
-        if(!target_signaled(device, &target))
+        if(!target_signaled(pigment, &target))
         {
             return P_FALSE;
         }
@@ -704,7 +705,7 @@ static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
             .timeline = {.semaphore = queue->timeline, .value = value},
         };
 
-        if(!target_signaled(device, &target))
+        if(!target_signaled(pigment, &target))
         {
             return P_FALSE;
         }
@@ -713,19 +714,26 @@ static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
     return entry->ready_fn == NULL || entry->ready_fn(pigment, entry->ready_resource);
 }
 
-static PBool target_signaled(VkDevice device, const PWaitTarget* target)
+static PBool target_signaled(Pigment* pigment, const PWaitTarget* target)
 {
-    if(target->kind == P_WAIT_FENCE)
-    {
-        return vkGetFenceStatus(device, target->fence) == VK_SUCCESS;
-    }
-
+    VkDevice device        = pigment->device->logical_device;
     uint64_t current_value = 0;
-    if(vkGetSemaphoreCounterValue(device, target->timeline.semaphore, &current_value) != VK_SUCCESS)
+    VkResult result        = target->kind == P_WAIT_FENCE
+                                 ? vkGetFenceStatus(device, target->fence)
+                                 : vkGetSemaphoreCounterValue(device, target->timeline.semaphore, &current_value);
+
+    device_record_loss(pigment, result);
+    if(result == VK_ERROR_DEVICE_LOST)
+    {
+        // Device loss ends GPU use for destruction, but does not validate the results.
+        return P_TRUE;
+    }
+    if(result != VK_SUCCESS)
     {
         return P_FALSE;
     }
-    return current_value >= target->timeline.value;
+
+    return target->kind == P_WAIT_FENCE || current_value >= target->timeline.value;
 }
 
 static PBool wait_target(Pigment* pigment, const PWaitTarget* target)
@@ -749,7 +757,8 @@ static PBool wait_target(Pigment* pigment, const PWaitTarget* target)
         result = vkWaitSemaphores(device, &wait_info, UINT64_MAX);
     }
 
-    if(result != VK_SUCCESS)
+    device_record_loss(pigment, result);
+    if(result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST)
     {
         PLOG_ERROR(pigment, "Deferred destroy wait failed (result: %d)", result);
         return P_FALSE;

@@ -37,6 +37,7 @@ typedef enum PResult {
     PIGMENT_NOT_READY           = 4,
     PIGMENT_TIMEOUT             = 5,
     PIGMENT_RECREATE_REQUIRED   = 6,
+    PIGMENT_ERROR_DEVICE_LOST   = 7,
 } PResult;
 
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \

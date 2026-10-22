@@ -122,6 +122,8 @@ struct Pigment {
 
     PInstance* instance;
     PDevice* device;
+    _Atomic PBool device_lost;
+
     PVkAllocator* gpu_allocator;
 
     PSwapchainCallbackList* swapchain_callbacks;
@@ -314,10 +316,15 @@ typedef struct PAcquireSync {
     PBool pending;
 } PAcquireSync;
 
+typedef struct PPresentSync {
+    VkFence fence;
+    PBool pending;
+} PPresentSync;
+
 struct PSync {
     PAcquireSync* acquisitions;
     VkSemaphore* render_finished_semaphores;
-    VkFence* present_fences;
+    PPresentSync* presentations;
 };
 
 struct PDescriptorSetLayout {

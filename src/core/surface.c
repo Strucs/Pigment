@@ -365,6 +365,11 @@ PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_ERROR;
     }
 
+    if(pigment_device_lost(pigment))
+    {
+        return PIGMENT_ERROR_DEVICE_LOST;
+    }
+
     if(!renderer->needs_recreate)
     {
         return PIGMENT_SUCCESS;
@@ -388,7 +393,7 @@ PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
     if(recreate_swapchain(pigment, renderer) != PIGMENT_SUCCESS)
     {
         renderer->needs_recreate = P_TRUE;
-        return PIGMENT_ERROR;
+        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR;
     }
 
     PSwapchainRecreateEvent event = {
@@ -775,8 +780,8 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         old_swapchain->retired   = P_TRUE;
     }
 
-    VkResult result;
-    if((result = vkCreateSwapchainKHR(device->logical_device, &create_info, &pigment->vk_alloc, &(swapchain->swapchain))) != VK_SUCCESS)
+    VkResult result = vkCreateSwapchainKHR(device->logical_device, &create_info, &pigment->vk_alloc, &(swapchain->swapchain));
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create swap chain! (result: %d)", result);
         goto ERROR;
@@ -790,7 +795,8 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
-    if((result = vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images)) != VK_SUCCESS)
+    result = vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images);
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to get swapchain images! (result: %d)", result);
         goto ERROR;

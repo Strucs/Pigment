@@ -52,12 +52,22 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         return PIGMENT_ERROR;
     }
 
+    if(pigment_device_lost(pigment))
+    {
+        return PIGMENT_ERROR_DEVICE_LOST;
+    }
+
     if(renderer->frames[slot].active)
     {
         return PIGMENT_NOT_READY;
     }
 
     drain_deletion_queue(pigment);
+
+    if(pigment_device_lost(pigment))
+    {
+        return PIGMENT_ERROR_DEVICE_LOST;
+    }
 
     if(renderer->needs_recreate)
     {
@@ -90,10 +100,10 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
 
     VkFence acquire_fence = sync->acquisitions[slot].fence;
     VkResult result       = vkResetFences(device->logical_device, 1, &acquire_fence);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to reset acquisition fence (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
+        return device_result(pigment, result);
     }
 
     result = vkAcquireNextImageKHR(device->logical_device, renderer->swapchain->swapchain, timeout_ns, sync->acquisitions[slot].semaphore, acquire_fence, &image_index);
@@ -117,7 +127,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
     else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
         PLOG_ERROR(pigment, "Failed to acquire swapchain image (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
+        return device_result(pigment, result);
     }
 
     sync->acquisitions[slot].pending = P_TRUE;
@@ -787,19 +797,19 @@ void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRende
     P_STACK_OR_HEAP_FREE(pigment, barriers);
 }
 
-void pigment_present_frame(Pigment* pigment, PFrame* frame)
+PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
 {
     if(pigment == NULL || frame == NULL || !frame->active || !frame->present_ready)
     {
-        return;
+        return PIGMENT_ERROR;
     }
 
-    if(frame->swapchain->out_of_date || frame->swapchain->retired)
+    if(frame->swapchain->out_of_date || frame->swapchain->retired || pigment_device_lost(pigment))
     {
         // Recreation retires this image and its unconsumed present semaphore after GPU use.
         frame->active = P_FALSE;
         resource_tracker_release(pigment, &frame->swapchain->tracker);
-        return;
+        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_RECREATE_REQUIRED;
     }
 
     uint32_t current_frame = frame->slot;
@@ -810,14 +820,30 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
 
     VkSwapchainPresentFenceInfoEXT present_fence_info = {0};
     void* present_pnext                               = NULL;
-    if(frame->sync->present_fences != NULL)
+    if(frame->sync->presentations != NULL)
     {
-        VkFence fence = frame->sync->present_fences[current_frame];
-        vkWaitForFences(pigment->device->logical_device, 1, &fence, VK_TRUE, UINT64_MAX);
-        vkResetFences(pigment->device->logical_device, 1, &fence);
+        PPresentSync* presentation = &frame->sync->presentations[current_frame];
+        VkResult result            = VK_SUCCESS;
+        if(presentation->pending)
+        {
+            result = vkWaitForFences(pigment->device->logical_device, 1, &presentation->fence, VK_TRUE, UINT64_MAX);
+            if(device_result(pigment, result) != PIGMENT_SUCCESS)
+            {
+                PLOG_ERROR(pigment, "Failed to wait for presentation (result: %d)", result);
+                return device_result(pigment, result);
+            }
+            presentation->pending = P_FALSE;
+        }
+
+        result = vkResetFences(pigment->device->logical_device, 1, &presentation->fence);
+        if(device_result(pigment, result) != PIGMENT_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Failed to reset presentation fence (result: %d)", result);
+            return device_result(pigment, result);
+        }
         present_fence_info.sType          = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
         present_fence_info.swapchainCount = 1;
-        present_fence_info.pFences        = &frame->sync->present_fences[current_frame];
+        present_fence_info.pFences        = &presentation->fence;
         present_pnext                     = &present_fence_info;
     }
 
@@ -832,6 +858,17 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
     };
 
     VkResult result = vkQueuePresentKHR(frame->swapchain->present_queue, &present_info);
+    if(result == VK_ERROR_OUT_OF_HOST_MEMORY || result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
+    {
+        // Nothing was queued. Keep the frame and its present semaphore for a retry.
+        PLOG_ERROR(pigment, "Failed to queue presentation (result: %d)", result);
+        return device_result(pigment, result);
+    }
+
+    if(frame->sync->presentations != NULL)
+    {
+        frame->sync->presentations[current_frame].pending = P_TRUE;
+    }
     if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         frame->swapchain->out_of_date = P_TRUE;
@@ -842,11 +879,18 @@ void pigment_present_frame(Pigment* pigment, PFrame* frame)
     }
     if(result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR)
     {
-        PLOG_ERROR(pigment, "Failed to present swap chain image!");
+        PLOG_ERROR(pigment, "Failed to present swapchain image (result: %d)", result);
     }
 
     frame->active = P_FALSE;
     resource_tracker_release(pigment, &frame->swapchain->tracker);
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        return PIGMENT_RECREATE_REQUIRED;
+    }
+
+    return device_result(pigment, result);
 }
 
 PResult pigment_cancel_frame(Pigment* pigment, PFrame* frame)
@@ -861,7 +905,7 @@ PResult pigment_cancel_frame(Pigment* pigment, PFrame* frame)
     }
 
     PResult result = wait_acquisition(pigment, frame->sync, frame->slot, UINT64_MAX);
-    if(result != PIGMENT_SUCCESS)
+    if(result != PIGMENT_SUCCESS && result != PIGMENT_ERROR_DEVICE_LOST)
     {
         return result;
     }
@@ -876,7 +920,7 @@ PResult pigment_cancel_frame(Pigment* pigment, PFrame* frame)
 
     resource_tracker_release(pigment, &frame->swapchain->tracker);
 
-    return PIGMENT_SUCCESS;
+    return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_SUCCESS;
 }
 
 void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op)

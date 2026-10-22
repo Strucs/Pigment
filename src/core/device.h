@@ -55,6 +55,20 @@ PIGMENT_API uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags)
  */
 PIGMENT_API PDeviceLimits pigment_device_limits(Pigment* pigment);
 
+/**
+ * @brief Check whether Pigment has observed device loss.
+ *
+ * This state is permanent and can be queried from any thread. Stop GPU work,
+ * cancel active frames, release owned resources and destroy the instance.
+ * GPU results are invalid. Completion checks return P_FALSE, but cancellation
+ * can close frames and deferred destruction can proceed. Recorded references remain retained.
+ *
+ * @param pigment Pigment instance.
+ *
+ * @return P_TRUE after device loss, otherwise P_FALSE.
+ */
+PIGMENT_API PBool pigment_device_lost(const Pigment* pigment);
+
 #ifdef __cplusplus
 }
 #endif

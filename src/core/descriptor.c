@@ -178,7 +178,7 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
     }
 
     VkResult result = vkCreateDescriptorSetLayout(pigment->device->logical_device, &layout_info, &pigment->vk_alloc, &layout->layout);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create descriptor set layout (result: %d)", result);
         goto ERROR;
@@ -249,7 +249,7 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
     };
 
     VkResult result = vkCreateDescriptorPool(pigment->device->logical_device, &pool_info, &pigment->vk_alloc, &pool->pool);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create descriptor pool (result: %d)", result);
         goto ERROR;
@@ -322,7 +322,7 @@ void pigment_reset_descriptor_pool(Pigment* pigment, PDescriptorPool* pool)
     }
 
     VkResult result = vkResetDescriptorPool(pigment->device->logical_device, pool->pool, 0);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to reset descriptor pool (result: %d)", result);
         return;
@@ -454,10 +454,9 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
     };
 
     VkResult result = vkAllocateDescriptorSets(pigment->device->logical_device, &alloc_info, vk_sets);
-    if(result != VK_SUCCESS)
+    if((status = device_result(pigment, result)) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to allocate descriptor sets (count=%u, result: %d)", count, result);
-        status = PIGMENT_ERROR_VULKAN;
         goto FREE;
     }
 

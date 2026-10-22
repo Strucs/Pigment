@@ -172,7 +172,7 @@ void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool)
     pigment_collect_command_pool(pigment, pool);
 
     VkResult result = vkResetCommandPool(pigment->device->logical_device, pool->pool, 0);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to reset command pool (result: %d)", result);
         return;
@@ -214,10 +214,9 @@ PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCo
     };
 
     VkResult result = vkAllocateCommandBuffers(pigment->device->logical_device, &alloc_info, vk_cmds);
-    if(result != VK_SUCCESS)
+    if((status = device_result(pigment, result)) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to allocate command buffers (count=%u, result: %d)", count, result);
-        status = PIGMENT_ERROR_VULKAN;
         goto FREE;
     }
     vk_allocated = P_TRUE;
@@ -341,8 +340,9 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
     }
 
     VkResult result = vkBeginCommandBuffer(cmd->buffer, &begin_info);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
+        cmd->recording_failed = P_TRUE;
         PLOG_ERROR(pigment, "Failed to begin command buffer recording (result: %d)", result);
     }
     else
@@ -395,8 +395,9 @@ void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd)
         return;
     }
     VkResult result = vkEndCommandBuffer(cmd->buffer);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
+        cmd->recording_failed = P_TRUE;
         PLOG_ERROR(pigment, "Failed to end command buffer recording (result: %d)", result);
     }
 }
@@ -411,6 +412,11 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
     if(pigment == NULL || submits == NULL || submit_count == 0)
     {
         return PIGMENT_ERROR;
+    }
+
+    if(pigment_device_lost(pigment))
+    {
+        return PIGMENT_ERROR_DEVICE_LOST;
     }
 
     PDeviceQueue* graphics_default = device_find_queue(pigment->device, P_QUEUE_GRAPHICS_BIT);
@@ -610,7 +616,7 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
         }
 
         result = vkQueueSubmit2(queue->queue, end - i, &submit_infos[i], VK_NULL_HANDLE);
-        if(result != VK_SUCCESS)
+        if(device_result(pigment, result) != PIGMENT_SUCCESS)
         {
             break;
         }
@@ -645,10 +651,10 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
     P_STACK_OR_HEAP_FREE(pigment, waits);
     P_STACK_OR_HEAP_FREE(pigment, handles);
 
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to batch submit command buffers (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
+        return device_result(pigment, result);
     }
 
     return PIGMENT_SUCCESS;
@@ -666,8 +672,14 @@ PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle)
         return P_TRUE;
     }
 
+    if(pigment_device_lost(pigment))
+    {
+        return P_FALSE;
+    }
+
     uint64_t current = 0;
-    if(vkGetSemaphoreCounterValue(pigment->device->logical_device, handle.queue->timeline, &current) != VK_SUCCESS)
+    VkResult result  = vkGetSemaphoreCounterValue(pigment->device->logical_device, handle.queue->timeline, &current);
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         return P_FALSE;
     }
@@ -695,13 +707,13 @@ PResult pigment_submit_wait(Pigment* pigment, PSubmitHandle handle)
     };
 
     VkResult result = vkWaitSemaphores(pigment->device->logical_device, &wait_info, UINT64_MAX);
-    if(result != VK_SUCCESS)
+    PResult status  = device_result(pigment, result);
+    if(status != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to wait for submit (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
     }
 
-    return PIGMENT_SUCCESS;
+    return status == PIGMENT_SUCCESS && pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : status;
 }
 
 static void retire_command_buffers(Pigment* pigment, void* resource)
@@ -824,7 +836,7 @@ static VkCommandPool create_vk_command_pool(Pigment* pigment, uint32_t queue_fam
     };
 
     VkResult result = vkCreateCommandPool(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &command_pool);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create command pool! (result: %d)", result);
         return NULL;
@@ -1047,7 +1059,7 @@ void pigment_resource_tracker_destroy(Pigment* pigment, PResourceTracker* tracke
 
 PBool resource_tracker_idle(Pigment* pigment, const PResourceTracker* tracker)
 {
-    if(pigment == NULL || tracker == NULL || atomic_load_explicit(&tracker->references, memory_order_acquire) != 1)
+    if(pigment == NULL || tracker == NULL || pigment_device_lost(pigment) || atomic_load_explicit(&tracker->references, memory_order_acquire) != 1)
     {
         return P_FALSE;
     }
@@ -1117,13 +1129,13 @@ PResult pigment_resource_tracker_wait(Pigment* pigment, const PResourceTracker* 
     P_STACK_OR_HEAP_FREE(pigment, semaphores);
     P_STACK_OR_HEAP_FREE(pigment, values);
 
-    if(result != VK_SUCCESS)
+    PResult status = device_result(pigment, result);
+    if(status != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to wait for tracked submissions (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
     }
 
-    return PIGMENT_SUCCESS;
+    return status == PIGMENT_SUCCESS && pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : status;
 }
 
 PResourceTracker* pigment_create_resource_tracker(Pigment* pigment)

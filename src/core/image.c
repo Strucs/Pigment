@@ -848,7 +848,7 @@ void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, c
     };
 
     VkResult result = vkCopyMemoryToImageEXT(pigment->device->logical_device, &info);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "vkCopyMemoryToImage failed (result: %d)", result);
     }
@@ -895,7 +895,7 @@ void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, co
     };
 
     VkResult result = vkCopyImageToMemoryEXT(pigment->device->logical_device, &info);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "vkCopyImageToMemory failed (result: %d)", result);
     }
@@ -941,7 +941,7 @@ void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition*
     if(valid > 0)
     {
         VkResult result = vkTransitionImageLayoutEXT(pigment->device->logical_device, valid, vk_transitions);
-        if(result != VK_SUCCESS)
+        if(device_result(pigment, result) != PIGMENT_SUCCESS)
         {
             PLOG_ERROR(pigment, "vkTransitionImageLayout failed (result: %d)", result);
         }
@@ -976,10 +976,10 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
     PVkAllocator* alloc = pigment->gpu_allocator;
 
     VkResult result = alloc->create_image(alloc->user_data, &image_create_info, alloc_info, &image->image, &image->image_allocation);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_TRACE(pigment, "Failed to create image (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
+        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR_VULKAN;
     }
 
     set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_IMAGE, (uint64_t) image->image, image->name);
@@ -1004,8 +1004,8 @@ VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType v
         .subresourceRange.layerCount     = layer_count,
     };
 
-    VkResult result;
-    if((result = vkCreateImageView(device, &view_create_info, &pigment->vk_alloc, &image_view)) != VK_SUCCESS)
+    VkResult result = vkCreateImageView(device, &view_create_info, &pigment->vk_alloc, &image_view);
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create image view! (result: %d)", result);
         return NULL;
@@ -1232,7 +1232,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
 
     if(create_vk_image(pigment, image, width, height, tiling, &alloc_info) != PIGMENT_SUCCESS)
     {
-        return PIGMENT_ERROR_VULKAN;
+        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR_VULKAN;
     }
 
     image->width        = width;
@@ -1246,8 +1246,9 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
         vkGetImageSubresourceLayout(pigment->device->logical_device, image->image, &subresource, &layout);
         image->row_pitch = (uint64_t) layout.rowPitch;
 
-        void* base = NULL;
-        if(pigment->gpu_allocator->map(pigment->gpu_allocator->user_data, image->image_allocation, &base) == VK_SUCCESS && base != NULL)
+        void* base      = NULL;
+        VkResult result = pigment->gpu_allocator->map(pigment->gpu_allocator->user_data, image->image_allocation, &base);
+        if(device_result(pigment, result) == PIGMENT_SUCCESS && base != NULL)
         {
             image->mapped = (char*) base + layout.offset;
         }
@@ -1261,7 +1262,7 @@ static PResult allocate_resources(Pigment* pigment, PImage* image, uint32_t widt
         pigment->gpu_allocator->destroy_image(pigment->gpu_allocator->user_data, image->image, image->image_allocation);
         image->image            = VK_NULL_HANDLE;
         image->image_allocation = NULL;
-        return PIGMENT_ERROR_VULKAN;
+        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR_VULKAN;
     }
 
     return PIGMENT_SUCCESS;

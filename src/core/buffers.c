@@ -78,7 +78,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
     PVkAllocator* alloc = pigment->gpu_allocator;
     VkResult result     = alloc->create_buffer(alloc->user_data, &buffer_create_info, &alloc_info, &buffer->buffer, &buffer->allocation);
     P_STACK_OR_HEAP_FREE(pigment, families);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);
         pigment_resource_tracker_destroy(pigment, &buffer->tracker);
@@ -94,7 +94,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
     if(buffer->memory_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
         result = alloc->map(alloc->user_data, buffer->allocation, &buffer->mapped);
-        if(result != VK_SUCCESS)
+        if(device_result(pigment, result) != PIGMENT_SUCCESS)
         {
             PLOG_ERROR(pigment, "Failed to map buffer (result: %d)", result);
             alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);

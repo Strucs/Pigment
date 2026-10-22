@@ -47,8 +47,8 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 
     if(pigment_has_swapchain_maintenance1(pigment))
     {
-        sync->present_fences = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->present_fences, max_frame);
-        if(sync->present_fences == NULL)
+        sync->presentations = P_NEW_ARRAY_FOR_OBJECT(pigment, sync->presentations, max_frame);
+        if(sync->presentations == NULL)
         {
             goto ERROR;
         }
@@ -71,10 +71,10 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
             goto ERROR;
         }
 
-        if(sync->present_fences != NULL)
+        if(sync->presentations != NULL)
         {
-            sync->present_fences[i] = create_fence(pigment);
-            if(sync->present_fences[i] == NULL)
+            sync->presentations[i].fence = create_fence(pigment);
+            if(sync->presentations[i].fence == NULL)
             {
                 PLOG_ERROR(pigment, "Failed to create synchronization objects");
                 goto ERROR;
@@ -113,16 +113,16 @@ ERROR:
                 vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
             }
         }
-        if(sync->present_fences != NULL)
+        if(sync->presentations != NULL)
         {
             for(size_t i = 0; i < max_frame; i++)
             {
-                if(sync->present_fences[i] != NULL)
+                if(sync->presentations[i].fence != NULL)
                 {
-                    vkDestroyFence(device->logical_device, sync->present_fences[i], &pigment->vk_alloc);
+                    vkDestroyFence(device->logical_device, sync->presentations[i].fence, &pigment->vk_alloc);
                 }
             }
-            P_FREE(pigment, sync->present_fences);
+            P_FREE(pigment, sync->presentations);
         }
 
         P_FREE(pigment, sync->render_finished_semaphores);
@@ -144,9 +144,9 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
     {
         vkDestroySemaphore(device->logical_device, sync->acquisitions[i].semaphore, &pigment->vk_alloc);
         vkDestroyFence(device->logical_device, sync->acquisitions[i].fence, &pigment->vk_alloc);
-        if(sync->present_fences != NULL)
+        if(sync->presentations != NULL)
         {
-            vkDestroyFence(device->logical_device, sync->present_fences[i], &pigment->vk_alloc);
+            vkDestroyFence(device->logical_device, sync->presentations[i].fence, &pigment->vk_alloc);
         }
     }
 
@@ -155,7 +155,7 @@ void destroy_sync(Pigment* pigment, PSync* sync, PSwapchain* swapchain, const ui
         vkDestroySemaphore(device->logical_device, sync->render_finished_semaphores[i], &pigment->vk_alloc);
     }
 
-    P_FREE(pigment, sync->present_fences);
+    P_FREE(pigment, sync->presentations);
     P_FREE(pigment, sync->render_finished_semaphores);
     P_FREE(pigment, sync->acquisitions);
     P_FREE(pigment, sync);
@@ -175,14 +175,19 @@ PResult wait_acquisition(Pigment* pigment, PSync* sync, uint32_t slot, uint64_t 
         return timeout_ns == 0 ? PIGMENT_NOT_READY : PIGMENT_TIMEOUT;
     }
 
-    if(result != VK_SUCCESS)
+    if(result == VK_ERROR_DEVICE_LOST)
+    {
+        acquisition->pending = P_FALSE;
+    }
+
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to wait for acquisition (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
+        return device_result(pigment, result);
     }
 
     acquisition->pending = P_FALSE;
-    return PIGMENT_SUCCESS;
+    return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_SUCCESS;
 }
 
 static VkSemaphore create_semaphore(Pigment* pigment)
@@ -191,8 +196,8 @@ static VkSemaphore create_semaphore(Pigment* pigment)
 
     VkSemaphoreCreateInfo semaphore_create_info = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
 
-    VkResult result;
-    if((result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, &pigment->vk_alloc, &semaphore)) != VK_SUCCESS)
+    VkResult result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, &pigment->vk_alloc, &semaphore);
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create semaphore (result: %d)", result);
         return NULL;
@@ -210,8 +215,8 @@ static VkFence create_fence(Pigment* pigment)
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
 
-    VkResult result;
-    if((result = vkCreateFence(pigment->device->logical_device, &fence_create_info, &pigment->vk_alloc, &fence)) != VK_SUCCESS)
+    VkResult result = vkCreateFence(pigment->device->logical_device, &fence_create_info, &pigment->vk_alloc, &fence);
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create fence (result: %d)", result);
         return NULL;

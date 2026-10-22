@@ -33,6 +33,7 @@ Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
         return NULL;
     }
     memset(pigment, 0, sizeof(*pigment));
+    atomic_init(&pigment->device_lost, P_FALSE);
     pigment->cpu_allocator = cpu_alloc;
 
     if(pigment_log_init(pigment) != PIGMENT_SUCCESS)
@@ -103,7 +104,7 @@ void destroy_pigment(Pigment* pigment)
     }
 
     PResult result = device_wait_idle(pigment);
-    if(result != PIGMENT_SUCCESS)
+    if(result != PIGMENT_SUCCESS && result != PIGMENT_ERROR_DEVICE_LOST)
     {
         PLOG_ERROR(pigment, "Device wait idle failed during destroy (result: %d). Continuing.", result);
     }
@@ -124,12 +125,12 @@ void destroy_pigment(Pigment* pigment)
 PResult pigment_wait_idle(Pigment* pigment)
 {
     PResult result = device_wait_idle(pigment);
-    if(result != PIGMENT_SUCCESS)
+    if(result != PIGMENT_SUCCESS && result != PIGMENT_ERROR_DEVICE_LOST)
     {
         return result;
     }
     drain_deletion_queue(pigment);
-    return PIGMENT_SUCCESS;
+    return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_SUCCESS;
 }
 
 PBool pigment_supports(Pigment* pigment, PFeature feature)

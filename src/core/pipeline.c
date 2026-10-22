@@ -334,7 +334,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
     status                   = PIGMENT_ERROR_VULKAN;
     VkPipelineCache vk_cache = (cache != NULL) ? cache->cache : VK_NULL_HANDLE;
     VkResult result          = vkCreateGraphicsPipelines(device, vk_cache, count, pipeline_create_infos, &pigment->vk_alloc, vk_pipelines);
-    if(result != VK_SUCCESS)
+    if((status = device_result(pigment, result)) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create graphics pipelines! (result: %d)", result);
         for(uint32_t i = 0; i < count; i++)
@@ -459,7 +459,7 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
     status                   = PIGMENT_ERROR_VULKAN;
     VkPipelineCache vk_cache = (cache != NULL) ? cache->cache : VK_NULL_HANDLE;
     VkResult result          = vkCreateComputePipelines(device, vk_cache, count, pipeline_create_infos, &pigment->vk_alloc, vk_pipelines);
-    if(result != VK_SUCCESS)
+    if((status = device_result(pigment, result)) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create compute pipelines! (result: %d)", result);
         for(uint32_t i = 0; i < count; i++)
@@ -832,11 +832,11 @@ PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data
     };
 
     VkResult result = vkCreatePipelineCache(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &cache->cache);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create pipeline cache (result: %d)", result);
         P_FREE(pigment, cache);
-        return PIGMENT_ERROR_VULKAN;
+        return device_result(pigment, result);
     }
 
     *out = cache;
@@ -870,7 +870,7 @@ PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache,
     if(result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
         PLOG_ERROR(pigment, "Failed to query pipeline cache data (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
+        return device_result(pigment, result);
     }
 
     return PIGMENT_SUCCESS;
@@ -919,7 +919,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
 
     P_FREE(pigment, vk_set_layouts);
 
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create pipeline layout! (result: %d)", result);
         return NULL;

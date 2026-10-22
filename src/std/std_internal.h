@@ -22,6 +22,7 @@
 #include "buffer_version.h"
 
 #include <stdatomic.h>
+#include <stddef.h>
 
 #define PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY 8
 

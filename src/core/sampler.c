@@ -73,7 +73,7 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
     };
 
     VkResult result = vkCreateSampler(device->logical_device, &sampler_create_info, &pigment->vk_alloc, &sampler->sampler);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to create sampler! (result: %d)", result);
         pigment_resource_tracker_destroy(pigment, &sampler->tracker);

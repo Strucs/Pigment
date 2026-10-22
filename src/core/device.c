@@ -1006,6 +1006,31 @@ void destroy_device(Pigment* pigment)
     P_FREE(pigment, device);
 }
 
+PBool pigment_device_lost(const Pigment* pigment)
+{
+    return pigment != NULL && atomic_load_explicit(&pigment->device_lost, memory_order_relaxed);
+}
+
+void device_record_loss(Pigment* pigment, VkResult result)
+{
+    if(result == VK_ERROR_DEVICE_LOST)
+    {
+        atomic_store_explicit(&pigment->device_lost, P_TRUE, memory_order_relaxed);
+    }
+}
+
+PResult device_result(Pigment* pigment, VkResult result)
+{
+    device_record_loss(pigment, result);
+
+    if(result == VK_ERROR_DEVICE_LOST)
+    {
+        return PIGMENT_ERROR_DEVICE_LOST;
+    }
+
+    return result == VK_SUCCESS ? PIGMENT_SUCCESS : PIGMENT_ERROR_VULKAN;
+}
+
 PResult device_wait_idle(Pigment* pigment)
 {
     if(pigment == NULL || pigment->device == NULL)
@@ -1014,13 +1039,12 @@ PResult device_wait_idle(Pigment* pigment)
     }
 
     VkResult result = vkDeviceWaitIdle(pigment->device->logical_device);
-    if(result != VK_SUCCESS)
+    if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
         PLOG_ERROR(pigment, "Failed to wait for device (result: %d)", result);
-        return PIGMENT_ERROR_VULKAN;
     }
 
-    return PIGMENT_SUCCESS;
+    return device_result(pigment, result);
 }
 
 VkInstance pigment_vk_instance(Pigment* pigment)

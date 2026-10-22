@@ -169,12 +169,15 @@ PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFram
  * Call after a successful pigment_queue_submit with signal_present set.
  * Replaced or out-of-date swapchains only close the context, without presenting.
  * Their resources remain alive until recorded and submitted uses finish.
+ * If fence preparation or queue allocation fails, the context stays active for retry or cancellation.
  * Caller must synchronize access to the frame, renderer and present queue.
  *
  * @param pigment Pigment instance.
  * @param frame Submitted frame.
+ *
+ * @return PIGMENT_SUCCESS, PIGMENT_RECREATE_REQUIRED, or an error code.
  */
-PIGMENT_API void pigment_present_frame(Pigment* pigment, PFrame* frame);
+PIGMENT_API PResult pigment_present_frame(Pigment* pigment, PFrame* frame);
 
 /**
  * @brief Cancel a frame without submitting or presenting.

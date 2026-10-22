@@ -54,11 +54,11 @@ PIGMENT_API void destroy_pigment(Pigment* pigment);
 /**
  * @brief Wait for submitted GPU work, then collect ready deferred destructions.
  *
- * Recorded references remain retained. On failure, pending destructions are left queued.
+ * Recorded references remain retained.
  *
  * @param pigment Pigment instance.
  *
- * @return PIGMENT_SUCCESS on completion or no-op, otherwise PIGMENT_ERROR_VULKAN.
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise an error code.
  */
 PIGMENT_API PResult pigment_wait_idle(Pigment* pigment);
 

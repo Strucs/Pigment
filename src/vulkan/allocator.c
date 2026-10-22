@@ -196,8 +196,8 @@ static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_
         .pNext           = &flags_info
     };
 
-    VkResult result;
-    if((result = vkAllocateMemory(alloc->device, &alloc_info, &alloc->pigment->vk_alloc, &block->memory)) != VK_SUCCESS)
+    VkResult result = vkAllocateMemory(alloc->device, &alloc_info, &alloc->pigment->vk_alloc, &block->memory);
+    if(device_result(alloc->pigment, result) != PIGMENT_SUCCESS)
     {
         uint32_t type_bit = 1U << memory_type_index;
         if((alloc->logged_failure_mask & type_bit) == 0)
@@ -212,7 +212,7 @@ static DefaultBlock* create_block(DefaultAllocator* alloc, uint32_t memory_type_
 
     if(memory_type_is_host_visible(&alloc->memory_properties, memory_type_index))
     {
-        if(vkMapMemory(alloc->device, block->memory, 0, VK_WHOLE_SIZE, 0, &block->mapped) != VK_SUCCESS)
+        if(device_result(alloc->pigment, vkMapMemory(alloc->device, block->memory, 0, VK_WHOLE_SIZE, 0, &block->mapped)) != PIGMENT_SUCCESS)
         {
             block->mapped = NULL;
         }
@@ -395,8 +395,8 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
 
     VkDeviceMemory memory = VK_NULL_HANDLE;
 
-    VkResult result;
-    if((result = vkAllocateMemory(alloc->device, &info, &alloc->pigment->vk_alloc, &memory)) != VK_SUCCESS)
+    VkResult result = vkAllocateMemory(alloc->device, &info, &alloc->pigment->vk_alloc, &memory);
+    if(device_result(alloc->pigment, result) != PIGMENT_SUCCESS)
     {
         uint32_t type_bit = 1U << memory_type_index;
         if((alloc->logged_failure_mask & type_bit) == 0)
@@ -410,7 +410,7 @@ static PVkAllocation* allocate_dedicated(DefaultAllocator* alloc, VkDeviceSize s
     void* mapped = NULL;
     if(memory_type_is_host_visible(&alloc->memory_properties, memory_type_index))
     {
-        if(vkMapMemory(alloc->device, memory, 0, VK_WHOLE_SIZE, 0, &mapped) != VK_SUCCESS)
+        if(device_result(alloc->pigment, vkMapMemory(alloc->device, memory, 0, VK_WHOLE_SIZE, 0, &mapped)) != PIGMENT_SUCCESS)
         {
             mapped = NULL;
         }
@@ -737,7 +737,7 @@ static void default_flush(void* user_data, PVkAllocation* allocation, VkDeviceSi
     {
         return;
     }
-    vkFlushMappedMemoryRanges(alloc->device, 1, &range);
+    device_record_loss(alloc->pigment, vkFlushMappedMemoryRanges(alloc->device, 1, &range));
 }
 
 static void default_invalidate(void* user_data, PVkAllocation* allocation, VkDeviceSize offset, VkDeviceSize size)
@@ -748,7 +748,7 @@ static void default_invalidate(void* user_data, PVkAllocation* allocation, VkDev
     {
         return;
     }
-    vkInvalidateMappedMemoryRanges(alloc->device, 1, &range);
+    device_record_loss(alloc->pigment, vkInvalidateMappedMemoryRanges(alloc->device, 1, &range));
 }
 
 static void default_destroy(void* user_data)

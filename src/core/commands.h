@@ -243,7 +243,7 @@ PIGMENT_API PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submit
  * @param pigment Pigment instance.
  * @param handle Submit handle returned by pigment_queue_submit.
  *
- * @return P_TRUE if the submit is complete, P_FALSE otherwise.
+ * @return P_TRUE if the submit is complete, P_FALSE if pending or on failure.
  */
 PIGMENT_API PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle);
 
@@ -253,7 +253,7 @@ PIGMENT_API PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle
  * @param pigment Pigment instance.
  * @param handle Submit handle returned by pigment_queue_submit.
  *
- * @return PIGMENT_SUCCESS on completion or no-op, otherwise PIGMENT_ERROR_VULKAN.
+ * @return PIGMENT_SUCCESS on completion or no-op, otherwise an error code.
  */
 PIGMENT_API PResult pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
 

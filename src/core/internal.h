@@ -230,6 +230,8 @@ PBool find_graphics_family(Pigment* pigment, VkPhysicalDevice device, uint32_t* 
 PBool device_supports_surface(VkPhysicalDevice device, uint32_t family_index, VkSurfaceKHR surface);
 PDeviceQueue* device_find_queue(PDevice* device, PQueueFlags required);
 PResult device_wait_idle(Pigment* pigment);
+void device_record_loss(Pigment* pigment, VkResult result);
+PResult device_result(Pigment* pigment, VkResult result);
 
 static inline uint64_t device_queue_acquire_value(PDeviceQueue* queue)
 {
