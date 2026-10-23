@@ -683,6 +683,7 @@ int main(void)
         for(;;)
         {
             pigment_wait_frame_ready(test.pigment, test.renderer, sequence % slot_count);
+            pigment_drain_pending(test.pigment);
             const uint64_t timeouts[] = {0, 1000000, UINT64_MAX};
             uint64_t timeout          = timeouts[sequence % 3];
             uint32_t slot             = sequence % slot_count;

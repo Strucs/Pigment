@@ -108,9 +108,10 @@ struct PRenderPassDesc {
 PIGMENT_API PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot);
 
 /**
- * @brief Acquire a frame and drain pending deletions.
+ * @brief Acquire a frame.
  *
- * The caller must wait for prior GPU use of the slot and synchronize renderer, frame and queue access.
+ * The caller must wait for prior GPU use of the slot and synchronize renderer and frame access.
+ * Call pigment_drain_pending separately to collect deferred destructions.
  * Contexts survive swapchain recreation. Present or cancel them before destroying the renderer.
  *
  * @param pigment Pigment instance.

@@ -61,7 +61,7 @@ PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn dest
 /**
  * @brief Run pending destroys whose GPU work has completed.
  *
- * Also called by pigment_begin_frame_context and pigment_wait_idle.
+ * Also called by pigment_wait_idle.
  * May block while waiting for presentation to finish. Serialize this call with
  * submissions and presentation on all queues.
  *

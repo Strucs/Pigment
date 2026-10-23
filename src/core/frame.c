@@ -18,7 +18,6 @@
 
 #include "cmd_sync.h"
 #include "commands.h"
-#include "deletion.h"
 #include "image.h"
 #include "surface.h"
 #include "synchronization.h"
@@ -60,13 +59,6 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
     if(renderer->frames[slot].active)
     {
         return PIGMENT_NOT_READY;
-    }
-
-    drain_deletion_queue(pigment);
-
-    if(pigment_device_lost(pigment))
-    {
-        return PIGMENT_ERROR_DEVICE_LOST;
     }
 
     if(renderer->needs_recreate)

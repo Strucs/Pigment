@@ -488,6 +488,7 @@ int main(void)
         }
 
         pigment_wait_frame_ready(pigment, renderer, frame_slot);
+        pigment_drain_pending(pigment);
 
         PFrame* frame;
         PResult acquire_result = pigment_begin_frame_context(pigment, renderer, frame_slot, UINT64_MAX, &frame);
