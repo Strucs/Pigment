@@ -664,12 +664,12 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
 
     uint32_t graphics_family_index = graphics->family_index;
     uint32_t present_family_index  = UINT32_MAX;
-    VkQueue present_queue          = VK_NULL_HANDLE;
+    PDeviceQueue* present_queue    = NULL;
 
     if(device_supports_surface(device->physical_device, graphics_family_index, surface->surface))
     {
         present_family_index = graphics_family_index;
-        present_queue        = graphics->queue;
+        present_queue        = graphics;
     }
     else
     {
@@ -683,12 +683,12 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
             if(device_supports_surface(device->physical_device, device->queues[i].family_index, surface->surface))
             {
                 present_family_index = device->queues[i].family_index;
-                present_queue        = device->queues[i].queue;
+                present_queue        = &device->queues[i];
                 break;
             }
         }
 
-        if(present_queue == VK_NULL_HANDLE)
+        if(present_queue == NULL)
         {
             PLOG_ERROR(pigment, "No queue family on the picked GPU supports presentation on this surface");
             goto ERROR;
@@ -1102,5 +1102,5 @@ VkSwapchainKHR pigment_vk_swapchain(PWindowRenderer* renderer)
 
 VkQueue pigment_vk_present_queue(PWindowRenderer* renderer)
 {
-    return (renderer != NULL && renderer->swapchain != NULL) ? renderer->swapchain->present_queue : VK_NULL_HANDLE;
+    return (renderer != NULL && renderer->swapchain != NULL) ? renderer->swapchain->present_queue->queue : VK_NULL_HANDLE;
 }

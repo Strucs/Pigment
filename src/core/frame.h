@@ -135,6 +135,15 @@ PIGMENT_API PResult pigment_begin_frame_context(Pigment* pigment, PWindowRendere
 PIGMENT_API uint32_t pigment_frame_slot(const PFrame* frame);
 
 /**
+ * @brief Get the frame's presentation queue.
+ *
+ * @param frame Frame context.
+ *
+ * @return Presentation queue, or NULL for a NULL or inactive frame.
+ */
+PIGMENT_API PDeviceQueue* pigment_frame_present_queue(const PFrame* frame);
+
+/**
  * @brief Get the acquired image for explicit image commands.
  *
  * @param frame Frame context.

@@ -150,6 +150,11 @@ uint32_t pigment_frame_slot(const PFrame* frame)
     return frame != NULL && frame->active ? frame->slot : UINT32_MAX;
 }
 
+PDeviceQueue* pigment_frame_present_queue(const PFrame* frame)
+{
+    return frame != NULL && frame->active ? frame->swapchain->present_queue : NULL;
+}
+
 PImage* pigment_frame_image(const PFrame* frame)
 {
     if(frame == NULL || !frame->active || frame->swapchain->image_wrappers == NULL)
@@ -849,7 +854,7 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
         .pImageIndices      = &image_index
     };
 
-    VkResult result = vkQueuePresentKHR(frame->swapchain->present_queue, &present_info);
+    VkResult result = vkQueuePresentKHR(frame->swapchain->present_queue->queue, &present_info);
     if(result == VK_ERROR_OUT_OF_HOST_MEMORY || result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
     {
         // Nothing was queued. Keep the frame and its present semaphore for a retry.
