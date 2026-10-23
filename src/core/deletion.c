@@ -64,6 +64,7 @@ typedef struct PDeletionTsd {
     PDeletionQueue* queue;
     PDeletionNode* private_free;
     struct PDeletionTsd* next;
+    _Atomic PBool in_use;
 } PDeletionTsd;
 
 struct PDeletionQueue {
@@ -80,6 +81,7 @@ static PBool entry_ready(Pigment* pigment, const PDeletionNode* node);
 static void collect_active_targets(Pigment* pigment, PDeletionNode* node);
 static void prepend_chain(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
 static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
+static PDeletionTsd* acquire_tsd(Pigment* pigment, PDeletionQueue* queue);
 static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue);
 static PDeletionNode* allocate_chunk(Pigment* pigment, PDeletionQueue* queue);
 static void tsd_destructor(void* ptr);
@@ -517,30 +519,56 @@ static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head
     while(!atomic_compare_exchange_weak_explicit(&queue->shared_free, &old_head, chain_head, memory_order_release, memory_order_relaxed));
 }
 
+static PDeletionTsd* acquire_tsd(Pigment* pigment, PDeletionQueue* queue)
+{
+    PDeletionTsd* tsd = atomic_load_explicit(&queue->tsds, memory_order_acquire);
+    while(tsd != NULL)
+    {
+        PBool in_use = P_FALSE;
+        if(atomic_compare_exchange_strong_explicit(&tsd->in_use, &in_use, P_TRUE, memory_order_acquire, memory_order_relaxed))
+        {
+            if(pigment_tsd_set(queue->tsd, tsd) != 0)
+            {
+                atomic_store_explicit(&tsd->in_use, P_FALSE, memory_order_release);
+                return NULL;
+            }
+
+            return tsd;
+        }
+
+        tsd = tsd->next;
+    }
+
+    tsd = P_NEW_FOR_INSTANCE(pigment, tsd);
+    if(tsd == NULL)
+    {
+        return NULL;
+    }
+
+    tsd->queue = queue;
+    atomic_init(&tsd->in_use, P_TRUE);
+    if(pigment_tsd_set(queue->tsd, tsd) != 0)
+    {
+        P_FREE(pigment, tsd);
+        return NULL;
+    }
+
+    PDeletionTsd* head = atomic_load_explicit(&queue->tsds, memory_order_relaxed);
+    do
+    {
+        tsd->next = head;
+    }
+    while(!atomic_compare_exchange_weak_explicit(&queue->tsds, &head, tsd, memory_order_release, memory_order_relaxed));
+
+    return tsd;
+}
+
 static PDeletionNode* node_acquire(Pigment* pigment, PDeletionQueue* queue)
 {
     PDeletionTsd* tsd = pigment_tsd_get(queue->tsd);
     if(tsd == NULL)
     {
-        tsd = P_NEW_FOR_INSTANCE(pigment, tsd);
-        if(tsd != NULL)
-        {
-            tsd->queue = queue;
-            if(pigment_tsd_set(queue->tsd, tsd) != 0)
-            {
-                P_FREE(pigment, tsd);
-                tsd = NULL;
-            }
-            else
-            {
-                PDeletionTsd* head = atomic_load_explicit(&queue->tsds, memory_order_relaxed);
-                do
-                {
-                    tsd->next = head;
-                }
-                while(!atomic_compare_exchange_weak_explicit(&queue->tsds, &head, tsd, memory_order_release, memory_order_relaxed));
-            }
-        }
+        tsd = acquire_tsd(pigment, queue);
     }
 
     // Try to acquire a node from the thread-local private free list first.
@@ -596,6 +624,8 @@ static void tsd_destructor(void* ptr)
         prepend_shared_free(tsd->queue, tsd->private_free, tail);
         tsd->private_free = NULL;
     }
+
+    atomic_store_explicit(&tsd->in_use, P_FALSE, memory_order_release);
 }
 
 static PDeletionNode* allocate_chunk(Pigment* pigment, PDeletionQueue* queue)
