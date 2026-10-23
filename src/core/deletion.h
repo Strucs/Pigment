@@ -23,7 +23,15 @@ extern "C" {
 
 #include "defines.h"
 
-typedef void (*PDestroyFn)(Pigment*, void*);
+/**
+ * @brief Destroy a resource after its GPU uses have ended.
+ *
+ * May run immediately or during collection. Do not submit, present or wait for GPU work.
+ *
+ * @param pigment Pigment instance.
+ * @param resource Resource to destroy.
+ */
+typedef void (*PDestroyFn)(Pigment* pigment, void* resource);
 
 /**
  * @brief Destroy a custom resource after all currently submitted GPU work finishes.
@@ -61,13 +69,25 @@ PIGMENT_API void pigment_defer_destroy_tracked(Pigment* pigment, PDestroyFn dest
 /**
  * @brief Run pending destroys whose GPU work has completed.
  *
- * Also called by pigment_wait_idle.
+ * pigment_wait_idle also collects with the device already idle.
  * May block while waiting for presentation to finish. Serialize this call with
  * submissions and presentation on all queues.
  *
  * @param pigment Pigment instance.
  */
 PIGMENT_API void pigment_drain_pending(Pigment* pigment);
+
+/**
+ * @brief Collect ready destructions without waiting for GPU work.
+ *
+ * Unfinished GPU uses remain queued. Swapchains without presentation fences need
+ * pigment_drain_pending or pigment_wait_idle to be released.
+ *
+ * @param pigment Pigment instance.
+ *
+ * @return P_FALSE if a ready swapchain needs a global wait, otherwise P_TRUE.
+ */
+PIGMENT_API PBool pigment_try_drain_pending(Pigment* pigment);
 
 #ifdef __cplusplus
 }

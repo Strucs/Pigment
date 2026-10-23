@@ -129,7 +129,13 @@ PResult pigment_wait_idle(Pigment* pigment)
     {
         return result;
     }
-    drain_deletion_queue(pigment);
+    uint64_t destroyed_count;
+    do
+    {
+        drain_deletion_queue(pigment, P_DELETION_ALREADY_IDLE, &destroyed_count);
+    }
+    while(destroyed_count != 0);
+
     return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_SUCCESS;
 }
 

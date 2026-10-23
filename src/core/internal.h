@@ -284,9 +284,16 @@ void destroy_swapchain_callback_list(Pigment* pigment, PSwapchainCallbackList* l
 void dispatch_swapchain_recreate(Pigment* pigment, const PSwapchainRecreateEvent* event);
 
 // deletion.c
+
+typedef enum PDeletionMode {
+    P_DELETION_NO_WAIT,
+    P_DELETION_ALLOW_WAIT,
+    P_DELETION_ALREADY_IDLE,
+} PDeletionMode;
+
 PDeletionQueue* create_deletion_queue(Pigment* pigment);
 void destroy_deletion_queue(Pigment* pigment, PDeletionQueue* queue);
-void drain_deletion_queue(Pigment* pigment);
+PBool drain_deletion_queue(Pigment* pigment, PDeletionMode mode, uint64_t* destroyed_count);
 PDeletionNode* create_tracker_deletion(Pigment* pigment);
 PDeletionNode* create_resource_deletion(Pigment* pigment);
 void defer_destroy_node(Pigment* pigment, PDeletionNode* node, PDestroyFn destroy_fn, void* resource);

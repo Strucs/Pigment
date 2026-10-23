@@ -39,9 +39,15 @@ typedef struct PWaitTarget {
     };
 } PWaitTarget;
 
+typedef enum PDeletionState {
+    P_DELETION_PENDING,
+    P_DELETION_READY,
+    P_DELETION_WAIT_REQUIRED,
+} PDeletionState;
+
 typedef struct PDeletionEntry {
     PDestroyFn destroy_fn;
-    PBool (*ready_fn)(Pigment* pigment, void* resource);
+    PDeletionState (*ready_fn)(Pigment* pigment, void* resource);
     void* resource;
     PResourceTracker* tracker;
     void* ready_resource;
@@ -76,8 +82,8 @@ struct PDeletionQueue {
     uint64_t node_stride;
 };
 
-static PBool swapchain_ready(Pigment* pigment, void* resource);
-static PBool entry_ready(Pigment* pigment, const PDeletionNode* node);
+static PDeletionState swapchain_ready(Pigment* pigment, void* resource);
+static PDeletionState entry_ready(Pigment* pigment, const PDeletionNode* node);
 static void collect_active_targets(Pigment* pigment, PDeletionNode* node);
 static void prepend_chain(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
 static void prepend_shared_free(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail);
@@ -348,10 +354,9 @@ void prepare_swapchain_deletion(PSwapchain* swapchain)
     node->entry.ready_resource = swapchain;
 }
 
-static PBool swapchain_ready(Pigment* pigment, void* resource)
+static PDeletionState swapchain_ready(Pigment* pigment, void* resource)
 {
     const PSwapchain* swapchain = resource;
-    VkDevice device             = pigment->device->logical_device;
     PSync* sync                 = swapchain->sync;
 
     for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
@@ -371,24 +376,17 @@ static PBool swapchain_ready(Pigment* pigment, void* resource)
             PWaitTarget target = {.kind = P_WAIT_FENCE, .fence = fences[f]};
             if(!target_signaled(pigment, &target))
             {
-                return P_FALSE;
+                return P_DELETION_PENDING;
             }
         }
     }
 
-    if(sync->presentations == NULL)
+    if(sync->presentations == NULL && !pigment_device_lost(pigment))
     {
-        // Without presentation fences, wait for the device before destruction.
-        VkResult result = vkDeviceWaitIdle(device);
-        device_record_loss(pigment, result);
-        if(result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST)
-        {
-            PLOG_ERROR(pigment, "Failed to wait for swapchain destruction (result: %d)", result);
-            return P_FALSE;
-        }
+        return P_DELETION_WAIT_REQUIRED;
     }
 
-    return P_TRUE;
+    return P_DELETION_READY;
 }
 
 void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, void* resource, VkFence fence)
@@ -424,14 +422,24 @@ void pigment_vk_fence_defer_destroy(Pigment* pigment, PDestroyFn destroy_fn, voi
 
 void pigment_drain_pending(Pigment* pigment)
 {
-    drain_deletion_queue(pigment);
+    drain_deletion_queue(pigment, P_DELETION_ALLOW_WAIT, NULL);
 }
 
-void drain_deletion_queue(Pigment* pigment)
+PBool pigment_try_drain_pending(Pigment* pigment)
 {
+    return drain_deletion_queue(pigment, P_DELETION_NO_WAIT, NULL);
+}
+
+PBool drain_deletion_queue(Pigment* pigment, PDeletionMode mode, uint64_t* destroyed_count)
+{
+    if(destroyed_count != NULL)
+    {
+        *destroyed_count = 0;
+    }
+
     if(pigment == NULL || pigment->deletions == NULL)
     {
-        return;
+        return P_TRUE;
     }
 
     PDeletionQueue* queue = pigment->deletions;
@@ -452,6 +460,9 @@ void drain_deletion_queue(Pigment* pigment)
     PDeletionNode* not_ready_tail = NULL;
     PDeletionNode* ready_head     = NULL;
     PDeletionNode* ready_tail     = NULL;
+    PBool needs_wait              = P_FALSE;
+    PBool waited_idle             = mode == P_DELETION_ALREADY_IDLE;
+    VkResult idle_result          = VK_SUCCESS;
 
     // Iterate through all pending deletions and check if their targets are signaled.
     // If so, we can destroy them immediately. Otherwise, we need to keep them in the queue.
@@ -459,10 +470,36 @@ void drain_deletion_queue(Pigment* pigment)
     {
         PDeletionNode* next = node->next;
 
-        PBool ready = entry_ready(pigment, node);
-
-        if(ready)
+        PDeletionState state = entry_ready(pigment, node);
+        if(state == P_DELETION_WAIT_REQUIRED && mode != P_DELETION_NO_WAIT)
         {
+            if(!waited_idle)
+            {
+                idle_result = vkDeviceWaitIdle(pigment->device->logical_device);
+                device_record_loss(pigment, idle_result);
+                waited_idle = P_TRUE;
+
+                if(idle_result != VK_SUCCESS && idle_result != VK_ERROR_DEVICE_LOST)
+                {
+                    PLOG_ERROR(pigment, "Failed to wait for swapchain destruction (result: %d)", idle_result);
+                }
+            }
+
+            if(idle_result == VK_SUCCESS || idle_result == VK_ERROR_DEVICE_LOST)
+            {
+                state = P_DELETION_READY;
+            }
+        }
+
+        needs_wait |= state == P_DELETION_WAIT_REQUIRED;
+
+        if(state == P_DELETION_READY)
+        {
+            if(destroyed_count != NULL)
+            {
+                (*destroyed_count)++;
+            }
+
             PBool owned = node->entry.owned;
             node->entry.destroy_fn(pigment, node->entry.resource);
             if(!owned)
@@ -497,6 +534,8 @@ void drain_deletion_queue(Pigment* pigment)
     {
         prepend_shared_free(queue, ready_head, ready_tail);
     }
+
+    return !needs_wait;
 }
 
 static void prepend_chain(PDeletionQueue* queue, PDeletionNode* chain_head, PDeletionNode* chain_tail)
@@ -705,7 +744,7 @@ static void wait_submitted(Pigment* pigment)
     }
 }
 
-static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
+static PDeletionState entry_ready(Pigment* pigment, const PDeletionNode* node)
 {
     const PDeletionEntry* entry = &node->entry;
     if(entry->fence != VK_NULL_HANDLE)
@@ -713,7 +752,7 @@ static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
         PWaitTarget target = {.kind = P_WAIT_FENCE, .fence = entry->fence};
         if(!target_signaled(pigment, &target))
         {
-            return P_FALSE;
+            return P_DELETION_PENDING;
         }
     }
 
@@ -737,11 +776,11 @@ static PBool entry_ready(Pigment* pigment, const PDeletionNode* node)
 
         if(!target_signaled(pigment, &target))
         {
-            return P_FALSE;
+            return P_DELETION_PENDING;
         }
     }
 
-    return entry->ready_fn == NULL || entry->ready_fn(pigment, entry->ready_resource);
+    return entry->ready_fn != NULL ? entry->ready_fn(pigment, entry->ready_resource) : P_DELETION_READY;
 }
 
 static PBool target_signaled(Pigment* pigment, const PWaitTarget* target)

@@ -55,6 +55,8 @@ PIGMENT_API void destroy_pigment(Pigment* pigment);
  * @brief Wait for submitted GPU work, then collect ready deferred destructions.
  *
  * Recorded references remain retained.
+ * Collects ready destructions created by callbacks until no progress is made.
+ * Serialize this call with submissions and presentation on all queues.
  *
  * @param pigment Pigment instance.
  *
