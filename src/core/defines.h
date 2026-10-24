@@ -418,8 +418,19 @@ typedef enum PPipelineStage {
     P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1 << 12,
 } PPipelineStage;
 
+typedef enum PSubmitWaitType {
+    P_SUBMIT_WAIT_HANDLE = 0,
+    P_SUBMIT_WAIT_LOCAL  = 1,
+} PSubmitWaitType;
+
 typedef struct PSubmitWait {
-    PSubmitHandle handle;
+    PSubmitWaitType type;
+
+    union {
+        PSubmitHandle handle;     // HANDLE: work submitted by an earlier call.
+        uint32_t source_index;    // LOCAL: earlier submit in the current call (source_index < current index).
+    };
+
     PPipelineStage stage;    // stage at which the wait occurs. If NONE, treated as ALL_COMMANDS.
 } PSubmitWait;
 

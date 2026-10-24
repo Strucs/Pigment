@@ -461,10 +461,27 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
 
         for(uint32_t j = 0; j < submit->wait_count; j++)
         {
-            PSubmitHandle handle = submit->waits[j].handle;
-            if(handle.queue == NULL || handle.queue->timeline == VK_NULL_HANDLE || handle.value == 0)
+            const PSubmitWait* wait = &submit->waits[j];
+            if(wait->type == P_SUBMIT_WAIT_HANDLE)
             {
-                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].waits[%u] is invalid.", i, j);
+                PSubmitHandle handle = wait->handle;
+                if(handle.queue == NULL || handle.queue->timeline == VK_NULL_HANDLE || handle.value == 0)
+                {
+                    PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].waits[%u] is invalid.", i, j);
+                    return PIGMENT_ERROR;
+                }
+            }
+            else if(wait->type == P_SUBMIT_WAIT_LOCAL)
+            {
+                if(wait->source_index >= i)
+                {
+                    PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].waits[%u] must reference an earlier submit.", i, j);
+                    return PIGMENT_ERROR;
+                }
+            }
+            else
+            {
+                PLOG_ERROR(pigment, "pigment_queue_submit: submits[%u].waits[%u] has an invalid type.", i, j);
                 return PIGMENT_ERROR;
             }
         }
@@ -550,11 +567,12 @@ PResult pigment_queue_submit(Pigment* pigment, const PSubmit* submits, uint32_t 
         for(uint32_t j = 0; j < submits[i].wait_count; j++)
         {
             const PSubmitWait* wait = &submits[i].waits[j];
+            PSubmitHandle handle    = wait->type == P_SUBMIT_WAIT_LOCAL ? handles[wait->source_index] : wait->handle;
             PPipelineStage stage    = (wait->stage != P_PIPELINE_STAGE_NONE) ? wait->stage : P_PIPELINE_STAGE_ALL_COMMANDS_BIT;
             waits[wait_offset + j]  = (VkSemaphoreSubmitInfo) {
                 .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .semaphore = wait->handle.queue->timeline,
-                .value     = wait->handle.value,
+                .semaphore = handle.queue->timeline,
+                .value     = handle.value,
                 .stageMask = pipeline_stage_to_vk(stage),
             };
         }

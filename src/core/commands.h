@@ -35,7 +35,8 @@ typedef struct PSubmit {
     uint32_t cmd_count;
 
     /**
-     * @brief List of prior submits this batch should wait on before executing.
+     * @brief GPU waits on prior handles or earlier submits in this call.
+     * LOCAL waits reference a submit with a strictly smaller array index.
      */
     const PSubmitWait* waits;
     uint32_t wait_count;
@@ -219,6 +220,8 @@ PIGMENT_API void pigment_end_recording(Pigment* pigment, PCommandBuffer* cmd);
  * Frame tracking accepts any queue. Swapchain access and acquire/present flags use
  * the default graphics family or families added with PSwapchainDesc.shared_queues.
  * The caller defines GPU dependencies with waits and recorded barriers.
+ * HANDLE waits reference prior calls. LOCAL waits reference earlier submits in this array.
+ * A LOCAL source_index must be strictly less than the waiting submit's index.
  * Independent work may precede the acquire wait. No submits are chained automatically.
  * Wait acquire once and signal present on the last frame submit. Both may share a submit.
  * No further submits may use that frame after signal_present.
