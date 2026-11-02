@@ -842,9 +842,6 @@ PDevice* create_device(Pigment* pigment)
 
     static const char* default_req_extensions[] = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-#ifdef __APPLE__
-        "VK_KHR_portability_subset",
-#endif
     };
     const uint32_t default_req_count = sizeof(default_req_extensions) / sizeof(default_req_extensions[0]);
 
@@ -905,7 +902,9 @@ PDevice* create_device(Pigment* pigment)
         vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, available_extensions);
     }
 
-    uint32_t max_final = req_extensions.size + default_opt_count + (vk_init != NULL ? vk_init->opt_device_extensions_count : 0);
+    PBool has_portability_subset = extension_available(available_extensions, available_extension_count, "VK_KHR_portability_subset");
+
+    uint32_t max_final = req_extensions.size + default_opt_count + (vk_init != NULL ? vk_init->opt_device_extensions_count : 0) + (has_portability_subset ? 1 : 0);
     device->extensions = P_NEW_FOR_OBJECT(pigment, device->extensions);
     if(device->extensions == NULL)
     {
@@ -920,6 +919,11 @@ PDevice* create_device(Pigment* pigment)
     for(uint32_t i = 0; i < req_extensions.size; i++)
     {
         device->extensions->names[device->extensions->size++] = req_extensions.names[i];
+    }
+
+    if(has_portability_subset && !name_in_list((const char* const*) device->extensions->names, device->extensions->size, "VK_KHR_portability_subset"))
+    {
+        device->extensions->names[device->extensions->size++] = "VK_KHR_portability_subset";
     }
 
     for(uint32_t i = 0; i < default_opt_count; i++)
