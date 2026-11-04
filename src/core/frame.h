@@ -90,7 +90,7 @@ struct PRenderPassDesc {
     float depth_clear_value;
     uint32_t stencil_clear_value;    // ignored if depth_attachment.image has no stencil aspect
     uint32_t layer_count;
-    uint32_t view_mask;
+    uint32_t view_mask;    // Nonzero requires P_FEATURE_MULTIVIEW.
 };
 
 /**
@@ -229,6 +229,11 @@ PIGMENT_API void pigment_cmd_push_constants(Pigment* pigment, PCommandBuffer* cm
  */
 PIGMENT_API void pigment_cmd_bind_vertex_buffers(Pigment* pigment, PCommandBuffer* cmd, uint32_t first_binding, uint32_t buffer_count, PBuffer** buffers, const uint64_t* offsets);
 
+/**
+ * Classic direct and indirect draws require a bound VERTEX graphics pipeline.
+ * An incompatible or missing pipeline logs an error and the draw is ignored.
+ */
+
 PIGMENT_API void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 PIGMENT_API void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
 
@@ -239,10 +244,25 @@ PIGMENT_API void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd,
  * firstInstance != 0 in any command requires P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE.
  * The _count variants require P_FEATURE_DRAW_INDIRECT_COUNT.
  */
+
 PIGMENT_API void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
 PIGMENT_API void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
 PIGMENT_API void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
 PIGMENT_API void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
+
+/**
+ * @brief Draw mesh workgroups inside an active render pass.
+ *
+ * Requires P_FEATURE_MESH_SHADER and a bound MESH pipeline.
+ * Invalid calls log an error and are ignored.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to record into.
+ * @param group_x Workgroup count along X.
+ * @param group_y Workgroup count along Y.
+ * @param group_z Workgroup count along Z.
+ */
+PIGMENT_API void pigment_cmd_draw_mesh_tasks(Pigment* pigment, PCommandBuffer* cmd, uint32_t group_x, uint32_t group_y, uint32_t group_z);
 
 PIGMENT_API void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
 PIGMENT_API void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);

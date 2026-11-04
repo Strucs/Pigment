@@ -255,30 +255,13 @@ int main(void)
     error_code = 0;
 
 FREE:
-    if(vertex_buffer != NULL)
-    {
-        pigment_destroy_buffer(pigment, vertex_buffer);
-    }
-    if(pipeline != NULL)
-    {
-        pigment_destroy_pipeline(pigment, pipeline);
-    }
-    if(layout != NULL)
-    {
-        pigment_destroy_layout(pigment, layout);
-    }
-    if(renderer != NULL)
-    {
-        pigment_renderer_destroy(pigment, renderer);
-    }
-    if(pool != NULL)
-    {
-        pigment_destroy_command_pool(pigment, pool);
-    }
-    if(pigment != NULL)
-    {
-        destroy_pigment(pigment);
-    }
+    pigment_destroy_buffer(pigment, vertex_buffer);
+    pigment_destroy_pipeline(pigment, pipeline);
+    pigment_destroy_layout(pigment, layout);
+    pigment_renderer_destroy(pigment, renderer);
+    pigment_destroy_command_pool(pigment, pool);
+    destroy_pigment(pigment);
+
     if(window != NULL)
     {
         SDL_DestroyWindow(window);

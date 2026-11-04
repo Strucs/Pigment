@@ -28,7 +28,6 @@
 static void destroy_descriptor_pool_immediate(Pigment* pigment, void* resource);
 static void destroy_descriptor_set_immediate(Pigment* pigment, void* resource);
 static VkDescriptorType to_vk_descriptor_type(PDescriptorType type);
-static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages);
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags);
 static void pool_remove_set(PDescriptorPool* pool, PDescriptorSet* set);
 static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptorLayout override);
@@ -36,18 +35,23 @@ static VkImageLayout resolve_image_layout(PDescriptorType type, PImageDescriptor
 /**
  * @brief Prepare Vulkan bindings and layout creation parameters.
  */
-static void prepare_layout_info(const PDescriptorSetLayoutDesc* desc, VkDescriptorSetLayoutBinding* bindings, VkDescriptorBindingFlags* binding_flags, VkDescriptorSetLayoutBindingFlagsCreateInfo* flags_info, VkDescriptorSetLayoutCreateInfo* layout_info)
+static PBool prepare_layout_info(Pigment* pigment, const PDescriptorSetLayoutDesc* desc, VkDescriptorSetLayoutBinding* bindings, VkDescriptorBindingFlags* binding_flags, VkDescriptorSetLayoutBindingFlagsCreateInfo* flags_info, VkDescriptorSetLayoutCreateInfo* layout_info)
 {
     PBool needs_update_after_bind = P_FALSE;
     for(uint32_t i = 0; i < desc->binding_count; i++)
     {
         const PDescriptorBinding* b = &desc->bindings[i];
+        VkShaderStageFlags stages;
+        if(!shader_stages_to_vk(pigment, b->stages, &stages))
+        {
+            return P_FALSE;
+        }
 
         bindings[i] = (VkDescriptorSetLayoutBinding) {
             .binding         = b->binding,
             .descriptorType  = to_vk_descriptor_type(b->type),
             .descriptorCount = b->count,
-            .stageFlags      = to_vk_shader_stages(b->stages),
+            .stageFlags      = stages,
         };
 
         binding_flags[i] = to_vk_binding_flags(b->flags);
@@ -70,6 +74,8 @@ static void prepare_layout_info(const PDescriptorSetLayoutDesc* desc, VkDescript
         .flags        = needs_update_after_bind ? VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
         .pNext        = flags_info,
     };
+
+    return P_TRUE;
 }
 
 /**
@@ -103,7 +109,11 @@ PBool pigment_descriptor_set_layout_supported(Pigment* pigment, const PDescripto
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info;
     VkDescriptorSetLayoutCreateInfo layout_info;
-    prepare_layout_info(desc, bindings, binding_flags, &flags_info, &layout_info);
+    if(!prepare_layout_info(pigment, desc, bindings, binding_flags, &flags_info, &layout_info))
+    {
+        goto FREE;
+    }
+
     supported = query_layout_support(pigment, &layout_info);
 
 FREE:
@@ -130,7 +140,11 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo flags_info;
     VkDescriptorSetLayoutCreateInfo layout_info;
-    prepare_layout_info(desc, bindings, binding_flags, &flags_info, &layout_info);
+    if(!prepare_layout_info(pigment, desc, bindings, binding_flags, &flags_info, &layout_info))
+    {
+        goto ERROR;
+    }
+
     if(!query_layout_support(pigment, &layout_info))
     {
         VkPhysicalDeviceMaintenance3Properties maintenance = {
@@ -658,6 +672,13 @@ void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPi
         return;
     }
 
+    VkPipelineBindPoint bind_point = pipeline_bind_point_to_vk(pipeline->type);
+    if(bind_point == VK_PIPELINE_BIND_POINT_MAX_ENUM)
+    {
+        PLOG_ERROR(pigment, "Cannot bind descriptor sets for a pipeline with an unsupported type.");
+        return;
+    }
+
     P_STACK_OR_HEAP(VkDescriptorSet, vk_sets, set_count);
     if(vk_sets == NULL)
     {
@@ -675,7 +696,7 @@ void pigment_cmd_bind_descriptor_sets(Pigment* pigment, PCommandBuffer* cmd, PPi
         vk_sets[i] = sets[i]->set;
     }
 
-    vkCmdBindDescriptorSets(cmd->buffer, (VkPipelineBindPoint) pipeline->bind_point, pipeline->layout->layout, first_set, set_count, vk_sets, dynamic_offset_count, dynamic_offsets);
+    vkCmdBindDescriptorSets(cmd->buffer, bind_point, pipeline->layout->layout, first_set, set_count, vk_sets, dynamic_offset_count, dynamic_offsets);
 
     P_STACK_OR_HEAP_FREE(pigment, vk_sets);
 }
@@ -698,24 +719,6 @@ static VkDescriptorType to_vk_descriptor_type(PDescriptorType type)
             return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     }
     return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-}
-
-static VkShaderStageFlags to_vk_shader_stages(PShaderStageFlags stages)
-{
-    VkShaderStageFlags out = 0;
-    if(stages & P_SHADER_STAGE_VERTEX_BIT)
-    {
-        out |= VK_SHADER_STAGE_VERTEX_BIT;
-    }
-    if(stages & P_SHADER_STAGE_FRAGMENT_BIT)
-    {
-        out |= VK_SHADER_STAGE_FRAGMENT_BIT;
-    }
-    if(stages & P_SHADER_STAGE_COMPUTE_BIT)
-    {
-        out |= VK_SHADER_STAGE_COMPUTE_BIT;
-    }
-    return out;
 }
 
 static VkDescriptorBindingFlags to_vk_binding_flags(PDescriptorBindingFlags flags)

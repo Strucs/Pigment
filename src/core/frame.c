@@ -26,6 +26,20 @@
 
 #include <math.h>
 
+static PBool validate_classic_draw(Pigment* pigment, PCommandBuffer* cmd)
+{
+    if(cmd->recording_failed)
+    {
+        return P_FALSE;
+    }
+    if(cmd->graphics_pipeline_type != P_PIPELINE_TYPE_VERTEX)
+    {
+        PLOG_ERROR(pigment, "Classic draw requires a bound VERTEX graphics pipeline.");
+        return P_FALSE;
+    }
+    return P_TRUE;
+}
+
 PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot)
 {
     if(pigment == NULL || renderer == NULL)
@@ -391,6 +405,11 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
     {
         return;
     }
+    if(!validate_multiview(pigment, desc->view_mask))
+    {
+        cmd->recording_failed = P_TRUE;
+        return;
+    }
     PBool has_ds_attachment = (desc->depth_attachment.image != NULL);
     PBool has_depth         = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
     PBool has_stencil       = has_ds_attachment && (desc->depth_attachment.image->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
@@ -673,7 +692,7 @@ FREE:
 
 void pigment_end_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRenderPassDesc* desc)
 {
-    if(pigment == NULL || cmd == NULL || desc == NULL)
+    if(pigment == NULL || cmd == NULL || desc == NULL || cmd->recording_failed)
     {
         return;
     }
@@ -1122,6 +1141,10 @@ void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_t vertex_cou
     {
         return;
     }
+    if(!validate_classic_draw(pigment, cmd))
+    {
+        return;
+    }
     vkCmdDraw(cmd->buffer, vertex_count, instance_count, first_vertex, first_instance);
 }
 
@@ -1164,6 +1187,10 @@ void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* in
     {
         return;
     }
+    if(!validate_classic_draw(pigment, cmd))
+    {
+        return;
+    }
     pigment_cmd_use_buffer(pigment, cmd, index_buffer);
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_buffer_offset, vk_index_type);
@@ -1176,6 +1203,10 @@ void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* i
     {
         return;
     }
+    if(!validate_classic_draw(pigment, cmd))
+    {
+        return;
+    }
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     vkCmdDrawIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
 }
@@ -1183,6 +1214,10 @@ void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* i
 void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride)
 {
     if(pigment == NULL || cmd == NULL || index_buffer == NULL || indirect_buffer == NULL)
+    {
+        return;
+    }
+    if(!validate_classic_draw(pigment, cmd))
     {
         return;
     }
@@ -1199,6 +1234,10 @@ void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuf
     {
         return;
     }
+    if(!validate_classic_draw(pigment, cmd))
+    {
+        return;
+    }
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     pigment_cmd_use_buffer(pigment, cmd, count_buffer);
     vkCmdDrawIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
@@ -1210,10 +1249,45 @@ void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* c
     {
         return;
     }
+    if(!validate_classic_draw(pigment, cmd))
+    {
+        return;
+    }
     pigment_cmd_use_buffer(pigment, cmd, index_buffer);
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     pigment_cmd_use_buffer(pigment, cmd, count_buffer);
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
     vkCmdDrawIndexedIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
+}
+
+void pigment_cmd_draw_mesh_tasks(Pigment* pigment, PCommandBuffer* cmd, uint32_t group_x, uint32_t group_y, uint32_t group_z)
+{
+    if(pigment == NULL || cmd == NULL || cmd->recording_failed)
+    {
+        return;
+    }
+    if(!pigment->device->features[P_FEATURE_MESH_SHADER])
+    {
+        PLOG_ERROR(pigment, "Mesh draw requires P_FEATURE_MESH_SHADER.");
+        return;
+    }
+    if(cmd->graphics_pipeline_type != P_PIPELINE_TYPE_MESH)
+    {
+        PLOG_ERROR(pigment, "Mesh draw requires a bound MESH graphics pipeline.");
+        return;
+    }
+
+    const PMeshShaderLimits* limits = &pigment->device->mesh_limits;
+    uint64_t groups_xy              = (uint64_t) group_x * group_y;
+    if(group_x > limits->max_work_group_count[0]
+       || group_y > limits->max_work_group_count[1]
+       || group_z > limits->max_work_group_count[2]
+       || (group_z != 0 && groups_xy > limits->max_work_group_total_count / group_z))
+    {
+        PLOG_ERROR(pigment, "Mesh draw group counts exceed the device mesh workgroup limits.");
+        return;
+    }
+
+    vkCmdDrawMeshTasksEXT(cmd->buffer, group_x, group_y, group_z);
 }

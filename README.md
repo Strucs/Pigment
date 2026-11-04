@@ -37,3 +37,9 @@ For instance, to compile [suzanne_and_cube](examples/suzanne_and_cube) example, 
 ```sh
 python makefile.py -rvd --suzanne_and_cube
 ```
+
+To compile all examples at once, run:
+
+```sh
+python makefile.py -rvd --all-examples
+```

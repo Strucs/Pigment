@@ -24,6 +24,7 @@
 typedef enum PShaderType {
     P_SHADER_TYPE_VERTEX   = 0,
     P_SHADER_TYPE_FRAGMENT = 1,
+    P_SHADER_TYPE_MESH     = 2,
 } PShaderType;
 
 PIGMENT_API uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size);

@@ -485,6 +485,16 @@ uint64_t pigment_memory_budget(Pigment* pigment, PMemoryFlags flags)
     return total;
 }
 
+PBool validate_multiview(Pigment* pigment, uint32_t view_mask)
+{
+    if(view_mask != 0 && !pigment->device->features[P_FEATURE_MULTIVIEW])
+    {
+        PLOG_ERROR(pigment, "A nonzero view mask requires P_FEATURE_MULTIVIEW.");
+        return P_FALSE;
+    }
+    return P_TRUE;
+}
+
 PDeviceLimits pigment_device_limits(Pigment* pigment)
 {
     PDeviceLimits limits = {0};
@@ -493,8 +503,12 @@ PDeviceLimits pigment_device_limits(Pigment* pigment)
         return limits;
     }
 
-    VkPhysicalDeviceDescriptorIndexingProperties indexing = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES};
-    VkPhysicalDeviceProperties2 props                     = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &indexing};
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_properties = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT};
+    VkPhysicalDeviceDescriptorIndexingProperties indexing   = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES,
+        .pNext = pigment->device->features[P_FEATURE_MESH_SHADER] ? &mesh_properties : NULL,
+    };
+    VkPhysicalDeviceProperties2 props = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &indexing};
     vkGetPhysicalDeviceProperties2(pigment->device->physical_device, &props);
 
     const VkPhysicalDeviceLimits* core = &props.properties.limits;
@@ -521,6 +535,24 @@ PDeviceLimits pigment_device_limits(Pigment* pigment)
     limits.line_width_range[0]               = core->lineWidthRange[0];
     limits.line_width_range[1]               = core->lineWidthRange[1];
     limits.line_width_granularity            = core->lineWidthGranularity;
+
+    const VkPhysicalDeviceMeshShaderPropertiesEXT* mesh = &mesh_properties;
+
+    limits.max_mesh_work_group_total_count         = mesh->maxMeshWorkGroupTotalCount;
+    limits.max_mesh_work_group_invocations         = mesh->maxMeshWorkGroupInvocations;
+    limits.max_mesh_shared_memory_size             = mesh->maxMeshSharedMemorySize;
+    limits.max_mesh_output_memory_size             = mesh->maxMeshOutputMemorySize;
+    limits.max_mesh_payload_and_output_memory_size = mesh->maxMeshPayloadAndOutputMemorySize;
+    limits.max_mesh_output_components              = mesh->maxMeshOutputComponents;
+    limits.max_mesh_output_vertices                = mesh->maxMeshOutputVertices;
+    limits.max_mesh_output_primitives              = mesh->maxMeshOutputPrimitives;
+    limits.max_mesh_multiview_view_count           = mesh->maxMeshMultiviewViewCount;
+
+    for(uint32_t i = 0; i < 3; i++)
+    {
+        limits.max_mesh_work_group_count[i] = mesh->maxMeshWorkGroupCount[i];
+        limits.max_mesh_work_group_size[i]  = mesh->maxMeshWorkGroupSize[i];
+    }
 
     return limits;
 }
@@ -664,7 +696,12 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         selected_count++;
     }
 
-    VkPhysicalDeviceVulkan11Features available_11 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES};
+    PBool has_mesh_shader_extension                      = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_MESH_SHADER_EXTENSION_NAME);
+    VkPhysicalDeviceMeshShaderFeaturesEXT available_mesh = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
+    VkPhysicalDeviceVulkan11Features available_11        = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .pNext = has_mesh_shader_extension ? &available_mesh : NULL,
+    };
     VkPhysicalDeviceVulkan12Features available_12 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &available_11};
     VkPhysicalDeviceVulkan13Features available_13 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, .pNext = &available_12};
     VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
@@ -676,8 +713,11 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     device->features[P_FEATURE_DEPTH_BIAS_CLAMP]        = (PBool) available_2.features.depthBiasClamp;
     device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (PBool) available_2.features.depthBounds;
 
-    device->features[P_FEATURE_SAMPLE_RATE_SHADING] = (PBool) available_2.features.sampleRateShading;
-    device->features[P_FEATURE_INDEPENDENT_BLEND]   = (PBool) available_2.features.independentBlend;
+    device->features[P_FEATURE_MULTIVIEW]             = (PBool) available_11.multiview;
+    device->features[P_FEATURE_MESH_SHADER]           = (PBool) available_mesh.meshShader;
+    device->features[P_FEATURE_MULTIVIEW_MESH_SHADER] = (PBool) (available_11.multiview && available_mesh.meshShader && available_mesh.multiviewMeshShader);
+    device->features[P_FEATURE_SAMPLE_RATE_SHADING]   = (PBool) available_2.features.sampleRateShading;
+    device->features[P_FEATURE_INDEPENDENT_BLEND]     = (PBool) available_2.features.independentBlend;
 
     device->features[P_FEATURE_MULTI_DRAW_INDIRECT]          = (PBool) available_2.features.multiDrawIndirect;
     device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] = (PBool) available_2.features.drawIndirectFirstInstance;
@@ -692,7 +732,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
         .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-        .multiview = VK_TRUE,
+        .multiview = device->features[P_FEATURE_MULTIVIEW] ? VK_TRUE : VK_FALSE,
     };
     VkPhysicalDeviceVulkan12Features vk12_features = {
         .sType             = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
@@ -705,6 +745,37 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     };
 
     void* features_head = &vk13_features;
+
+    VkPhysicalDeviceMeshShaderFeaturesEXT mesh_features = {
+        .sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+        .meshShader          = device->features[P_FEATURE_MESH_SHADER] ? VK_TRUE : VK_FALSE,
+        .multiviewMeshShader = device->features[P_FEATURE_MULTIVIEW_MESH_SHADER] ? VK_TRUE : VK_FALSE,
+    };
+
+    if(device->features[P_FEATURE_MESH_SHADER])
+    {
+        mesh_features.pNext = features_head;
+        features_head       = &mesh_features;
+
+        VkPhysicalDeviceMeshShaderPropertiesEXT mesh_properties = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT};
+
+        VkPhysicalDeviceProperties2 properties = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+            .pNext = &mesh_properties,
+        };
+
+        vkGetPhysicalDeviceProperties2(device->physical_device, &properties);
+
+        device->mesh_limits = (PMeshShaderLimits) {
+            .max_work_group_total_count = mesh_properties.maxMeshWorkGroupTotalCount,
+            .max_work_group_count       = {
+                                           mesh_properties.maxMeshWorkGroupCount[0],
+                                           mesh_properties.maxMeshWorkGroupCount[1],
+                                           mesh_properties.maxMeshWorkGroupCount[2],
+                                           },
+            .max_multiview_view_count = mesh_properties.maxMeshMultiviewViewCount,
+        };
+    }
 
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchain_maint1_features = {0};
     PBool enable_swapchain_maint1                                              = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
@@ -866,7 +937,7 @@ PDevice* create_device(Pigment* pigment)
     PBool instance_has_surface_maint1 = name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME)
                                         && name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
-    const char* default_opt_extensions[3] = {0};
+    const char* default_opt_extensions[4] = {0};
     uint32_t default_opt_count            = 0;
     if(instance_has_surface_maint1)
     {
@@ -874,6 +945,7 @@ PDevice* create_device(Pigment* pigment)
     }
     default_opt_extensions[default_opt_count++] = VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME;
     default_opt_extensions[default_opt_count++] = VK_EXT_MEMORY_BUDGET_EXTENSION_NAME;
+    default_opt_extensions[default_opt_count++] = VK_EXT_MESH_SHADER_EXTENSION_NAME;
 
     device = P_NEW_FOR_OBJECT(pigment, device);
     if(device == NULL)

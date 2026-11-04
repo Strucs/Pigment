@@ -36,6 +36,19 @@ typedef struct PDeviceLimits {
     uint32_t max_update_after_bind_descriptors;    // descriptors across all update-after-bind pools
     float line_width_range[2];                     // minimum and maximum supported line widths in pixels
     float line_width_granularity;                  // spacing between supported line widths
+
+    // Mesh limits are zero when P_FEATURE_MESH_SHADER is unavailable.
+    uint32_t max_mesh_work_group_total_count;
+    uint32_t max_mesh_work_group_count[3];
+    uint32_t max_mesh_work_group_invocations;
+    uint32_t max_mesh_work_group_size[3];
+    uint32_t max_mesh_shared_memory_size;
+    uint32_t max_mesh_output_memory_size;
+    uint32_t max_mesh_payload_and_output_memory_size;
+    uint32_t max_mesh_output_components;
+    uint32_t max_mesh_output_vertices;
+    uint32_t max_mesh_output_primitives;
+    uint32_t max_mesh_multiview_view_count;
 } PDeviceLimits;
 
 /**

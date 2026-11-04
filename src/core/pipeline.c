@@ -109,9 +109,36 @@ static PBool validate_graphics_shader_stages(Pigment* pigment, const PPipelineDe
         seen |= (uint32_t) shader->stage;
     }
 
-    if((seen & P_SHADER_STAGE_VERTEX_BIT) == 0)
+    PBool vertex = (seen & P_SHADER_STAGE_VERTEX_BIT) != 0;
+    PBool mesh   = (seen & P_SHADER_STAGE_MESH_BIT) != 0;
+    if(vertex == mesh)
     {
-        PLOG_ERROR(pigment, "Graphics pipeline requires a VERTEX shader stage.");
+        PLOG_ERROR(pigment, "Graphics pipeline requires exactly one VERTEX or MESH shader stage.");
+        return P_FALSE;
+    }
+
+    if(mesh && !pigment->device->features[P_FEATURE_MESH_SHADER])
+    {
+        PLOG_ERROR(pigment, "Mesh shader requires P_FEATURE_MESH_SHADER.");
+        return P_FALSE;
+    }
+
+    if(mesh && (desc->vertex_binding_count != 0 || desc->vertex_attribute_count != 0 || desc->primitive_restart))
+    {
+        PLOG_ERROR(pigment, "Mesh pipelines require zero vertex input counts and disabled primitive restart.");
+        return P_FALSE;
+    }
+
+    if(mesh && desc->view_mask != 0 && !pigment->device->features[P_FEATURE_MULTIVIEW_MESH_SHADER])
+    {
+        PLOG_ERROR(pigment, "Mesh multiview requires P_FEATURE_MULTIVIEW_MESH_SHADER.");
+        return P_FALSE;
+    }
+
+    uint32_t max_mesh_views = pigment->device->mesh_limits.max_multiview_view_count;
+    if(mesh && desc->view_mask != 0 && max_mesh_views < 32 && (desc->view_mask >> max_mesh_views) != 0)
+    {
+        PLOG_ERROR(pigment, "Mesh view mask exceeds max_mesh_multiview_view_count.");
         return P_FALSE;
     }
 
@@ -238,6 +265,14 @@ static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* d
             status = result;
             goto ERROR;
         }
+        if(desc->stages[i].stage == P_SHADER_STAGE_VERTEX_BIT)
+        {
+            build->type = P_PIPELINE_TYPE_VERTEX;
+        }
+        else if(desc->stages[i].stage == P_SHADER_STAGE_MESH_BIT)
+        {
+            build->type = P_PIPELINE_TYPE_MESH;
+        }
     }
 
     build->color_format_count = desc->color_format_count;
@@ -303,13 +338,17 @@ static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* d
         build->vk_vertex_attribute_count = desc->vertex_attribute_count;
     }
 
-    build->vertex_input   = configure_vertex_input_state_create_info(build->vk_vertex_bindings, build->vk_vertex_binding_count, build->vk_vertex_attributes, build->vk_vertex_attribute_count);
-    build->input_assembly = configure_input_assembly_state_create_info(desc->topology, desc->primitive_restart);
-    build->viewport       = configure_viewport_state_create_info();
-    build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode, desc->depth_clamp);
-    build->multisample    = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1, desc->sample_shading_enable, desc->min_sample_shading, desc->alpha_to_coverage);
-    build->depth_stencil  = configure_depth_stencil_state_create_info();
-    build->color_blend    = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count, desc->blend_constants);
+    if(build->type == P_PIPELINE_TYPE_VERTEX)
+    {
+        build->vertex_input   = configure_vertex_input_state_create_info(build->vk_vertex_bindings, build->vk_vertex_binding_count, build->vk_vertex_attributes, build->vk_vertex_attribute_count);
+        build->input_assembly = configure_input_assembly_state_create_info(desc->topology, desc->primitive_restart);
+    }
+
+    build->viewport      = configure_viewport_state_create_info();
+    build->rasterizer    = configure_rasterizer_state_create_info(desc->polygon_mode, desc->depth_clamp);
+    build->multisample   = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1, desc->sample_shading_enable, desc->min_sample_shading, desc->alpha_to_coverage);
+    build->depth_stencil = configure_depth_stencil_state_create_info();
+    build->color_blend   = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count, desc->blend_constants);
 
     static const VkDynamicState base_dynamic_state_list[] = {
         VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
@@ -441,7 +480,8 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
             return PIGMENT_ERROR;
         }
 
-        if(!validate_graphics_shader_stages(pigment, &descs[i])
+        if(!validate_multiview(pigment, descs[i].view_mask)
+           || !validate_graphics_shader_stages(pigment, &descs[i])
            || !validate_depth_clamp(pigment, &descs[i])
            || !validate_primitive_restart(pigment, &descs[i])
            || !validate_sample_shading(pigment, &descs[i])
@@ -497,8 +537,8 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
             .pNext               = &builds[i]->rendering,
             .stageCount          = builds[i]->shader_stage_count,
             .pStages             = builds[i]->shader_stages,
-            .pVertexInputState   = &builds[i]->vertex_input,
-            .pInputAssemblyState = &builds[i]->input_assembly,
+            .pVertexInputState   = builds[i]->type == P_PIPELINE_TYPE_VERTEX ? &builds[i]->vertex_input : NULL,
+            .pInputAssemblyState = builds[i]->type == P_PIPELINE_TYPE_VERTEX ? &builds[i]->input_assembly : NULL,
             .pViewportState      = &builds[i]->viewport,
             .pRasterizationState = &builds[i]->rasterizer,
             .pMultisampleState   = &builds[i]->multisample,
@@ -529,10 +569,10 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i]->pipeline   = vk_pipelines[i];
-        temp_pipelines[i]->layout     = builds[i]->layout;
-        temp_pipelines[i]->bind_point = P_PIPELINE_BIND_POINT_GRAPHICS;
-        out[i]                        = temp_pipelines[i];
+        temp_pipelines[i]->pipeline = vk_pipelines[i];
+        temp_pipelines[i]->layout   = builds[i]->layout;
+        temp_pipelines[i]->type     = builds[i]->type;
+        out[i]                      = temp_pipelines[i];
 
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
@@ -652,10 +692,10 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i]->pipeline   = vk_pipelines[i];
-        temp_pipelines[i]->layout     = descs[i].layout;
-        temp_pipelines[i]->bind_point = P_PIPELINE_BIND_POINT_COMPUTE;
-        out[i]                        = temp_pipelines[i];
+        temp_pipelines[i]->pipeline = vk_pipelines[i];
+        temp_pipelines[i]->layout   = descs[i].layout;
+        temp_pipelines[i]->type     = P_PIPELINE_TYPE_COMPUTE;
+        out[i]                      = temp_pipelines[i];
 
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], descs[i].name);
     }
@@ -710,6 +750,20 @@ static void destroy_pipeline_immediate(Pigment* pigment, void* resource)
     P_FREE(pigment, pipeline);
 }
 
+VkPipelineBindPoint pipeline_bind_point_to_vk(PPipelineType type)
+{
+    switch(type)
+    {
+        case P_PIPELINE_TYPE_VERTEX:
+        case P_PIPELINE_TYPE_MESH:
+            return VK_PIPELINE_BIND_POINT_GRAPHICS;
+        case P_PIPELINE_TYPE_COMPUTE:
+            return VK_PIPELINE_BIND_POINT_COMPUTE;
+        default:
+            return VK_PIPELINE_BIND_POINT_MAX_ENUM;
+    }
+}
+
 void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pipeline)
 {
     if(pigment == NULL || cmd == NULL || pipeline == NULL)
@@ -717,14 +771,23 @@ void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pip
         return;
     }
 
+    VkPipelineBindPoint bind_point = pipeline_bind_point_to_vk(pipeline->type);
+    if(bind_point == VK_PIPELINE_BIND_POINT_MAX_ENUM)
+    {
+        PLOG_ERROR(pigment, "Cannot bind a pipeline with an unsupported type.");
+        return;
+    }
+
     pigment_cmd_use(pigment, cmd, &pipeline->tracker);
 
-    vkCmdBindPipeline(cmd->buffer, (VkPipelineBindPoint) pipeline->bind_point, pipeline->pipeline);
+    vkCmdBindPipeline(cmd->buffer, bind_point, pipeline->pipeline);
 
-    if(pipeline->bind_point != P_PIPELINE_BIND_POINT_GRAPHICS)
+    if(bind_point != VK_PIPELINE_BIND_POINT_GRAPHICS)
     {
         return;
     }
+
+    cmd->graphics_pipeline_type = pipeline->type;
 
     vkCmdSetCullMode(cmd->buffer, VK_CULL_MODE_BACK_BIT);
     vkCmdSetFrontFace(cmd->buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
@@ -1073,6 +1136,29 @@ PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache,
     return PIGMENT_SUCCESS;
 }
 
+PBool shader_stages_to_vk(Pigment* pigment, PShaderStageFlags stages, VkShaderStageFlags* out)
+{
+    uint32_t mask = (uint32_t) stages;
+    if((mask & ~(uint32_t) P_SHADER_STAGE_ALL) != 0)
+    {
+        PLOG_ERROR(pigment, "Shader visibility contains unsupported stage bits.");
+        return P_FALSE;
+    }
+
+    if((mask & P_SHADER_STAGE_MESH_BIT) != 0 && !pigment->device->features[P_FEATURE_MESH_SHADER])
+    {
+        if(stages != P_SHADER_STAGE_ALL && stages != P_SHADER_STAGE_ALL_GRAPHICS)
+        {
+            PLOG_ERROR(pigment, "MESH shader visibility requires P_FEATURE_MESH_SHADER.");
+            return P_FALSE;
+        }
+        mask &= ~(uint32_t) P_SHADER_STAGE_MESH_BIT;
+    }
+    *out = (VkShaderStageFlags) mask;
+
+    return P_TRUE;
+}
+
 PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
 {
     if(pigment == NULL || desc == NULL)
@@ -1080,7 +1166,11 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
         return NULL;
     }
 
-    VkShaderStageFlags vk_stages = (VkShaderStageFlags) desc->push_stages;
+    VkShaderStageFlags vk_stages;
+    if(!shader_stages_to_vk(pigment, desc->push_stages, &vk_stages))
+    {
+        return NULL;
+    }
 
     VkPushConstantRange range = {
         .stageFlags = vk_stages,

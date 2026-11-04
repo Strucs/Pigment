@@ -50,9 +50,10 @@ def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
         sources_mtime = max(os.path.getmtime(p) for p in [src] + deps)
         if dst_mtime >= sources_mtime:
             return False
-    result = subprocess.run(
-        ["glslc", src, "-o", dst], capture_output=True, text=True, check=False
-    )
+    command = ["glslc", src, "-o", dst]
+    if os.path.splitext(src)[1] == ".mesh":
+        command.append("--target-env=vulkan1.3")
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         print(result.stdout)
         print(result.stderr)
@@ -84,7 +85,7 @@ def build_shaders(
         f
         for f in all_files
         if os.path.splitext(f)[1]
-        in (".vert", ".frag", ".comp", ".geom", ".tesc", ".tese")
+        in (".vert", ".frag", ".comp", ".geom", ".tesc", ".tese", ".mesh")
     ]
     if not shader_files:
         return False

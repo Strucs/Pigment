@@ -27,16 +27,25 @@ def on_build(config: powermake.Config):
     gltf_artifact = build_lib.build_gltf_tool(config)
     build_lib.build_shaderc_tool(config)
 
-    needs_sdl = any(getattr(args_parsed, example) for example in example_list)
-    if needs_sdl:
+    selected_examples = [
+        example
+        for example in example_list
+        if args_parsed.all_examples or getattr(args_parsed, example)
+    ]
+
+    if selected_examples:
         config.add_shared_libs("SDL3")
         archives = [a for a in (sdl_artifact, gltf_artifact, pigment_artifact) if a]
-        for example in example_list:
-            if getattr(args_parsed, example):
-                build_examples.build_example(config, example, shared_build, archives)
+        for example in selected_examples:
+            build_examples.build_example(config, example, shared_build, archives)
 
 
 parser = powermake.ArgumentParser()
+parser.add_argument(
+    "--all-examples",
+    help="build all examples",
+    action="store_true",
+)
 parser.add_argument(
     "--shared",
     help="build pigment as a shared library instead of a static archive",
@@ -54,7 +63,7 @@ example_list = (
     [
         f
         for f in os.listdir(examples_dir)
-        if not os.path.isfile(os.path.join(examples_dir, f))
+        if os.path.isfile(os.path.join(examples_dir, f, "main.c"))
     ]
     if os.path.isdir(examples_dir)
     else []

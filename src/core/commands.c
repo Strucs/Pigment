@@ -280,6 +280,12 @@ void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBuff
         return;
     }
 
+    if(inheritance != NULL && !validate_multiview(pigment, inheritance->view_mask))
+    {
+        cmd->recording_failed = P_TRUE;
+        return;
+    }
+
     pigment_collect_command_pool(pigment, cmd->source_pool);
 
     VkCommandBufferUsageFlags vk_flags = 0;
@@ -385,6 +391,7 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
     }
 
     vkCmdExecuteCommands(primary->buffer, count, vk_secondaries);
+    primary->graphics_pipeline_type = P_PIPELINE_TYPE_NONE;
     P_STACK_OR_HEAP_FREE(pigment, vk_secondaries);
 }
 
@@ -1005,8 +1012,9 @@ static void cmd_release_uses(Pigment* pigment, PCommandBuffer* cmd)
         resource_tracker_release(pigment, cmd->uses[i]);
     }
 
-    cmd->use_count        = 0;
-    cmd->recording_failed = P_FALSE;
+    cmd->use_count              = 0;
+    cmd->recording_failed       = P_FALSE;
+    cmd->graphics_pipeline_type = P_PIPELINE_TYPE_NONE;
 }
 
 void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint32_t queue_slot, uint64_t value)

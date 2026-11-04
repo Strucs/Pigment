@@ -96,7 +96,7 @@ typedef struct PCommandBufferInheritance {
     PFormat depth_format;      // P_FORMAT_UNDEFINED if no depth
     PFormat stencil_format;    // P_FORMAT_UNDEFINED if no stencil
     PSampleCount samples;      // 0 = 1 sample
-    uint32_t view_mask;        // 0 = no multiview
+    uint32_t view_mask;        // 0 = no multiview, otherwise requires P_FEATURE_MULTIVIEW
 } PCommandBufferInheritance;
 
 /**

@@ -54,8 +54,8 @@ typedef struct PVkInitInfo {
     void* instance_pnext_chain;
 
     /**
-     * For third-party feature structs (mesh shader, ray tracing, ...) only.
-     * Do NOT chain VkPhysicalDeviceVulkanXXFeatures here because Pigment uses default features.
+     * For feature structs not managed by Pigment (ray tracing, ...) only.
+     * Do NOT chain VkPhysicalDeviceVulkanXXFeatures or VkPhysicalDeviceMeshShaderFeaturesEXT here.
      */
     void* device_pnext_chain;
 

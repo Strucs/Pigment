@@ -188,6 +188,10 @@ VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages)
     {
         out |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     }
+    if(stages & P_PIPELINE_STAGE_MESH_SHADER_BIT)
+    {
+        out |= VK_PIPELINE_STAGE_2_MESH_SHADER_BIT_EXT;
+    }
     if(stages & P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT)
     {
         out |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;

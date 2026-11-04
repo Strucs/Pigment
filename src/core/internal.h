@@ -25,6 +25,9 @@
 #include <string.h>
 
 VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);
+VkPipelineBindPoint pipeline_bind_point_to_vk(PPipelineType type);
+PBool validate_multiview(Pigment* pigment, uint32_t view_mask);
+PBool shader_stages_to_vk(Pigment* pigment, PShaderStageFlags stages, VkShaderStageFlags* out);
 
 static inline PBool name_in_list(const char* const* list, uint32_t count, const char* name)
 {

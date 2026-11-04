@@ -42,8 +42,24 @@ uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_
         goto FREE;
     }
 
-    shaderc_shader_kind kind = (type == P_SHADER_TYPE_FRAGMENT) ? shaderc_glsl_fragment_shader : shaderc_glsl_vertex_shader;
-    const char* input_name   = file_name ? file_name : "default";
+    shaderc_shader_kind kind;
+    switch(type)
+    {
+        case P_SHADER_TYPE_VERTEX:
+            kind = shaderc_glsl_vertex_shader;
+            break;
+        case P_SHADER_TYPE_FRAGMENT:
+            kind = shaderc_glsl_fragment_shader;
+            break;
+        case P_SHADER_TYPE_MESH:
+            kind = shaderc_glsl_mesh_shader;
+            shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
+            break;
+        default:
+            fprintf(stderr, "pigment_shaderc: unsupported shader type\n");
+            goto FREE;
+    }
+    const char* input_name = file_name ? file_name : "default";
 
     result = shaderc_compile_into_spv(compiler, source_code, source_size, kind, input_name, "main", options);
 

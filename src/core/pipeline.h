@@ -178,7 +178,9 @@ typedef struct PPipelineDesc {
     PLayout* layout;
 
     /**
-     * Exactly one VERTEX stage and optionally one FRAGMENT stage, in any order.
+     * Exactly one VERTEX or MESH stage and optionally one FRAGMENT stage, in any order.
+     * MESH requires P_FEATURE_MESH_SHADER and cannot be combined with VERTEX.
+     * A nonzero view_mask with MESH requires P_FEATURE_MULTIVIEW_MESH_SHADER.
      * The array and its referenced inputs are borrowed until creation returns.
      */
     const PShaderStageDesc* stages;
@@ -195,11 +197,12 @@ typedef struct PPipelineDesc {
     PFormat depth_format;    // P_FORMAT_UNDEFINED = no depth attachment
 
     PPolygonMode polygon_mode;
-    PBool depth_clamp;    // Requires P_FEATURE_DEPTH_CLAMP. Disabled by default. Creation fails if unavailable.
-    PTopology topology;
+    PBool depth_clamp;     // Requires P_FEATURE_DEPTH_CLAMP. Disabled by default. Creation fails if unavailable.
+    PTopology topology;    // Ignored with MESH, which declares its output topology in the shader.
 
     /**
-     * Indexed draws only. Requires LINE_STRIP, TRIANGLE_STRIP or TRIANGLE_FAN.
+     * Classic indexed draws only. Requires LINE_STRIP, TRIANGLE_STRIP or TRIANGLE_FAN.
+     * Must be disabled with MESH.
      * Restart index: 0xFFFF for UINT16, 0xFFFFFFFF for UINT32. Disabled by default.
      */
     PBool primitive_restart;
@@ -220,11 +223,12 @@ typedef struct PPipelineDesc {
     /**
      * Multiview view mask. Must match the view_mask of the render pass this pipeline is bound in.
      * 0 = single-view (default). e.g. 0b111111 = 6 views simultaneously (cubemap shadow).
+     * A nonzero mask requires P_FEATURE_MULTIVIEW.
      */
     uint32_t view_mask;
 
     /**
-     * Classic vertex input declaration.
+     * Classic vertex input declaration. Counts must be zero with MESH.
      */
 
     const PVertexBindingDesc* vertex_bindings;

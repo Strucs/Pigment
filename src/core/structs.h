@@ -189,6 +189,12 @@ typedef struct PQueueRange {
     uint32_t count;
 } PQueueRange;
 
+typedef struct PMeshShaderLimits {
+    uint32_t max_work_group_total_count;
+    uint32_t max_work_group_count[3];
+    uint32_t max_multiview_view_count;
+} PMeshShaderLimits;
+
 struct PDevice {
     VkPhysicalDevice physical_device;
     VkDevice logical_device;
@@ -199,6 +205,7 @@ struct PDevice {
     ExtensionList* extensions;
     PBool features[P_FEATURE_COUNT];
     float line_width_range[2];
+    PMeshShaderLimits mesh_limits;
 };
 
 struct PSurface {
@@ -235,10 +242,17 @@ struct PSwapchain {
     uint32_t present_family_index;
 };
 
+typedef enum PPipelineType {
+    P_PIPELINE_TYPE_NONE,
+    P_PIPELINE_TYPE_VERTEX,
+    P_PIPELINE_TYPE_MESH,
+    P_PIPELINE_TYPE_COMPUTE,
+} PPipelineType;
+
 struct PPipeline {
     VkPipeline pipeline;
     PLayout* layout;
-    PPipelineBindPoint bind_point;
+    PPipelineType type;
     PResourceTracker tracker;
 };
 
@@ -262,6 +276,7 @@ typedef struct PShaderStageBuild {
 struct PPipelineBuild {
     PShaderStageBuild* shaders;
     uint32_t shader_stage_count;
+    PPipelineType type;
     VkPipelineShaderStageCreateInfo* shader_stages;
     VkVertexInputBindingDescription* vk_vertex_bindings;
     uint32_t vk_vertex_binding_count;
@@ -308,6 +323,7 @@ struct PCommandBuffer {
     uint32_t use_count;
     uint32_t use_capacity;
     PBool recording_failed;
+    PPipelineType graphics_pipeline_type;    // Unaffected by compute pipeline binds.
 
     PCommandBuffer* next_retired;
 };
