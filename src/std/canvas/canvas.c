@@ -153,7 +153,8 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
     PFormat color_format = config->color_format;
     for(uint32_t i = 0; i < blend_mode_count; i++)
     {
-        PBlendMode mode = blend_modes[i];
+        PBlendMode mode            = blend_modes[i];
+        PBlendAttachmentDesc blend = pigment_blend_attachment(mode);
 
         PPipelineDesc pipeline_desc = {
             .layout               = canvas->resources->layout,
@@ -163,8 +164,7 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
             .fragment_shader_size = (uint32_t) ndc_frag_spv_size,
             .color_formats        = &color_format,
             .color_format_count   = 1,
-            .blend_modes          = &mode,
-            .blend_mode_count     = 1,
+            .blend_attachments    = &blend,
             .depth_format         = P_FORMAT_UNDEFINED,
             .polygon_mode         = P_POLYGON_MODE_FILL,
             .topology             = P_TOPOLOGY_TRIANGLE_LIST,

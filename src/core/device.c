@@ -673,6 +673,9 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     device->features[P_FEATURE_TEXTURE_COMPRESSION_BC]       = (PBool) available_2.features.textureCompressionBC;
     device->features[P_FEATURE_TEXTURE_COMPRESSION_ETC2]     = (PBool) available_2.features.textureCompressionETC2;
     device->features[P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR] = (PBool) available_2.features.textureCompressionASTC_LDR;
+    device->features[P_FEATURE_INDEPENDENT_BLEND]            = (PBool) available_2.features.independentBlend;
+    device->features[P_FEATURE_SAMPLE_RATE_SHADING]          = (PBool) available_2.features.sampleRateShading;
+    device->features[P_FEATURE_DEPTH_BIAS_CLAMP]             = (PBool) available_2.features.depthBiasClamp;
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
         .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
@@ -722,6 +725,9 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
                      .textureCompressionBC       = device->features[P_FEATURE_TEXTURE_COMPRESSION_BC] ? VK_TRUE : VK_FALSE,
                      .textureCompressionETC2     = device->features[P_FEATURE_TEXTURE_COMPRESSION_ETC2] ? VK_TRUE : VK_FALSE,
                      .textureCompressionASTC_LDR = device->features[P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR] ? VK_TRUE : VK_FALSE,
+                     .independentBlend           = device->features[P_FEATURE_INDEPENDENT_BLEND] ? VK_TRUE : VK_FALSE,
+                     .sampleRateShading          = device->features[P_FEATURE_SAMPLE_RATE_SHADING] ? VK_TRUE : VK_FALSE,
+                     .depthBiasClamp             = device->features[P_FEATURE_DEPTH_BIAS_CLAMP] ? VK_TRUE : VK_FALSE,
                      },
         .pNext = features_head,
     };

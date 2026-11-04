@@ -1040,6 +1040,11 @@ void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool ena
     {
         return;
     }
+    if(enable && clamp != 0.0f && !pigment->device->features[P_FEATURE_DEPTH_BIAS_CLAMP])
+    {
+        PLOG_ERROR(pigment, "Nonzero depth bias clamp requires P_FEATURE_DEPTH_BIAS_CLAMP.");
+        return;
+    }
     vkCmdSetDepthBiasEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);
     if(enable)
     {
@@ -1053,8 +1058,9 @@ void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool e
     {
         return;
     }
-    if(!pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST])
+    if(enable && !pigment->device->features[P_FEATURE_DEPTH_BOUNDS_TEST])
     {
+        PLOG_ERROR(pigment, "Depth bounds test requires P_FEATURE_DEPTH_BOUNDS_TEST.");
         return;
     }
     vkCmdSetDepthBoundsTestEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);

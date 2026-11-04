@@ -31,12 +31,81 @@ static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(vo
 static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode);
 static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count, PBool sample_shading_enable, float min_sample_shading, PBool alpha_to_coverage);
 static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(void);
-static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode);
-static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count);
+static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(const PBlendAttachmentDesc* desc);
+static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count, const float constants[4]);
 static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDynamicState* dynamic_states, uint32_t dynamic_states_size);
 static void destroy_pipeline_immediate(Pigment* pigment, void* resource);
 static void destroy_layout_immediate(Pigment* pigment, void* resource);
 static PResult build_specialization(Pigment* pigment, const PSpecializationInfo* in, VkSpecializationMapEntry** out_entries, VkSpecializationInfo* out_info);
+
+static PBool validate_sample_shading(Pigment* pigment, const PPipelineDesc* desc)
+{
+    if(!desc->sample_shading_enable)
+    {
+        return P_TRUE;
+    }
+
+    if(!(desc->min_sample_shading >= 0.0f && desc->min_sample_shading <= 1.0f))
+    {
+        PLOG_ERROR(pigment, "PPipelineDesc.min_sample_shading must be in [0, 1] when sample shading is enabled.");
+        return P_FALSE;
+    }
+
+    if(!pigment->device->features[P_FEATURE_SAMPLE_RATE_SHADING])
+    {
+        PLOG_ERROR(pigment, "Sample shading requires P_FEATURE_SAMPLE_RATE_SHADING.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
+
+static PBool validate_blend_attachments(Pigment* pigment, const PPipelineDesc* desc)
+{
+    if(desc->color_format_count > 0 && desc->color_formats == NULL)
+    {
+        PLOG_ERROR(pigment, "PPipelineDesc.color_formats is NULL with nonzero color_format_count.");
+        return P_FALSE;
+    }
+
+    if(desc->blend_attachments == NULL)
+    {
+        return P_TRUE;
+    }
+
+    for(uint32_t i = 0; i < desc->color_format_count; i++)
+    {
+        const PBlendAttachmentDesc* blend = &desc->blend_attachments[i];
+        if(((uint32_t) blend->write_mask & ~(uint32_t) P_COLOR_COMPONENT_RGBA) != 0
+           || (uint32_t) blend->src_color_factor >= P_BLEND_FACTOR_COUNT
+           || (uint32_t) blend->dst_color_factor >= P_BLEND_FACTOR_COUNT
+           || (uint32_t) blend->src_alpha_factor >= P_BLEND_FACTOR_COUNT
+           || (uint32_t) blend->dst_alpha_factor >= P_BLEND_FACTOR_COUNT
+           || (uint32_t) blend->color_op >= P_BLEND_OP_COUNT
+           || (uint32_t) blend->alpha_op >= P_BLEND_OP_COUNT)
+        {
+            PLOG_ERROR(pigment, "Invalid blend state for color attachment %u.", i);
+            return P_FALSE;
+        }
+
+        const PBlendAttachmentDesc* first = &desc->blend_attachments[0];
+        if(i > 0 && !pigment->device->features[P_FEATURE_INDEPENDENT_BLEND]
+           && ((blend->enable != 0) != (first->enable != 0)
+               || blend->write_mask != first->write_mask
+               || blend->src_color_factor != first->src_color_factor
+               || blend->dst_color_factor != first->dst_color_factor
+               || blend->color_op != first->color_op
+               || blend->src_alpha_factor != first->src_alpha_factor
+               || blend->dst_alpha_factor != first->dst_alpha_factor
+               || blend->alpha_op != first->alpha_op))
+        {
+            PLOG_ERROR(pigment, "Different blend states across color attachments require P_FEATURE_INDEPENDENT_BLEND.");
+            return P_FALSE;
+        }
+    }
+
+    return P_TRUE;
+}
 
 static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc)
 {
@@ -74,12 +143,6 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         }
     }
 
-    if(desc->blend_modes != NULL && desc->blend_mode_count != desc->color_format_count)
-    {
-        PLOG_ERROR(pigment, "pigment_pipeline_build_from_desc: blend_mode_count (%u) must equal color_format_count (%u) when blend_modes is not NULL.", desc->blend_mode_count, desc->color_format_count);
-        goto ERROR;
-    }
-
     build->color_format_count = desc->color_format_count;
     if(desc->color_format_count > 0)
     {
@@ -101,8 +164,8 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         }
         for(uint32_t i = 0; i < desc->color_format_count; i++)
         {
-            PBlendMode mode             = (desc->blend_modes != NULL) ? desc->blend_modes[i] : P_BLEND_MODE_OPAQUE;
-            build->blend_attachments[i] = configure_color_blend_attachment_state_create_info(mode);
+            PBlendAttachmentDesc blend  = desc->blend_attachments != NULL ? desc->blend_attachments[i] : pigment_blend_attachment(P_BLEND_MODE_OPAQUE);
+            build->blend_attachments[i] = configure_color_blend_attachment_state_create_info(&blend);
         }
     }
 
@@ -149,7 +212,7 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
     build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode);
     build->multisample    = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1, desc->sample_shading_enable, desc->min_sample_shading, desc->alpha_to_coverage);
     build->depth_stencil  = configure_depth_stencil_state_create_info();
-    build->color_blend    = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count);
+    build->color_blend    = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count, desc->blend_constants);
 
     static const VkDynamicState base_dynamic_state_list[] = {
         VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT,
@@ -271,6 +334,14 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
     if(pigment == NULL || descs == NULL || out == NULL || count == 0)
     {
         return PIGMENT_ERROR;
+    }
+
+    for(uint32_t i = 0; i < count; i++)
+    {
+        if(!validate_sample_shading(pigment, &descs[i]) || !validate_blend_attachments(pigment, &descs[i]))
+        {
+            return PIGMENT_ERROR;
+        }
     }
 
     PResult status               = PIGMENT_ERROR_OUT_OF_MEMORY;
@@ -720,69 +791,85 @@ static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_creat
     return depth_stencil_state_create_info;
 }
 
-static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(PBlendMode mode)
+static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(const PBlendAttachmentDesc* desc)
 {
-    VkPipelineColorBlendAttachmentState color_blend_attachment_state_create_info = {
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-        .blendEnable    = VK_FALSE
+    return (VkPipelineColorBlendAttachmentState) {
+        .blendEnable         = desc->enable ? VK_TRUE : VK_FALSE,
+        .srcColorBlendFactor = (VkBlendFactor) desc->src_color_factor,
+        .dstColorBlendFactor = (VkBlendFactor) desc->dst_color_factor,
+        .colorBlendOp        = (VkBlendOp) desc->color_op,
+        .srcAlphaBlendFactor = (VkBlendFactor) desc->src_alpha_factor,
+        .dstAlphaBlendFactor = (VkBlendFactor) desc->dst_alpha_factor,
+        .alphaBlendOp        = (VkBlendOp) desc->alpha_op,
+        .colorWriteMask      = (VkColorComponentFlags) desc->write_mask,
+    };
+}
+
+PBlendAttachmentDesc pigment_blend_attachment(PBlendMode mode)
+{
+    PBlendAttachmentDesc blend = {
+        .write_mask = P_COLOR_COMPONENT_RGBA,
+        .enable     = P_FALSE
     };
 
     switch(mode)
     {
         case P_BLEND_MODE_OPAQUE:
-            color_blend_attachment_state_create_info.blendEnable = VK_FALSE;
+            blend.enable = P_FALSE;
             break;
         case P_BLEND_MODE_ALPHA:
-            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
-            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
-            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            blend.enable           = P_TRUE;
+            blend.src_color_factor = P_BLEND_FACTOR_SRC_ALPHA;
+            blend.dst_color_factor = P_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.color_op         = P_BLEND_OP_ADD;
+            blend.src_alpha_factor = P_BLEND_FACTOR_ONE;
+            blend.dst_alpha_factor = P_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.alpha_op         = P_BLEND_OP_ADD;
             break;
         case P_BLEND_MODE_PREMULTIPLIED_ALPHA:
-            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
-            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
-            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            blend.enable           = P_TRUE;
+            blend.src_color_factor = P_BLEND_FACTOR_ONE;
+            blend.dst_color_factor = P_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.color_op         = P_BLEND_OP_ADD;
+            blend.src_alpha_factor = P_BLEND_FACTOR_ONE;
+            blend.dst_alpha_factor = P_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.alpha_op         = P_BLEND_OP_ADD;
             break;
         case P_BLEND_MODE_ADDITIVE:
-            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
-            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
-            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            blend.enable           = P_TRUE;
+            blend.src_color_factor = P_BLEND_FACTOR_SRC_ALPHA;
+            blend.dst_color_factor = P_BLEND_FACTOR_ONE;
+            blend.color_op         = P_BLEND_OP_ADD;
+            blend.src_alpha_factor = P_BLEND_FACTOR_ONE;
+            blend.dst_alpha_factor = P_BLEND_FACTOR_ONE;
+            blend.alpha_op         = P_BLEND_OP_ADD;
             break;
         case P_BLEND_MODE_MULTIPLY:
-            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
-            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_DST_COLOR;
-            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
-            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
-            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            blend.enable           = P_TRUE;
+            blend.src_color_factor = P_BLEND_FACTOR_DST_COLOR;
+            blend.dst_color_factor = P_BLEND_FACTOR_ZERO;
+            blend.color_op         = P_BLEND_OP_ADD;
+            blend.src_alpha_factor = P_BLEND_FACTOR_DST_ALPHA;
+            blend.dst_alpha_factor = P_BLEND_FACTOR_ZERO;
+            blend.alpha_op         = P_BLEND_OP_ADD;
             break;
         case P_BLEND_MODE_SCREEN:
-            color_blend_attachment_state_create_info.blendEnable         = VK_TRUE;
-            color_blend_attachment_state_create_info.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
-            color_blend_attachment_state_create_info.colorBlendOp        = VK_BLEND_OP_ADD;
-            color_blend_attachment_state_create_info.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-            color_blend_attachment_state_create_info.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-            color_blend_attachment_state_create_info.alphaBlendOp        = VK_BLEND_OP_ADD;
+            blend.enable           = P_TRUE;
+            blend.src_color_factor = P_BLEND_FACTOR_ONE;
+            blend.dst_color_factor = P_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+            blend.color_op         = P_BLEND_OP_ADD;
+            blend.src_alpha_factor = P_BLEND_FACTOR_ONE;
+            blend.dst_alpha_factor = P_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.alpha_op         = P_BLEND_OP_ADD;
+            break;
+        default:
             break;
     }
 
-    return color_blend_attachment_state_create_info;
+    return blend;
 }
 
-static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count)
+static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_info(VkPipelineColorBlendAttachmentState* attachments, uint32_t attachment_count, const float constants[4])
 {
     VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = {
         .sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -790,10 +877,10 @@ static VkPipelineColorBlendStateCreateInfo configure_color_blend_state_create_in
         .logicOp           = VK_LOGIC_OP_COPY,
         .attachmentCount   = attachment_count,
         .pAttachments      = attachments,
-        .blendConstants[0] = 0.0f,
-        .blendConstants[1] = 0.0f,
-        .blendConstants[2] = 0.0f,
-        .blendConstants[3] = 0.0f,
+        .blendConstants[0] = constants[0],
+        .blendConstants[1] = constants[1],
+        .blendConstants[2] = constants[2],
+        .blendConstants[3] = constants[3],
     };
 
     return color_blend_state_create_info;

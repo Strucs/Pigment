@@ -116,8 +116,7 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
     desc.depth_format       = depth_format;
     desc.polygon_mode       = P_POLYGON_MODE_FILL;
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
-    desc.blend_modes        = NULL;
-    desc.blend_mode_count   = 0;
+    desc.blend_attachments  = NULL;
     desc.sample_count       = samples;
 
     return desc;
@@ -164,8 +163,7 @@ PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* 
     desc.depth_format       = depth_format;
     desc.polygon_mode       = P_POLYGON_MODE_FILL;
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
-    desc.blend_modes        = NULL;
-    desc.blend_mode_count   = 0;
+    desc.blend_attachments  = NULL;
     desc.sample_count       = samples;
 
     return desc;
@@ -211,8 +209,7 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
     desc.depth_format       = depth_format;
     desc.polygon_mode       = P_POLYGON_MODE_FILL;
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
-    desc.blend_modes        = NULL;
-    desc.blend_mode_count   = 0;
+    desc.blend_attachments  = NULL;
     desc.sample_count       = samples;
 
     return desc;
@@ -258,8 +255,7 @@ PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless
     desc.depth_format       = depth_format;
     desc.polygon_mode       = P_POLYGON_MODE_FILL;
     desc.topology           = P_TOPOLOGY_TRIANGLE_LIST;
-    desc.blend_modes        = NULL;
-    desc.blend_mode_count   = 0;
+    desc.blend_attachments  = NULL;
     desc.sample_count       = samples;
 
     return desc;

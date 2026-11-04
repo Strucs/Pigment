@@ -82,6 +82,9 @@ typedef enum PFeature {
     P_FEATURE_TEXTURE_COMPRESSION_BC       = 7,
     P_FEATURE_TEXTURE_COMPRESSION_ETC2     = 8,
     P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR = 9,
+    P_FEATURE_INDEPENDENT_BLEND            = 10,
+    P_FEATURE_SAMPLE_RATE_SHADING          = 11,
+    P_FEATURE_DEPTH_BIAS_CLAMP             = 12,
     P_FEATURE_COUNT    // size of the device feature array
 } PFeature;
 

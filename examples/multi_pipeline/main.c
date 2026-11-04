@@ -163,9 +163,8 @@ int main(void)
     PPipelineDesc desc_opaque   = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, samples);
     PPipelineDesc desc_additive = default_graphic_pipeline_desc(pigment, bindless, &color_format, 1, depth_format, samples);
 
-    PBlendMode additive_blend      = P_BLEND_MODE_ADDITIVE;
-    desc_additive.blend_modes      = &additive_blend;
-    desc_additive.blend_mode_count = 1;
+    PBlendAttachmentDesc additive_blend = pigment_blend_attachment(P_BLEND_MODE_ADDITIVE);
+    desc_additive.blend_attachments     = &additive_blend;
 
     PPipelineDesc descs[sizeof(pipelines) / sizeof(pipelines[0])] = {desc_opaque, desc_additive};
     if(pigment_create_graphic_pipelines(pigment, NULL, descs, sizeof(descs) / sizeof(descs[0]), pipelines) != PIGMENT_SUCCESS)

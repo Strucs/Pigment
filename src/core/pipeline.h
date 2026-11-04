@@ -76,6 +76,61 @@ typedef enum PBlendMode {
     P_BLEND_MODE_SCREEN              = 5,
 } PBlendMode;
 
+typedef enum PBlendFactor {
+    P_BLEND_FACTOR_ZERO                     = 0,
+    P_BLEND_FACTOR_ONE                      = 1,
+    P_BLEND_FACTOR_SRC_COLOR                = 2,
+    P_BLEND_FACTOR_ONE_MINUS_SRC_COLOR      = 3,
+    P_BLEND_FACTOR_DST_COLOR                = 4,
+    P_BLEND_FACTOR_ONE_MINUS_DST_COLOR      = 5,
+    P_BLEND_FACTOR_SRC_ALPHA                = 6,
+    P_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA      = 7,
+    P_BLEND_FACTOR_DST_ALPHA                = 8,
+    P_BLEND_FACTOR_ONE_MINUS_DST_ALPHA      = 9,
+    P_BLEND_FACTOR_CONSTANT_COLOR           = 10,
+    P_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR = 11,
+    P_BLEND_FACTOR_CONSTANT_ALPHA           = 12,
+    P_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA = 13,
+    P_BLEND_FACTOR_SRC_ALPHA_SATURATE       = 14,
+    P_BLEND_FACTOR_COUNT,
+} PBlendFactor;
+
+typedef enum PBlendOp {
+    P_BLEND_OP_ADD              = 0,
+    P_BLEND_OP_SUBTRACT         = 1,
+    P_BLEND_OP_REVERSE_SUBTRACT = 2,
+    P_BLEND_OP_MIN              = 3,
+    P_BLEND_OP_MAX              = 4,
+    P_BLEND_OP_COUNT,
+} PBlendOp;
+
+typedef enum PColorComponentFlags {
+    P_COLOR_COMPONENT_R_BIT = 1 << 0,
+    P_COLOR_COMPONENT_G_BIT = 1 << 1,
+    P_COLOR_COMPONENT_B_BIT = 1 << 2,
+    P_COLOR_COMPONENT_A_BIT = 1 << 3,
+    P_COLOR_COMPONENT_RGB   = P_COLOR_COMPONENT_R_BIT | P_COLOR_COMPONENT_G_BIT | P_COLOR_COMPONENT_B_BIT,
+    P_COLOR_COMPONENT_RGBA  = P_COLOR_COMPONENT_RGB | P_COLOR_COMPONENT_A_BIT,
+} PColorComponentFlags;
+
+typedef struct PBlendAttachmentDesc {
+    PBool enable;
+    PColorComponentFlags write_mask;    // Applies even when blending is disabled. 0 = no color writes.
+    PBlendFactor src_color_factor;
+    PBlendFactor dst_color_factor;
+    PBlendOp color_op;
+    PBlendFactor src_alpha_factor;
+    PBlendFactor dst_alpha_factor;
+    PBlendOp alpha_op;
+} PBlendAttachmentDesc;
+
+/**
+ * @brief Build a blend preset with RGBA writes enabled, ready for customization.
+ *
+ * Unknown modes fall back to OPAQUE.
+ */
+PIGMENT_API PBlendAttachmentDesc pigment_blend_attachment(PBlendMode mode);
+
 typedef struct PSpecializationEntry {
     uint32_t constant_id;
     uint32_t offset;
@@ -135,16 +190,16 @@ typedef struct PPipelineDesc {
     PTopology topology;
 
     /**
-     * Per-attachment blend modes. NULL = all attachments OPAQUE.
-     * If non-NULL, count must equal color_format_count.
+     * Array of color_format_count blend states. NULL = OPAQUE with RGBA writes.
+     * Different states across attachments require P_FEATURE_INDEPENDENT_BLEND.
      */
-    const PBlendMode* blend_modes;
-    uint32_t blend_mode_count;
+    const PBlendAttachmentDesc* blend_attachments;
+    float blend_constants[4];    // Shared by all attachments using CONSTANT_COLOR / CONSTANT_ALPHA factors.
 
     PSampleCount sample_count;
 
-    PBool sample_shading_enable;
-    float min_sample_shading;
+    PBool sample_shading_enable;    // Requires P_FEATURE_SAMPLE_RATE_SHADING. Creation fails if unavailable.
+    float min_sample_shading;       // [0, 1] when enabled. Ignored otherwise.
     PBool alpha_to_coverage;
 
     /**

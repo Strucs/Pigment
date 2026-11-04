@@ -253,7 +253,23 @@ PIGMENT_API void pigment_cmd_set_stencil_write_mask(Pigment* pigment, PCommandBu
 PIGMENT_API void pigment_cmd_set_stencil_reference(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t reference);
 PIGMENT_API void pigment_cmd_set_viewport(Pigment* pigment, PCommandBuffer* cmd, const PViewport* viewports, uint32_t count);
 PIGMENT_API void pigment_cmd_set_scissor(Pigment* pigment, PCommandBuffer* cmd, const PScissor* scissors, uint32_t count);
+
+/**
+ * @brief Enable or disable depth bias.
+ *
+ * Requires P_FEATURE_DEPTH_BIAS_CLAMP when enabled with nonzero clamp.
+ * An unsupported clamp logs an error and the call is ignored.
+ * constant, clamp and slope are ignored when enable is false.
+ */
 PIGMENT_API void pigment_cmd_set_depth_bias(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float constant, float clamp, float slope);
+
+/**
+ * @brief Enable or disable the depth bounds test.
+ *
+ * Requires P_FEATURE_DEPTH_BOUNDS_TEST.
+ * Enabling it logs an error if unavailable and the call is ignored.
+ * min and max are ignored when enable is false.
+ */
 PIGMENT_API void pigment_cmd_set_depth_bounds(Pigment* pigment, PCommandBuffer* cmd, PBool enable, float min, float max);
 
 #ifdef __cplusplus
