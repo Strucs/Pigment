@@ -150,6 +150,11 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
         goto FREE;
     }
 
+    static const PShaderStageDesc stages[] = {
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) ndc_vert_spv, .code_size = (uint32_t) ndc_vert_spv_size},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) ndc_frag_spv, .code_size = (uint32_t) ndc_frag_spv_size},
+    };
+
     PFormat color_format = config->color_format;
     for(uint32_t i = 0; i < blend_mode_count; i++)
     {
@@ -157,19 +162,17 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
         PBlendAttachmentDesc blend = pigment_blend_attachment(mode);
 
         PPipelineDesc pipeline_desc = {
-            .layout               = canvas->resources->layout,
-            .vertex_shader        = (const uint32_t*) ndc_vert_spv,
-            .vertex_shader_size   = (uint32_t) ndc_vert_spv_size,
-            .fragment_shader      = (const uint32_t*) ndc_frag_spv,
-            .fragment_shader_size = (uint32_t) ndc_frag_spv_size,
-            .color_formats        = &color_format,
-            .color_format_count   = 1,
-            .blend_attachments    = &blend,
-            .depth_format         = P_FORMAT_UNDEFINED,
-            .polygon_mode         = P_POLYGON_MODE_FILL,
-            .topology             = P_TOPOLOGY_TRIANGLE_LIST,
-            .sample_count         = samples,
-            .name                 = "std_canvas_pipeline",
+            .layout             = canvas->resources->layout,
+            .stages             = stages,
+            .stage_count        = sizeof(stages) / sizeof(stages[0]),
+            .color_formats      = &color_format,
+            .color_format_count = 1,
+            .blend_attachments  = &blend,
+            .depth_format       = P_FORMAT_UNDEFINED,
+            .polygon_mode       = P_POLYGON_MODE_FILL,
+            .topology           = P_TOPOLOGY_TRIANGLE_LIST,
+            .sample_count       = samples,
+            .name               = "std_canvas_pipeline",
         };
 
         PPipeline* pipeline = NULL;

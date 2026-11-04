@@ -246,6 +246,26 @@ PIGMENT_API void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PComm
 
 PIGMENT_API void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
 PIGMENT_API void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);
+
+/**
+ * @brief Set the rasterized line width in pixels.
+ *
+ * Width must be finite, positive and within PDeviceLimits.line_width_range.
+ * Widths other than 1.0 require P_FEATURE_WIDE_LINES.
+ * Invalid or unsupported widths log an error and the call is ignored.
+ * The GPU may quantize the width according to line_width_granularity.
+ * Binding a graphics pipeline resets the width to 1.0.
+ */
+PIGMENT_API void pigment_cmd_set_line_width(Pigment* pigment, PCommandBuffer* cmd, float width);
+
+/**
+ * @brief Enable or disable primitive discard before rasterization.
+ *
+ * When enabled, draws produce no color or depth/stencil writes.
+ * Binding a graphics pipeline resets this state to disabled.
+ */
+PIGMENT_API void pigment_cmd_set_rasterizer_discard(Pigment* pigment, PCommandBuffer* cmd, PBool enable);
+
 PIGMENT_API void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, PBool enable);
 PIGMENT_API void pigment_cmd_set_stencil_op(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, PStencilOp fail_op, PStencilOp pass_op, PStencilOp depth_fail_op, PCompareOp compare_op);
 PIGMENT_API void pigment_cmd_set_stencil_compare_mask(Pigment* pigment, PCommandBuffer* cmd, PStencilFaceFlags faces, uint32_t mask);

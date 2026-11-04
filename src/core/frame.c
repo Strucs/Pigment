@@ -24,6 +24,8 @@
 
 #include "internal.h"
 
+#include <math.h>
+
 PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot)
 {
     if(pigment == NULL || renderer == NULL)
@@ -939,6 +941,40 @@ void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode,
     }
     vkCmdSetCullMode(cmd->buffer, (VkCullModeFlags) mode);
     vkCmdSetFrontFace(cmd->buffer, (VkFrontFace) face);
+}
+
+void pigment_cmd_set_line_width(Pigment* pigment, PCommandBuffer* cmd, float width)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    if(!isfinite(width) || width <= 0.0f)
+    {
+        PLOG_ERROR(pigment, "Line width must be finite and positive (got %g).", (double) width);
+        return;
+    }
+    if(width != 1.0f && !pigment->device->features[P_FEATURE_WIDE_LINES])
+    {
+        PLOG_ERROR(pigment, "Line widths other than 1.0 require P_FEATURE_WIDE_LINES.");
+        return;
+    }
+    const float* range = pigment->device->line_width_range;
+    if(width < range[0] || width > range[1])
+    {
+        PLOG_ERROR(pigment, "Line width %g is outside the supported range [%g, %g].", (double) width, (double) range[0], (double) range[1]);
+        return;
+    }
+    vkCmdSetLineWidth(cmd->buffer, width);
+}
+
+void pigment_cmd_set_rasterizer_discard(Pigment* pigment, PCommandBuffer* cmd, PBool enable)
+{
+    if(pigment == NULL || cmd == NULL)
+    {
+        return;
+    }
+    vkCmdSetRasterizerDiscardEnable(cmd->buffer, enable ? VK_TRUE : VK_FALSE);
 }
 
 void pigment_cmd_set_stencil_test(Pigment* pigment, PCommandBuffer* cmd, PBool enable)

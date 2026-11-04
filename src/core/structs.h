@@ -198,6 +198,7 @@ struct PDevice {
     uint32_t queue_range_count;
     ExtensionList* extensions;
     PBool features[P_FEATURE_COUNT];
+    float line_width_range[2];
 };
 
 struct PSurface {
@@ -252,15 +253,16 @@ struct PPipelineCache {
     VkPipelineCache cache;
 };
 
+typedef struct PShaderStageBuild {
+    VkShaderModule module;
+    VkSpecializationMapEntry* spec_entries;
+    VkSpecializationInfo spec_info;
+} PShaderStageBuild;
+
 struct PPipelineBuild {
-    VkShaderModule vertex_module;
-    VkShaderModule fragment_module;
+    PShaderStageBuild* shaders;
     uint32_t shader_stage_count;
-    VkPipelineShaderStageCreateInfo shader_stages[2];
-    VkSpecializationMapEntry* vertex_spec_entries;
-    VkSpecializationInfo vertex_spec_info;
-    VkSpecializationMapEntry* fragment_spec_entries;
-    VkSpecializationInfo fragment_spec_info;
+    VkPipelineShaderStageCreateInfo* shader_stages;
     VkVertexInputBindingDescription* vk_vertex_bindings;
     uint32_t vk_vertex_binding_count;
     VkVertexInputAttributeDescription* vk_vertex_attributes;

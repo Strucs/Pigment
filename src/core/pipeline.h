@@ -144,6 +144,18 @@ typedef struct PSpecializationInfo {
     uint64_t data_size;
 } PSpecializationInfo;
 
+/**
+ * Shader stage inputs are borrowed until pipeline creation returns.
+ * Code, entry point and specialization data may be released afterwards.
+ */
+typedef struct PShaderStageDesc {
+    PShaderStageFlags stage;    // Exactly one P_SHADER_STAGE_* bit.
+    const uint32_t* code;
+    uint32_t code_size;         // SPIR-V size in bytes.
+    const char* entry_point;    // NULL = "main".
+    const PSpecializationInfo* specialization;
+} PShaderStageDesc;
+
 typedef enum PVertexInputRate {
     P_VERTEX_INPUT_RATE_VERTEX   = 0,
     P_VERTEX_INPUT_RATE_INSTANCE = 1,
@@ -165,16 +177,12 @@ typedef struct PVertexAttributeDesc {
 typedef struct PPipelineDesc {
     PLayout* layout;
 
-    const uint32_t* vertex_shader;
-    uint32_t vertex_shader_size;
-    const uint32_t* fragment_shader;
-    uint32_t fragment_shader_size;
-
     /**
-     * Per-stage specialization constants. NULL = no specialization for that stage.
+     * Exactly one VERTEX stage and optionally one FRAGMENT stage, in any order.
+     * The array and its referenced inputs are borrowed until creation returns.
      */
-    const PSpecializationInfo* vertex_specialization;
-    const PSpecializationInfo* fragment_specialization;
+    const PShaderStageDesc* stages;
+    uint32_t stage_count;
 
     const PFormat* color_formats;
     /**
@@ -187,7 +195,14 @@ typedef struct PPipelineDesc {
     PFormat depth_format;    // P_FORMAT_UNDEFINED = no depth attachment
 
     PPolygonMode polygon_mode;
+    PBool depth_clamp;    // Requires P_FEATURE_DEPTH_CLAMP. Disabled by default. Creation fails if unavailable.
     PTopology topology;
+
+    /**
+     * Indexed draws only. Requires LINE_STRIP, TRIANGLE_STRIP or TRIANGLE_FAN.
+     * Restart index: 0xFFFF for UINT16, 0xFFFFFFFF for UINT32. Disabled by default.
+     */
+    PBool primitive_restart;
 
     /**
      * Array of color_format_count blend states. NULL = OPAQUE with RGBA writes.
@@ -223,13 +238,7 @@ typedef struct PPipelineDesc {
 typedef struct PComputePipelineDesc {
     PLayout* layout;
 
-    const uint32_t* compute_shader;
-    uint32_t compute_shader_size;
-
-    /**
-     * Specialization constants applied to the compute shader.
-     */
-    const PSpecializationInfo* specialization;
+    PShaderStageDesc shader;    // Must use P_SHADER_STAGE_COMPUTE_BIT.
 
     const char* name;
 } PComputePipelineDesc;

@@ -311,10 +311,13 @@ int main(void)
     }
 
     PComputePipelineDesc wave_desc = {
-        .layout              = wave_layout,
-        .compute_shader      = (const uint32_t*) wave_comp_spv,
-        .compute_shader_size = (uint32_t) sizeof(wave_comp_spv),
-        .name                = "wave_compute",
+        .layout = wave_layout,
+        .shader = {
+                   .stage     = P_SHADER_STAGE_COMPUTE_BIT,
+                   .code      = (const uint32_t*) wave_comp_spv,
+                   .code_size = (uint32_t) sizeof(wave_comp_spv),
+                   },
+        .name = "wave_compute",
     };
     if(pigment_create_compute_pipelines(pigment, NULL, &wave_desc, 1, &wave_pipeline) != PIGMENT_SUCCESS)
     {

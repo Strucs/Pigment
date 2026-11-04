@@ -21,14 +21,15 @@
 #include "internal.h"
 #include "structs.h"
 
-static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc);
+static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc, PPipelineBuild** out);
 static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
 static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
-static PResult configure_shader_stage_create_info(Pigment* pigment, VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point, const PSpecializationInfo* specialization, VkSpecializationMapEntry** out_vk_entries, VkSpecializationInfo* out_vk_spec_info, VkPipelineShaderStageCreateInfo* out_stage);
+static PResult shader_stage_build_from_desc(Pigment* pigment, const PShaderStageDesc* desc, PShaderStageBuild* build, VkPipelineShaderStageCreateInfo* out_stage);
+static void shader_stage_build_destroy(Pigment* pigment, PShaderStageBuild* build);
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(const VkVertexInputBindingDescription* bindings, uint32_t binding_count, const VkVertexInputAttributeDescription* attributes, uint32_t attribute_count);
-static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology);
+static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology, PBool primitive_restart);
 static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(void);
-static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode);
+static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode, PBool depth_clamp);
 static VkPipelineMultisampleStateCreateInfo configure_multisampling_state_create_info(PSampleCount sample_count, PBool sample_shading_enable, float min_sample_shading, PBool alpha_to_coverage);
 static VkPipelineDepthStencilStateCreateInfo configure_depth_stencil_state_create_info(void);
 static VkPipelineColorBlendAttachmentState configure_color_blend_attachment_state_create_info(const PBlendAttachmentDesc* desc);
@@ -37,6 +38,110 @@ static VkPipelineDynamicStateCreateInfo configure_dynamic_state_create_info(VkDy
 static void destroy_pipeline_immediate(Pigment* pigment, void* resource);
 static void destroy_layout_immediate(Pigment* pigment, void* resource);
 static PResult build_specialization(Pigment* pigment, const PSpecializationInfo* in, VkSpecializationMapEntry** out_entries, VkSpecializationInfo* out_info);
+
+static PBool validate_shader_stage(Pigment* pigment, const PShaderStageDesc* shader, PShaderStageFlags allowed)
+{
+    uint32_t stage = (uint32_t) shader->stage;
+    if(stage == 0 || (stage & (stage - 1)) != 0 || (stage & (uint32_t) allowed) != stage)
+    {
+        PLOG_ERROR(pigment, "Shader stage must be exactly one supported stage bit for this pipeline.");
+        return P_FALSE;
+    }
+
+    if(shader->code == NULL || shader->code_size == 0 || shader->code_size % sizeof(uint32_t) != 0)
+    {
+        PLOG_ERROR(pigment, "Shader code must be non-NULL with a nonzero SPIR-V size divisible by 4.");
+        return P_FALSE;
+    }
+
+    if(shader->entry_point != NULL && shader->entry_point[0] == '\0')
+    {
+        PLOG_ERROR(pigment, "Shader entry point must not be empty. Use NULL for the default main entry point.");
+        return P_FALSE;
+    }
+
+    const PSpecializationInfo* spec = shader->specialization;
+    if(spec != NULL && spec->entry_count > 0)
+    {
+        if(spec->entries == NULL || spec->data == NULL)
+        {
+            PLOG_ERROR(pigment, "Shader specialization entries and data must be non-NULL when entry_count is nonzero.");
+            return P_FALSE;
+        }
+
+        for(uint32_t i = 0; i < spec->entry_count; i++)
+        {
+            const PSpecializationEntry* entry = &spec->entries[i];
+            if(entry->size == 0 || entry->offset > spec->data_size || entry->size > spec->data_size - entry->offset)
+            {
+                PLOG_ERROR(pigment, "Shader specialization entry %u must describe a nonempty range within data_size.", i);
+                return P_FALSE;
+            }
+        }
+    }
+
+    return P_TRUE;
+}
+
+static PBool validate_graphics_shader_stages(Pigment* pigment, const PPipelineDesc* desc)
+{
+    if(desc->stages == NULL || desc->stage_count == 0)
+    {
+        PLOG_ERROR(pigment, "Graphics pipeline requires a nonempty shader stage array.");
+        return P_FALSE;
+    }
+
+    uint32_t seen = 0;
+    for(uint32_t i = 0; i < desc->stage_count; i++)
+    {
+        const PShaderStageDesc* shader = &desc->stages[i];
+        if(!validate_shader_stage(pigment, shader, P_SHADER_STAGE_ALL_GRAPHICS))
+        {
+            return P_FALSE;
+        }
+
+        if((seen & (uint32_t) shader->stage) != 0)
+        {
+            PLOG_ERROR(pigment, "Graphics pipeline shader stages must not contain duplicates.");
+            return P_FALSE;
+        }
+
+        seen |= (uint32_t) shader->stage;
+    }
+
+    if((seen & P_SHADER_STAGE_VERTEX_BIT) == 0)
+    {
+        PLOG_ERROR(pigment, "Graphics pipeline requires a VERTEX shader stage.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
+
+static PBool validate_depth_clamp(Pigment* pigment, const PPipelineDesc* desc)
+{
+    if(desc->depth_clamp && !pigment->device->features[P_FEATURE_DEPTH_CLAMP])
+    {
+        PLOG_ERROR(pigment, "Depth clamp requires P_FEATURE_DEPTH_CLAMP.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
+
+static PBool validate_primitive_restart(Pigment* pigment, const PPipelineDesc* desc)
+{
+    if(desc->primitive_restart
+       && desc->topology != P_TOPOLOGY_LINE_STRIP
+       && desc->topology != P_TOPOLOGY_TRIANGLE_STRIP
+       && desc->topology != P_TOPOLOGY_TRIANGLE_FAN)
+    {
+        PLOG_ERROR(pigment, "Primitive restart requires LINE_STRIP, TRIANGLE_STRIP or TRIANGLE_FAN topology.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
 
 static PBool validate_sample_shading(Pigment* pigment, const PPipelineDesc* desc)
 {
@@ -107,38 +212,30 @@ static PBool validate_blend_attachments(Pigment* pigment, const PPipelineDesc* d
     return P_TRUE;
 }
 
-static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc)
+static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc, PPipelineBuild** out)
 {
-    if(pigment == NULL || desc == NULL || desc->vertex_shader == NULL)
-    {
-        return NULL;
-    }
-
+    *out                  = NULL;
+    PResult status        = PIGMENT_ERROR_OUT_OF_MEMORY;
     PPipelineBuild* build = P_NEW_FOR_OBJECT(pigment, build);
     if(build == NULL)
     {
-        return NULL;
+        return PIGMENT_ERROR_OUT_OF_MEMORY;
     }
 
-    build->vertex_module = create_shader_module(pigment, desc->vertex_shader, desc->vertex_shader_size);
-    if(build->vertex_module == NULL)
-    {
-        goto ERROR;
-    }
-    if(configure_shader_stage_create_info(pigment, build->vertex_module, VK_SHADER_STAGE_VERTEX_BIT, "main", desc->vertex_specialization, &build->vertex_spec_entries, &build->vertex_spec_info, &build->shader_stages[build->shader_stage_count++]) != PIGMENT_SUCCESS)
+    build->shader_stage_count = desc->stage_count;
+    build->shaders            = P_NEW_ARRAY_FOR_OBJECT(pigment, build->shaders, desc->stage_count);
+    build->shader_stages      = P_NEW_ARRAY_FOR_OBJECT(pigment, build->shader_stages, desc->stage_count);
+    if(build->shaders == NULL || build->shader_stages == NULL)
     {
         goto ERROR;
     }
 
-    if(desc->fragment_shader != NULL)
+    for(uint32_t i = 0; i < desc->stage_count; i++)
     {
-        build->fragment_module = create_shader_module(pigment, desc->fragment_shader, desc->fragment_shader_size);
-        if(build->fragment_module == NULL)
+        PResult result = shader_stage_build_from_desc(pigment, &desc->stages[i], &build->shaders[i], &build->shader_stages[i]);
+        if(result != PIGMENT_SUCCESS)
         {
-            goto ERROR;
-        }
-        if(configure_shader_stage_create_info(pigment, build->fragment_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main", desc->fragment_specialization, &build->fragment_spec_entries, &build->fragment_spec_info, &build->shader_stages[build->shader_stage_count++]) != PIGMENT_SUCCESS)
-        {
+            status = result;
             goto ERROR;
         }
     }
@@ -207,9 +304,9 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
     }
 
     build->vertex_input   = configure_vertex_input_state_create_info(build->vk_vertex_bindings, build->vk_vertex_binding_count, build->vk_vertex_attributes, build->vk_vertex_attribute_count);
-    build->input_assembly = configure_input_assembly_state_create_info(desc->topology);
+    build->input_assembly = configure_input_assembly_state_create_info(desc->topology, desc->primitive_restart);
     build->viewport       = configure_viewport_state_create_info();
-    build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode);
+    build->rasterizer     = configure_rasterizer_state_create_info(desc->polygon_mode, desc->depth_clamp);
     build->multisample    = configure_multisampling_state_create_info(desc->sample_count != 0 ? desc->sample_count : P_SAMPLE_COUNT_1, desc->sample_shading_enable, desc->min_sample_shading, desc->alpha_to_coverage);
     build->depth_stencil  = configure_depth_stencil_state_create_info();
     build->color_blend    = configure_color_blend_state_create_info(build->blend_attachments, build->blend_attachment_count, desc->blend_constants);
@@ -219,6 +316,7 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT,
         VK_DYNAMIC_STATE_CULL_MODE,
         VK_DYNAMIC_STATE_FRONT_FACE,
+        VK_DYNAMIC_STATE_LINE_WIDTH,
         VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
         VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
         VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
@@ -253,6 +351,7 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
     if(desc->layout == NULL)
     {
         PLOG_ERROR(pigment, "PPipelineDesc.layout is NULL");
+        status = PIGMENT_ERROR;
         goto ERROR;
     }
     build->layout = desc->layout;
@@ -267,11 +366,12 @@ static PPipelineBuild* pipeline_build_from_desc(Pigment* pigment, const PPipelin
         .stencilAttachmentFormat = format_has_stencil(desc->depth_format) ? (VkFormat) desc->depth_format : VK_FORMAT_UNDEFINED,
     };
 
-    return build;
+    *out = build;
+    return PIGMENT_SUCCESS;
 
 ERROR:
     pipeline_build_destroy(pigment, build);
-    return NULL;
+    return status;
 }
 
 static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
@@ -281,22 +381,19 @@ static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build)
         return;
     }
 
-    VkDevice device = pigment->device->logical_device;
-
-    if(build->vertex_module != NULL)
+    if(build->shaders != NULL)
     {
-        vkDestroyShaderModule(device, build->vertex_module, &pigment->vk_alloc);
-    }
-    if(build->fragment_module != NULL)
-    {
-        vkDestroyShaderModule(device, build->fragment_module, &pigment->vk_alloc);
+        for(uint32_t i = 0; i < build->shader_stage_count; i++)
+        {
+            shader_stage_build_destroy(pigment, &build->shaders[i]);
+        }
     }
 
     P_FREE(pigment, build->color_formats);
     P_FREE(pigment, build->blend_attachments);
     P_FREE(pigment, build->dynamic_state_list);
-    P_FREE(pigment, build->vertex_spec_entries);
-    P_FREE(pigment, build->fragment_spec_entries);
+    P_FREE(pigment, build->shaders);
+    P_FREE(pigment, build->shader_stages);
     P_FREE(pigment, build->vk_vertex_bindings);
     P_FREE(pigment, build->vk_vertex_attributes);
     P_FREE(pigment, build);
@@ -338,7 +435,17 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
 
     for(uint32_t i = 0; i < count; i++)
     {
-        if(!validate_sample_shading(pigment, &descs[i]) || !validate_blend_attachments(pigment, &descs[i]))
+        if(descs[i].layout == NULL)
+        {
+            PLOG_ERROR(pigment, "PPipelineDesc.layout is NULL.");
+            return PIGMENT_ERROR;
+        }
+
+        if(!validate_graphics_shader_stages(pigment, &descs[i])
+           || !validate_depth_clamp(pigment, &descs[i])
+           || !validate_primitive_restart(pigment, &descs[i])
+           || !validate_sample_shading(pigment, &descs[i])
+           || !validate_blend_attachments(pigment, &descs[i]))
         {
             return PIGMENT_ERROR;
         }
@@ -361,12 +468,14 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
 
     for(uint32_t i = 0; i < count; i++)
     {
-        builds[i] = pipeline_build_from_desc(pigment, &descs[i]);
-        if(builds[i] == NULL)
+        status = pipeline_build_from_desc(pigment, &descs[i], &builds[i]);
+        if(status != PIGMENT_SUCCESS)
         {
             goto FREE;
         }
         builds_done++;
+
+        status = PIGMENT_ERROR_OUT_OF_MEMORY;
 
         temp_pipelines[i] = P_NEW_FOR_OBJECT(pigment, temp_pipelines[i]);
         if(temp_pipelines[i] == NULL)
@@ -459,26 +568,32 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
         return PIGMENT_ERROR;
     }
 
+    for(uint32_t i = 0; i < count; i++)
+    {
+        if(descs[i].layout == NULL)
+        {
+            PLOG_ERROR(pigment, "PComputePipelineDesc.layout is NULL.");
+            return PIGMENT_ERROR;
+        }
+
+        if(!validate_shader_stage(pigment, &descs[i].shader, P_SHADER_STAGE_COMPUTE_BIT))
+        {
+            return PIGMENT_ERROR;
+        }
+    }
+
     PResult status               = PIGMENT_ERROR_OUT_OF_MEMORY;
-    uint32_t modules_done        = 0;
+    uint32_t shaders_done        = 0;
     uint32_t temp_pipelines_done = 0;
 
-    P_STACK_OR_HEAP(VkShaderModule, modules, count);
-    P_STACK_OR_HEAP(VkSpecializationMapEntry*, spec_entry_arrays, count);
-    P_STACK_OR_HEAP(VkSpecializationInfo, spec_infos, count);
+    P_STACK_OR_HEAP(PShaderStageBuild, shaders, count);
     P_STACK_OR_HEAP(VkComputePipelineCreateInfo, pipeline_create_infos, count);
     P_STACK_OR_HEAP(VkPipeline, vk_pipelines, count);
     P_STACK_OR_HEAP(PPipeline*, temp_pipelines, count);
-    if(modules == NULL || spec_entry_arrays == NULL || spec_infos == NULL || pipeline_create_infos == NULL || vk_pipelines == NULL || temp_pipelines == NULL)
+
+    if(shaders == NULL || pipeline_create_infos == NULL || vk_pipelines == NULL || temp_pipelines == NULL)
     {
         goto FREE;
-    }
-
-    for(uint32_t i = 0; i < count; i++)
-    {
-        modules[i]           = VK_NULL_HANDLE;
-        spec_entry_arrays[i] = NULL;
-        temp_pipelines[i]    = NULL;
     }
 
     VkDevice device = pigment->device->logical_device;
@@ -486,21 +601,24 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
     for(uint32_t i = 0; i < count; i++)
     {
         const PComputePipelineDesc* desc = &descs[i];
-        if(desc->layout == NULL || desc->compute_shader == NULL)
+
+        pipeline_create_infos[i] = (VkComputePipelineCreateInfo) {
+            .sType              = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .layout             = desc->layout->layout,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex  = -1,
+        };
+
+        shaders[i] = (PShaderStageBuild) {0};
+        shaders_done++;
+
+        status = shader_stage_build_from_desc(pigment, &desc->shader, &shaders[i], &pipeline_create_infos[i].stage);
+        if(status != PIGMENT_SUCCESS)
         {
-            PLOG_ERROR(pigment, "pigment_create_compute_pipelines: desc[%u] missing layout or compute_shader", i);
-            status = PIGMENT_ERROR;
             goto FREE;
         }
 
-        modules[i] = create_shader_module(pigment, desc->compute_shader, desc->compute_shader_size);
-        if(modules[i] == VK_NULL_HANDLE)
-        {
-            status = PIGMENT_ERROR_VULKAN;
-            goto FREE;
-        }
-        modules_done++;
-
+        status            = PIGMENT_ERROR_OUT_OF_MEMORY;
         temp_pipelines[i] = P_NEW_FOR_OBJECT(pigment, temp_pipelines[i]);
         if(temp_pipelines[i] == NULL)
         {
@@ -514,17 +632,6 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
             goto FREE;
         }
         temp_pipelines_done++;
-
-        pipeline_create_infos[i] = (VkComputePipelineCreateInfo) {
-            .sType              = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-            .layout             = desc->layout->layout,
-            .basePipelineHandle = VK_NULL_HANDLE,
-        };
-
-        if(configure_shader_stage_create_info(pigment, modules[i], VK_SHADER_STAGE_COMPUTE_BIT, "main", desc->specialization, &spec_entry_arrays[i], &spec_infos[i], &pipeline_create_infos[i].stage) != PIGMENT_SUCCESS)
-        {
-            goto FREE;
-        }
     }
 
     status                   = PIGMENT_ERROR_VULKAN;
@@ -569,28 +676,15 @@ FREE:
         }
     }
 
-    for(uint32_t i = 0; i < count; i++)
+    for(uint32_t i = 0; i < shaders_done; i++)
     {
-        if(spec_entry_arrays[i] != NULL)
-        {
-            P_FREE(pigment, spec_entry_arrays[i]);
-        }
-    }
-
-    for(uint32_t i = 0; i < modules_done; i++)
-    {
-        if(modules[i] != VK_NULL_HANDLE)
-        {
-            vkDestroyShaderModule(pigment->device->logical_device, modules[i], &pigment->vk_alloc);
-        }
+        shader_stage_build_destroy(pigment, &shaders[i]);
     }
 
     P_STACK_OR_HEAP_FREE(pigment, temp_pipelines);
     P_STACK_OR_HEAP_FREE(pigment, vk_pipelines);
     P_STACK_OR_HEAP_FREE(pigment, pipeline_create_infos);
-    P_STACK_OR_HEAP_FREE(pigment, spec_infos);
-    P_STACK_OR_HEAP_FREE(pigment, spec_entry_arrays);
-    P_STACK_OR_HEAP_FREE(pigment, modules);
+    P_STACK_OR_HEAP_FREE(pigment, shaders);
 
     return status;
 }
@@ -634,6 +728,7 @@ void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pip
 
     vkCmdSetCullMode(cmd->buffer, VK_CULL_MODE_BACK_BIT);
     vkCmdSetFrontFace(cmd->buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    vkCmdSetLineWidth(cmd->buffer, 1.0f);
     vkCmdSetDepthTestEnable(cmd->buffer, VK_TRUE);
     vkCmdSetDepthWriteEnable(cmd->buffer, VK_TRUE);
     vkCmdSetDepthCompareOp(cmd->buffer, VK_COMPARE_OP_GREATER);
@@ -667,25 +762,40 @@ static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* cod
     return shader_module;
 }
 
-static PResult configure_shader_stage_create_info(Pigment* pigment, VkShaderModule shader_module, VkShaderStageFlagBits stage, const char* entry_point, const PSpecializationInfo* specialization, VkSpecializationMapEntry** out_vk_entries, VkSpecializationInfo* out_vk_spec_info, VkPipelineShaderStageCreateInfo* out_stage)
+static PResult shader_stage_build_from_desc(Pigment* pigment, const PShaderStageDesc* desc, PShaderStageBuild* build, VkPipelineShaderStageCreateInfo* out_stage)
 {
+    build->module = create_shader_module(pigment, desc->code, desc->code_size);
+    if(build->module == VK_NULL_HANDLE)
+    {
+        return PIGMENT_ERROR_VULKAN;
+    }
+
     *out_stage = (VkPipelineShaderStageCreateInfo) {
         .sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage  = stage,
-        .module = shader_module,
-        .pName  = entry_point,
+        .stage  = (VkShaderStageFlagBits) desc->stage,
+        .module = build->module,
+        .pName  = desc->entry_point != NULL ? desc->entry_point : "main",
     };
 
-    if(specialization != NULL && specialization->entry_count > 0)
+    if(desc->specialization != NULL && desc->specialization->entry_count > 0)
     {
-        if(build_specialization(pigment, specialization, out_vk_entries, out_vk_spec_info) != PIGMENT_SUCCESS)
+        if(build_specialization(pigment, desc->specialization, &build->spec_entries, &build->spec_info) != PIGMENT_SUCCESS)
         {
             return PIGMENT_ERROR_OUT_OF_MEMORY;
         }
-        out_stage->pSpecializationInfo = out_vk_spec_info;
+        out_stage->pSpecializationInfo = &build->spec_info;
     }
 
     return PIGMENT_SUCCESS;
+}
+
+static void shader_stage_build_destroy(Pigment* pigment, PShaderStageBuild* build)
+{
+    if(build->module != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(pigment->device->logical_device, build->module, &pigment->vk_alloc);
+    }
+    P_FREE(pigment, build->spec_entries);
 }
 
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(const VkVertexInputBindingDescription* bindings, uint32_t binding_count, const VkVertexInputAttributeDescription* attributes, uint32_t attribute_count)
@@ -701,12 +811,12 @@ static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_
     return vertex_input_state_create_info;
 }
 
-static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology)
+static VkPipelineInputAssemblyStateCreateInfo configure_input_assembly_state_create_info(PTopology topology, PBool primitive_restart)
 {
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state_create_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology               = (VkPrimitiveTopology) topology,
-        .primitiveRestartEnable = VK_FALSE,
+        .primitiveRestartEnable = primitive_restart ? VK_TRUE : VK_FALSE,
     };
 
     return input_assembly_state_create_info;
@@ -722,11 +832,11 @@ static VkPipelineViewportStateCreateInfo configure_viewport_state_create_info(vo
     return viewport_state_create_info;
 }
 
-static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode)
+static VkPipelineRasterizationStateCreateInfo configure_rasterizer_state_create_info(PPolygonMode polygon_mode, PBool depth_clamp)
 {
     VkPipelineRasterizationStateCreateInfo rasterizer_state_create_info = {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .depthClampEnable        = VK_FALSE,
+        .depthClampEnable        = depth_clamp ? VK_TRUE : VK_FALSE,
         .rasterizerDiscardEnable = VK_FALSE,    // placeholder
         .polygonMode             = (VkPolygonMode) polygon_mode,
         .lineWidth               = 1.0f,

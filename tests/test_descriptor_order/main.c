@@ -46,9 +46,12 @@ static void test_recorded_sets(Pigment* pigment, PDescriptorSetLayout* set_layou
         assert(pigment_create_descriptor_sets(pigment, pool, &alloc, 1, &set) == PIGMENT_SUCCESS);
 
         PComputePipelineDesc pipeline_desc = {
-            .layout              = layout,
-            .compute_shader      = (const uint32_t*) empty_comp_spv,
-            .compute_shader_size = (uint32_t) sizeof(empty_comp_spv),
+            .layout = layout,
+            .shader = {
+                       .stage     = P_SHADER_STAGE_COMPUTE_BIT,
+                       .code      = (const uint32_t*) empty_comp_spv,
+                       .code_size = (uint32_t) sizeof(empty_comp_spv),
+                       },
         };
         PPipeline* pipeline;
         assert(pigment_create_compute_pipelines(pigment, NULL, &pipeline_desc, 1, &pipeline) == PIGMENT_SUCCESS);

@@ -130,12 +130,14 @@ int main(void)
     PFormat color_format = pigment_get_color_format(renderer);
     PSampleCount samples = pigment_get_sample_count(renderer);
 
+    PShaderStageDesc stages[] = {
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) test_vert_spv, .code_size = (uint32_t) sizeof(test_vert_spv)},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) test_frag_spv, .code_size = (uint32_t) sizeof(test_frag_spv)},
+    };
     PPipelineDesc pipeline_desc = {
         .layout                 = layout,
-        .vertex_shader          = (const uint32_t*) test_vert_spv,
-        .vertex_shader_size     = (uint32_t) sizeof(test_vert_spv),
-        .fragment_shader        = (const uint32_t*) test_frag_spv,
-        .fragment_shader_size   = (uint32_t) sizeof(test_frag_spv),
+        .stages                 = stages,
+        .stage_count            = sizeof(stages) / sizeof(stages[0]),
         .color_formats          = &color_format,
         .color_format_count     = 1,
         .depth_format           = P_FORMAT_UNDEFINED,

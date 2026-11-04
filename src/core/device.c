@@ -322,6 +322,8 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
 
     VkPhysicalDeviceProperties device_properties;
     vkGetPhysicalDeviceProperties(device->physical_device, &device_properties);
+    device->line_width_range[0] = device_properties.limits.lineWidthRange[0];
+    device->line_width_range[1] = device_properties.limits.lineWidthRange[1];
 
     PLOG_INFO(pigment, "GPU picked: %s", device_properties.deviceName);
 
@@ -516,6 +518,9 @@ PDeviceLimits pigment_device_limits(Pigment* pigment)
     limits.max_color_attachments             = core->maxColorAttachments;
     limits.max_per_stage_resources           = indexing.maxPerStageUpdateAfterBindResources;
     limits.max_update_after_bind_descriptors = indexing.maxUpdateAfterBindDescriptorsInAllPools;
+    limits.line_width_range[0]               = core->lineWidthRange[0];
+    limits.line_width_range[1]               = core->lineWidthRange[1];
+    limits.line_width_granularity            = core->lineWidthGranularity;
 
     return limits;
 }
@@ -665,17 +670,25 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     VkPhysicalDeviceFeatures2 available_2         = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &available_13};
     vkGetPhysicalDeviceFeatures2(device->physical_device, &available_2);
 
-    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]            = (PBool) available_2.features.depthBounds;
-    device->features[P_FEATURE_WIREFRAME_RASTERIZATION]      = (PBool) available_2.features.fillModeNonSolid;
+    device->features[P_FEATURE_WIREFRAME_RASTERIZATION] = (PBool) available_2.features.fillModeNonSolid;
+    device->features[P_FEATURE_WIDE_LINES]              = (PBool) available_2.features.wideLines;
+    device->features[P_FEATURE_DEPTH_CLAMP]             = (PBool) available_2.features.depthClamp;
+    device->features[P_FEATURE_DEPTH_BIAS_CLAMP]        = (PBool) available_2.features.depthBiasClamp;
+    device->features[P_FEATURE_DEPTH_BOUNDS_TEST]       = (PBool) available_2.features.depthBounds;
+
+    device->features[P_FEATURE_SAMPLE_RATE_SHADING] = (PBool) available_2.features.sampleRateShading;
+    device->features[P_FEATURE_INDEPENDENT_BLEND]   = (PBool) available_2.features.independentBlend;
+
     device->features[P_FEATURE_MULTI_DRAW_INDIRECT]          = (PBool) available_2.features.multiDrawIndirect;
     device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] = (PBool) available_2.features.drawIndirectFirstInstance;
     device->features[P_FEATURE_DRAW_INDIRECT_COUNT]          = (PBool) available_12.drawIndirectCount;
+
     device->features[P_FEATURE_TEXTURE_COMPRESSION_BC]       = (PBool) available_2.features.textureCompressionBC;
     device->features[P_FEATURE_TEXTURE_COMPRESSION_ETC2]     = (PBool) available_2.features.textureCompressionETC2;
     device->features[P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR] = (PBool) available_2.features.textureCompressionASTC_LDR;
-    device->features[P_FEATURE_INDEPENDENT_BLEND]            = (PBool) available_2.features.independentBlend;
-    device->features[P_FEATURE_SAMPLE_RATE_SHADING]          = (PBool) available_2.features.sampleRateShading;
-    device->features[P_FEATURE_DEPTH_BIAS_CLAMP]             = (PBool) available_2.features.depthBiasClamp;
+
+    device->features[P_FEATURE_HOST_IMAGE_COPY] = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME);
+    device->features[P_FEATURE_MEMORY_BUDGET]   = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
 
     VkPhysicalDeviceVulkan11Features vk11_features = {
         .sType     = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
@@ -704,7 +717,6 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     }
 
     VkPhysicalDeviceHostImageCopyFeatures host_image_copy_features = {0};
-    device->features[P_FEATURE_HOST_IMAGE_COPY]                    = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME);
     if(device->features[P_FEATURE_HOST_IMAGE_COPY])
     {
         host_image_copy_features.sType         = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES;
@@ -713,21 +725,21 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         features_head                          = &host_image_copy_features;
     }
 
-    device->features[P_FEATURE_MEMORY_BUDGET] = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
-
     VkPhysicalDeviceFeatures2 features = {
         .sType    = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
         .features = {
                      .fillModeNonSolid           = device->features[P_FEATURE_WIREFRAME_RASTERIZATION] ? VK_TRUE : VK_FALSE,
+                     .wideLines                  = device->features[P_FEATURE_WIDE_LINES] ? VK_TRUE : VK_FALSE,
+                     .depthClamp                 = device->features[P_FEATURE_DEPTH_CLAMP] ? VK_TRUE : VK_FALSE,
+                     .depthBiasClamp             = device->features[P_FEATURE_DEPTH_BIAS_CLAMP] ? VK_TRUE : VK_FALSE,
                      .depthBounds                = device->features[P_FEATURE_DEPTH_BOUNDS_TEST] ? VK_TRUE : VK_FALSE,
+                     .sampleRateShading          = device->features[P_FEATURE_SAMPLE_RATE_SHADING] ? VK_TRUE : VK_FALSE,
+                     .independentBlend           = device->features[P_FEATURE_INDEPENDENT_BLEND] ? VK_TRUE : VK_FALSE,
                      .multiDrawIndirect          = device->features[P_FEATURE_MULTI_DRAW_INDIRECT] ? VK_TRUE : VK_FALSE,
                      .drawIndirectFirstInstance  = device->features[P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE] ? VK_TRUE : VK_FALSE,
                      .textureCompressionBC       = device->features[P_FEATURE_TEXTURE_COMPRESSION_BC] ? VK_TRUE : VK_FALSE,
                      .textureCompressionETC2     = device->features[P_FEATURE_TEXTURE_COMPRESSION_ETC2] ? VK_TRUE : VK_FALSE,
                      .textureCompressionASTC_LDR = device->features[P_FEATURE_TEXTURE_COMPRESSION_ASTC_LDR] ? VK_TRUE : VK_FALSE,
-                     .independentBlend           = device->features[P_FEATURE_INDEPENDENT_BLEND] ? VK_TRUE : VK_FALSE,
-                     .sampleRateShading          = device->features[P_FEATURE_SAMPLE_RATE_SHADING] ? VK_TRUE : VK_FALSE,
-                     .depthBiasClamp             = device->features[P_FEATURE_DEPTH_BIAS_CLAMP] ? VK_TRUE : VK_FALSE,
                      },
         .pNext = features_head,
     };

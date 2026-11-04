@@ -34,6 +34,8 @@ typedef struct PDeviceLimits {
     uint32_t max_color_attachments;                // color attachments in one render pass
     uint32_t max_per_stage_resources;              // update-after-bind resources per stage, excluding separate samplers
     uint32_t max_update_after_bind_descriptors;    // descriptors across all update-after-bind pools
+    float line_width_range[2];                     // minimum and maximum supported line widths in pixels
+    float line_width_granularity;                  // spacing between supported line widths
 } PDeviceLimits;
 
 /**
