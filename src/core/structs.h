@@ -93,6 +93,7 @@ typedef struct PRuntimeConfig {
     uint32_t max_frames_in_flight;
     PBool validation_enabled;
     PBool best_practices_enabled;
+    PBool debug_utils_enabled;
     float depth_clear_value;
     const PQueueRequest* queue_requests;
     uint32_t queue_request_count;

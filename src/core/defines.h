@@ -575,6 +575,7 @@ typedef struct PigmentConfig {
     const PQueueRequest* queue_requests;    // explicit queue layout. NULL or count=0 = default policy (1 graphics + 1 compute + 1 transfer, most specialized the hardware exposes).
     uint32_t queue_request_count;
     const void* extra;
+    PBool enable_debug_names;    // Enable object names and command labels without validation. Also enabled by enable_validation.
 } PigmentConfig;
 
 #ifdef __cplusplus

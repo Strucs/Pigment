@@ -89,21 +89,18 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     if(pigment->config.validation_enabled)
     {
-        PBool layer_ok       = layer_available(available_layers, available_layer_count, "VK_LAYER_KHRONOS_validation");
-        PBool debug_utils_ok = extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        if(!layer_ok)
+        if(!layer_available(available_layers, available_layer_count, "VK_LAYER_KHRONOS_validation"))
         {
             PLOG_WARN(pigment, "VK_LAYER_KHRONOS_validation not installed. Disabling validation.");
-        }
-        if(!debug_utils_ok)
-        {
-            PLOG_WARN(pigment, "VK_EXT_debug_utils not available. Disabling validation.");
-        }
-        if(!layer_ok || !debug_utils_ok)
-        {
             pigment->config.validation_enabled     = P_FALSE;
             pigment->config.best_practices_enabled = P_FALSE;
         }
+    }
+
+    if(pigment->config.debug_utils_enabled && !extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+    {
+        PLOG_WARN(pigment, "VK_EXT_debug_utils not available. Disabling debug names, command labels and debug messenger.");
+        pigment->config.debug_utils_enabled = P_FALSE;
     }
 
     if(build_instance_layers(pigment, instance, vk_init, available_layers, available_layer_count) != PIGMENT_SUCCESS)
@@ -143,18 +140,15 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         .pEnabledValidationFeatures    = enabled_features,
     };
 
-    if(pigment->config.validation_enabled)
+    if(pigment->config.validation_enabled && pigment->config.debug_utils_enabled)
     {
         populate_debug_messenger_create_info(&debug_create_info, pigment);
-        if(pigment->config.best_practices_enabled)
-        {
-            debug_create_info.pNext = &validation_features;
-        }
         create_info.pNext = &debug_create_info;
     }
-    else
+
+    if(pigment->config.validation_enabled && pigment->config.best_practices_enabled)
     {
-        create_info.pNext = NULL;
+        pigment_vk_append_pnext(&create_info, &validation_features);
     }
 
     if(vk_init != NULL && vk_init->instance_pnext_chain != NULL)
@@ -314,7 +308,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
 #ifdef __APPLE__
     max_extensions++;
 #endif
-    if(pigment->config.validation_enabled)
+    if(pigment->config.debug_utils_enabled)
     {
         max_extensions++;
     }
@@ -347,7 +341,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
         names[count++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
     }
 #endif
-    if(pigment->config.validation_enabled && !name_in_list((const char* const*) names, count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+    if(pigment->config.debug_utils_enabled && !name_in_list((const char* const*) names, count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
     {
         names[count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     }
@@ -419,10 +413,7 @@ void destroy_instance(Pigment* pigment)
     {
         return;
     }
-    if(pigment->config.validation_enabled)
-    {
-        destroy_debug_utils_messenger(instance->vulkan_instance, instance->debug_messenger, &pigment->vk_alloc);
-    }
+    destroy_debug_utils_messenger(instance->vulkan_instance, instance->debug_messenger, &pigment->vk_alloc);
     vkDestroyInstance(instance->vulkan_instance, &pigment->vk_alloc);
     P_FREE(pigment, instance->layers->names);
     P_FREE(pigment, instance->layers);
@@ -515,7 +506,7 @@ static void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfo
 
 void setup_debug_messenger(Pigment* pigment)
 {
-    if(!pigment->config.validation_enabled)
+    if(!pigment->config.validation_enabled || !pigment->config.debug_utils_enabled)
     {
         return;
     }
