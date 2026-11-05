@@ -40,6 +40,12 @@ typedef struct PDrawIndexedIndirectCommand {
     uint32_t first_instance;
 } PDrawIndexedIndirectCommand;
 
+typedef struct PDrawMeshTasksIndirectCommand {
+    uint32_t group_count_x;
+    uint32_t group_count_y;
+    uint32_t group_count_z;
+} PDrawMeshTasksIndirectCommand;
+
 typedef struct PViewport {
     float x;
     float y;
@@ -238,11 +244,14 @@ PIGMENT_API void pigment_cmd_draw(Pigment* pigment, PCommandBuffer* cmd, uint32_
 PIGMENT_API void pigment_cmd_draw_indexed(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_buffer_offset, uint32_t first_index, uint32_t index_count, int32_t vertex_offset, uint32_t instance_count, uint32_t first_instance);
 
 /**
- * Indirect draws. The draw parameters are read from a GPU buffer of PDrawIndirectCommand / PDrawIndexedIndirectCommand.
+ * Indirect buffers store PDrawIndirectCommand or PDrawIndexedIndirectCommand.
  *
- * draw_count > 1 requires P_FEATURE_MULTI_DRAW_INDIRECT.
- * firstInstance != 0 in any command requires P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE.
- * The _count variants require P_FEATURE_DRAW_INDIRECT_COUNT.
+ * Buffers require P_BUFFER_USAGE_INDIRECT, synchronization and enough space.
+ * Offsets and stride are multiples of 4. stride >= command size, ignored for non-count draw_count <= 1.
+ * Draw counts must fit PDeviceLimits.max_draw_indirect_count.
+ * draw_count > 1 requires P_FEATURE_MULTI_DRAW_INDIRECT. _count requires P_FEATURE_DRAW_INDIRECT_COUNT.
+ * Nonzero first_instance requires P_FEATURE_DRAW_INDIRECT_FIRST_INSTANCE.
+ * Invalid calls log an error and are ignored.
  */
 
 PIGMENT_API void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
@@ -251,11 +260,11 @@ PIGMENT_API void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffe
 PIGMENT_API void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* index_buffer, PIndexType index_type, uint64_t index_offset, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
 
 /**
- * @brief Draw mesh workgroups inside an active render pass.
+ * @brief Draw TASK or MESH workgroups inside an active render pass.
  *
  * Requires P_FEATURE_MESH_SHADER and a bound MESH pipeline.
- * Counts and their product are checked against TASK limits when TASK is present, otherwise MESH limits.
- * TASK shaders must respect MESH limits when emitting mesh workgroups.
+ * Group counts and their product must fit TASK limits if present, otherwise MESH limits.
+ * TASK emissions must also fit MESH limits.
  * Invalid calls log an error and are ignored.
  *
  * @param pigment Pigment instance.
@@ -265,6 +274,40 @@ PIGMENT_API void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PComm
  * @param group_z Workgroup count along Z.
  */
 PIGMENT_API void pigment_cmd_draw_mesh_tasks(Pigment* pigment, PCommandBuffer* cmd, uint32_t group_x, uint32_t group_y, uint32_t group_z);
+
+/**
+ * @brief Draw a GPU array of PDrawMeshTasksIndirectCommand.
+ *
+ * Same pipeline requirements as @ref pigment_cmd_draw_mesh_tasks.
+ * draw_count > 1 requires P_FEATURE_MULTI_DRAW_INDIRECT.
+ * GPU group counts must fit TASK limits if present, otherwise MESH limits.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to record into.
+ * @param indirect_buffer Synchronized P_BUFFER_USAGE_INDIRECT buffer large enough for draw_count commands.
+ * @param indirect_offset First command byte offset, a multiple of 4.
+ * @param draw_count Number of commands, at most PDeviceLimits.max_draw_indirect_count.
+ * @param stride Byte spacing, multiple of 4 and >= command size. Ignored for draw_count <= 1.
+ */
+PIGMENT_API void pigment_cmd_draw_mesh_tasks_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride);
+
+/**
+ * @brief Draw mesh workgroups with a GPU command count.
+ *
+ * Same mesh pipeline and buffer rules as @ref pigment_cmd_draw_mesh_tasks_indirect.
+ * Requires P_FEATURE_DRAW_INDIRECT_COUNT.
+ * stride always applies. The GPU count must fit PDeviceLimits.max_draw_indirect_count.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer to record into.
+ * @param indirect_buffer Buffer of PDrawMeshTasksIndirectCommand entries.
+ * @param indirect_offset First command byte offset.
+ * @param count_buffer Synchronized INDIRECT buffer containing a uint32_t count.
+ * @param count_offset Counter byte offset, a multiple of 4.
+ * @param max_draw_count Maximum commands to execute and fit in indirect_buffer.
+ * @param stride Byte spacing between commands.
+ */
+PIGMENT_API void pigment_cmd_draw_mesh_tasks_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride);
 
 PIGMENT_API void pigment_cmd_set_depth(Pigment* pigment, PCommandBuffer* cmd, PBool test, PBool write, PCompareOp op);
 PIGMENT_API void pigment_cmd_set_cull(Pigment* pigment, PCommandBuffer* cmd, PCullMode mode, PFrontFace face);

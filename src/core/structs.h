@@ -210,6 +210,7 @@ struct PDevice {
     ExtensionList* extensions;
     PBool features[P_FEATURE_COUNT];
     float line_width_range[2];
+    uint32_t max_draw_indirect_count;
     PMeshShaderLimits mesh_limits;
 };
 

@@ -40,6 +40,102 @@ static PBool validate_classic_draw(Pigment* pigment, PCommandBuffer* cmd)
     return P_TRUE;
 }
 
+static PBool validate_mesh_draw(Pigment* pigment, PCommandBuffer* cmd)
+{
+    if(cmd->recording_failed)
+    {
+        return P_FALSE;
+    }
+
+    if(!pigment->device->features[P_FEATURE_MESH_SHADER])
+    {
+        PLOG_ERROR(pigment, "Mesh draw requires P_FEATURE_MESH_SHADER.");
+        return P_FALSE;
+    }
+
+    if(cmd->graphics_pipeline_type != P_PIPELINE_TYPE_MESH)
+    {
+        PLOG_ERROR(pigment, "Mesh draw requires a bound MESH graphics pipeline.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
+
+static PBool validate_indirect_buffer(Pigment* pigment, const PBuffer* buffer, uint64_t offset, uint32_t draw_count, uint32_t stride, uint64_t command_size)
+{
+    if(offset % 4 != 0)
+    {
+        PLOG_ERROR(pigment, "Indirect offset must be a multiple of 4.");
+        return P_FALSE;
+    }
+
+    if(draw_count == 0)
+    {
+        return P_TRUE;
+    }
+
+    uint64_t last_offset = (uint64_t) (draw_count - 1) * stride;
+    if(offset > buffer->size || command_size > buffer->size - offset || last_offset > buffer->size - offset - command_size)
+    {
+        PLOG_ERROR(pigment, "Indirect commands exceed the indirect buffer size.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
+
+static PBool validate_indirect_draw(Pigment* pigment, const PBuffer* buffer, uint64_t offset, uint32_t draw_count, uint32_t stride, uint64_t command_size)
+{
+    if(draw_count > 1 && !pigment->device->features[P_FEATURE_MULTI_DRAW_INDIRECT])
+    {
+        PLOG_ERROR(pigment, "Multiple indirect draws require P_FEATURE_MULTI_DRAW_INDIRECT.");
+        return P_FALSE;
+    }
+
+    if(draw_count > pigment->device->max_draw_indirect_count)
+    {
+        PLOG_ERROR(pigment, "Indirect draw count exceeds max_draw_indirect_count.");
+        return P_FALSE;
+    }
+
+    if(draw_count > 1 && (stride % 4 != 0 || stride < command_size))
+    {
+        PLOG_ERROR(pigment, "Indirect stride must be a multiple of 4 and at least the indirect command size.");
+        return P_FALSE;
+    }
+
+    return validate_indirect_buffer(pigment, buffer, offset, draw_count, stride, command_size);
+}
+
+static PBool validate_indirect_count_draw(Pigment* pigment, const PBuffer* buffer, uint64_t offset, const PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride, uint64_t command_size)
+{
+    if(!pigment->device->features[P_FEATURE_DRAW_INDIRECT_COUNT])
+    {
+        PLOG_ERROR(pigment, "Indirect count draw requires P_FEATURE_DRAW_INDIRECT_COUNT.");
+        return P_FALSE;
+    }
+
+    if(stride % 4 != 0 || stride < command_size)
+    {
+        PLOG_ERROR(pigment, "Indirect stride must be a multiple of 4 and at least the indirect command size.");
+        return P_FALSE;
+    }
+
+    if(!validate_indirect_buffer(pigment, buffer, offset, max_draw_count, stride, command_size))
+    {
+        return P_FALSE;
+    }
+
+    if(count_offset % 4 != 0 || count_offset > count_buffer->size || sizeof(uint32_t) > count_buffer->size - count_offset)
+    {
+        PLOG_ERROR(pigment, "Indirect count offset must be a multiple of 4 with room for a uint32_t in the count buffer.");
+        return P_FALSE;
+    }
+
+    return P_TRUE;
+}
+
 PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot)
 {
     if(pigment == NULL || renderer == NULL)
@@ -1203,11 +1299,17 @@ void pigment_cmd_draw_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* i
     {
         return;
     }
-    if(!validate_classic_draw(pigment, cmd))
+    if(!validate_classic_draw(pigment, cmd)
+       || !validate_indirect_draw(pigment, indirect_buffer, indirect_offset, draw_count, stride, sizeof(PDrawIndirectCommand)))
     {
         return;
     }
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
+    if(cmd->recording_failed)
+    {
+        return;
+    }
+
     vkCmdDrawIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
 }
 
@@ -1217,12 +1319,18 @@ void pigment_cmd_draw_indexed_indirect(Pigment* pigment, PCommandBuffer* cmd, PB
     {
         return;
     }
-    if(!validate_classic_draw(pigment, cmd))
+    if(!validate_classic_draw(pigment, cmd)
+       || !validate_indirect_draw(pigment, indirect_buffer, indirect_offset, draw_count, stride, sizeof(PDrawIndexedIndirectCommand)))
     {
         return;
     }
     pigment_cmd_use_buffer(pigment, cmd, index_buffer);
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
+    if(cmd->recording_failed)
+    {
+        return;
+    }
+
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
     vkCmdDrawIndexedIndirect(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
@@ -1234,12 +1342,18 @@ void pigment_cmd_draw_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuf
     {
         return;
     }
-    if(!validate_classic_draw(pigment, cmd))
+    if(!validate_classic_draw(pigment, cmd)
+       || !validate_indirect_count_draw(pigment, indirect_buffer, indirect_offset, count_buffer, count_offset, max_draw_count, stride, sizeof(PDrawIndirectCommand)))
     {
         return;
     }
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     pigment_cmd_use_buffer(pigment, cmd, count_buffer);
+    if(cmd->recording_failed)
+    {
+        return;
+    }
+
     vkCmdDrawIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
 }
 
@@ -1249,13 +1363,19 @@ void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* c
     {
         return;
     }
-    if(!validate_classic_draw(pigment, cmd))
+    if(!validate_classic_draw(pigment, cmd)
+       || !validate_indirect_count_draw(pigment, indirect_buffer, indirect_offset, count_buffer, count_offset, max_draw_count, stride, sizeof(PDrawIndexedIndirectCommand)))
     {
         return;
     }
     pigment_cmd_use_buffer(pigment, cmd, index_buffer);
     pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
     pigment_cmd_use_buffer(pigment, cmd, count_buffer);
+    if(cmd->recording_failed)
+    {
+        return;
+    }
+
     VkIndexType vk_index_type = (index_type == P_INDEX_TYPE_UINT16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     vkCmdBindIndexBuffer(cmd->buffer, index_buffer->buffer, (VkDeviceSize) index_offset, vk_index_type);
     vkCmdDrawIndexedIndirectCount(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
@@ -1263,18 +1383,13 @@ void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PCommandBuffer* c
 
 void pigment_cmd_draw_mesh_tasks(Pigment* pigment, PCommandBuffer* cmd, uint32_t group_x, uint32_t group_y, uint32_t group_z)
 {
-    if(pigment == NULL || cmd == NULL || cmd->recording_failed)
+    if(pigment == NULL || cmd == NULL)
     {
         return;
     }
-    if(!pigment->device->features[P_FEATURE_MESH_SHADER])
+
+    if(!validate_mesh_draw(pigment, cmd))
     {
-        PLOG_ERROR(pigment, "Mesh draw requires P_FEATURE_MESH_SHADER.");
-        return;
-    }
-    if(cmd->graphics_pipeline_type != P_PIPELINE_TYPE_MESH)
-    {
-        PLOG_ERROR(pigment, "Mesh draw requires a bound MESH graphics pipeline.");
         return;
     }
 
@@ -1291,4 +1406,49 @@ void pigment_cmd_draw_mesh_tasks(Pigment* pigment, PCommandBuffer* cmd, uint32_t
     }
 
     vkCmdDrawMeshTasksEXT(cmd->buffer, group_x, group_y, group_z);
+}
+
+void pigment_cmd_draw_mesh_tasks_indirect(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, uint32_t draw_count, uint32_t stride)
+{
+    if(pigment == NULL || cmd == NULL || indirect_buffer == NULL)
+    {
+        return;
+    }
+
+    if(!validate_mesh_draw(pigment, cmd)
+       || !validate_indirect_draw(pigment, indirect_buffer, indirect_offset, draw_count, stride, sizeof(PDrawMeshTasksIndirectCommand)))
+    {
+        return;
+    }
+
+    pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
+    if(cmd->recording_failed)
+    {
+        return;
+    }
+
+    vkCmdDrawMeshTasksIndirectEXT(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, draw_count, stride);
+}
+
+void pigment_cmd_draw_mesh_tasks_indirect_count(Pigment* pigment, PCommandBuffer* cmd, PBuffer* indirect_buffer, uint64_t indirect_offset, PBuffer* count_buffer, uint64_t count_offset, uint32_t max_draw_count, uint32_t stride)
+{
+    if(pigment == NULL || cmd == NULL || indirect_buffer == NULL || count_buffer == NULL)
+    {
+        return;
+    }
+
+    if(!validate_mesh_draw(pigment, cmd)
+       || !validate_indirect_count_draw(pigment, indirect_buffer, indirect_offset, count_buffer, count_offset, max_draw_count, stride, sizeof(PDrawMeshTasksIndirectCommand)))
+    {
+        return;
+    }
+
+    pigment_cmd_use_buffer(pigment, cmd, indirect_buffer);
+    pigment_cmd_use_buffer(pigment, cmd, count_buffer);
+    if(cmd->recording_failed)
+    {
+        return;
+    }
+
+    vkCmdDrawMeshTasksIndirectCountEXT(cmd->buffer, indirect_buffer->buffer, (VkDeviceSize) indirect_offset, count_buffer->buffer, (VkDeviceSize) count_offset, max_draw_count, stride);
 }

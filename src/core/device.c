@@ -322,8 +322,9 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
 
     VkPhysicalDeviceProperties device_properties;
     vkGetPhysicalDeviceProperties(device->physical_device, &device_properties);
-    device->line_width_range[0] = device_properties.limits.lineWidthRange[0];
-    device->line_width_range[1] = device_properties.limits.lineWidthRange[1];
+    device->line_width_range[0]     = device_properties.limits.lineWidthRange[0];
+    device->line_width_range[1]     = device_properties.limits.lineWidthRange[1];
+    device->max_draw_indirect_count = device_properties.limits.maxDrawIndirectCount;
 
     PLOG_INFO(pigment, "GPU picked: %s", device_properties.deviceName);
 
@@ -535,6 +536,7 @@ PDeviceLimits pigment_device_limits(Pigment* pigment)
     limits.line_width_range[0]               = core->lineWidthRange[0];
     limits.line_width_range[1]               = core->lineWidthRange[1];
     limits.line_width_granularity            = core->lineWidthGranularity;
+    limits.max_draw_indirect_count           = core->maxDrawIndirectCount;
 
     const VkPhysicalDeviceMeshShaderPropertiesEXT* mesh = &mesh_properties;
 

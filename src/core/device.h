@@ -32,6 +32,7 @@ typedef struct PDeviceLimits {
     uint32_t max_push_constants_size;              // push constant bytes, at least 128
     uint32_t max_image_dimension_2d;               // largest width or height of a 2D image
     uint32_t max_color_attachments;                // color attachments in one render pass
+    uint32_t max_draw_indirect_count;              // indirect draw commands in one call
     uint32_t max_per_stage_resources;              // update-after-bind resources per stage, excluding separate samplers
     uint32_t max_update_after_bind_descriptors;    // descriptors across all update-after-bind pools
     float line_width_range[2];                     // minimum and maximum supported line widths in pixels
