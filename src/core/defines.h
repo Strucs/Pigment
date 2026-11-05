@@ -82,6 +82,7 @@ typedef enum PFeature {
     // Shading and blending
     P_FEATURE_MULTIVIEW,
     P_FEATURE_MESH_SHADER,
+    P_FEATURE_TASK_SHADER,
     P_FEATURE_MULTIVIEW_MESH_SHADER,
     P_FEATURE_SAMPLE_RATE_SHADING,
     P_FEATURE_INDEPENDENT_BLEND,
@@ -272,9 +273,10 @@ typedef enum PShaderStageFlags {
     P_SHADER_STAGE_VERTEX_BIT   = 1 << 0,
     P_SHADER_STAGE_FRAGMENT_BIT = 1 << 4,
     P_SHADER_STAGE_COMPUTE_BIT  = 1 << 5,
+    P_SHADER_STAGE_TASK_BIT     = 1 << 6,
     P_SHADER_STAGE_MESH_BIT     = 1 << 7,
     // ALL masks select enabled stages when used for descriptor or push constant visibility.
-    P_SHADER_STAGE_ALL_GRAPHICS = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_MESH_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
+    P_SHADER_STAGE_ALL_GRAPHICS = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_TASK_BIT | P_SHADER_STAGE_MESH_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     P_SHADER_STAGE_ALL          = P_SHADER_STAGE_ALL_GRAPHICS | P_SHADER_STAGE_COMPUTE_BIT,
 } PShaderStageFlags;
 
@@ -437,6 +439,7 @@ typedef enum PPipelineStage {
     P_PIPELINE_STAGE_ALL_GRAPHICS_BIT            = 1 << 11,
     P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1 << 12,
     P_PIPELINE_STAGE_MESH_SHADER_BIT             = 1 << 13,
+    P_PIPELINE_STAGE_TASK_SHADER_BIT             = 1 << 14,
 } PPipelineStage;
 
 typedef enum PSubmitWaitType {

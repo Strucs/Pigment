@@ -55,6 +55,10 @@ uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_
             kind = shaderc_glsl_mesh_shader;
             shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
             break;
+        case P_SHADER_TYPE_TASK:
+            kind = shaderc_glsl_task_shader;
+            shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
+            break;
         default:
             fprintf(stderr, "pigment_shaderc: unsupported shader type\n");
             goto FREE;

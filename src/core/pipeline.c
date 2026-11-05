@@ -111,6 +111,7 @@ static PBool validate_graphics_shader_stages(Pigment* pigment, const PPipelineDe
 
     PBool vertex = (seen & P_SHADER_STAGE_VERTEX_BIT) != 0;
     PBool mesh   = (seen & P_SHADER_STAGE_MESH_BIT) != 0;
+    PBool task   = (seen & P_SHADER_STAGE_TASK_BIT) != 0;
     if(vertex == mesh)
     {
         PLOG_ERROR(pigment, "Graphics pipeline requires exactly one VERTEX or MESH shader stage.");
@@ -120,6 +121,18 @@ static PBool validate_graphics_shader_stages(Pigment* pigment, const PPipelineDe
     if(mesh && !pigment->device->features[P_FEATURE_MESH_SHADER])
     {
         PLOG_ERROR(pigment, "Mesh shader requires P_FEATURE_MESH_SHADER.");
+        return P_FALSE;
+    }
+
+    if(task && !mesh)
+    {
+        PLOG_ERROR(pigment, "Task shader requires a MESH shader stage.");
+        return P_FALSE;
+    }
+
+    if(task && !pigment->device->features[P_FEATURE_TASK_SHADER])
+    {
+        PLOG_ERROR(pigment, "Task shader requires P_FEATURE_TASK_SHADER.");
         return P_FALSE;
     }
 
@@ -265,6 +278,9 @@ static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* d
             status = result;
             goto ERROR;
         }
+
+        build->stage_flags |= desc->stages[i].stage;
+
         if(desc->stages[i].stage == P_SHADER_STAGE_VERTEX_BIT)
         {
             build->type = P_PIPELINE_TYPE_VERTEX;
@@ -569,10 +585,11 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i]->pipeline = vk_pipelines[i];
-        temp_pipelines[i]->layout   = builds[i]->layout;
-        temp_pipelines[i]->type     = builds[i]->type;
-        out[i]                      = temp_pipelines[i];
+        temp_pipelines[i]->pipeline    = vk_pipelines[i];
+        temp_pipelines[i]->layout      = builds[i]->layout;
+        temp_pipelines[i]->type        = builds[i]->type;
+        temp_pipelines[i]->stage_flags = builds[i]->stage_flags;
+        out[i]                         = temp_pipelines[i];
 
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
@@ -692,10 +709,11 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
 
     for(uint32_t i = 0; i < count; i++)
     {
-        temp_pipelines[i]->pipeline = vk_pipelines[i];
-        temp_pipelines[i]->layout   = descs[i].layout;
-        temp_pipelines[i]->type     = P_PIPELINE_TYPE_COMPUTE;
-        out[i]                      = temp_pipelines[i];
+        temp_pipelines[i]->pipeline    = vk_pipelines[i];
+        temp_pipelines[i]->layout      = descs[i].layout;
+        temp_pipelines[i]->type        = P_PIPELINE_TYPE_COMPUTE;
+        temp_pipelines[i]->stage_flags = P_SHADER_STAGE_COMPUTE_BIT;
+        out[i]                         = temp_pipelines[i];
 
         set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], descs[i].name);
     }
@@ -788,6 +806,7 @@ void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pip
     }
 
     cmd->graphics_pipeline_type = pipeline->type;
+    cmd->graphics_shader_stages = pipeline->stage_flags;
 
     vkCmdSetCullMode(cmd->buffer, VK_CULL_MODE_BACK_BIT);
     vkCmdSetFrontFace(cmd->buffer, VK_FRONT_FACE_COUNTER_CLOCKWISE);
@@ -1145,16 +1164,26 @@ PBool shader_stages_to_vk(Pigment* pigment, PShaderStageFlags stages, VkShaderSt
         return P_FALSE;
     }
 
-    if((mask & P_SHADER_STAGE_MESH_BIT) != 0 && !pigment->device->features[P_FEATURE_MESH_SHADER])
+    uint32_t unsupported = 0;
+    if(!pigment->device->features[P_FEATURE_TASK_SHADER])
     {
-        if(stages != P_SHADER_STAGE_ALL && stages != P_SHADER_STAGE_ALL_GRAPHICS)
-        {
-            PLOG_ERROR(pigment, "MESH shader visibility requires P_FEATURE_MESH_SHADER.");
-            return P_FALSE;
-        }
-        mask &= ~(uint32_t) P_SHADER_STAGE_MESH_BIT;
+        unsupported |= P_SHADER_STAGE_TASK_BIT;
     }
-    *out = (VkShaderStageFlags) mask;
+
+    if(!pigment->device->features[P_FEATURE_MESH_SHADER])
+    {
+        unsupported |= P_SHADER_STAGE_MESH_BIT;
+    }
+
+    unsupported &= mask;
+    if(unsupported != 0 && stages != P_SHADER_STAGE_ALL && stages != P_SHADER_STAGE_ALL_GRAPHICS)
+    {
+        const char* stage = (unsupported & P_SHADER_STAGE_TASK_BIT) != 0 ? "TASK" : "MESH";
+        PLOG_ERROR(pigment, "%s shader visibility requires P_FEATURE_%s_SHADER.", stage, stage);
+        return P_FALSE;
+    }
+
+    *out = (VkShaderStageFlags) (mask & ~unsupported);
 
     return P_TRUE;
 }

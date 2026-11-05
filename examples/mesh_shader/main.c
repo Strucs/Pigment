@@ -3,6 +3,7 @@
 
 #include "triangle_mesh_spv.h"
 #include "triangle_frag_spv.h"
+#include "triangle_task_spv.h"
 
 #include <stdio.h>
 
@@ -91,13 +92,20 @@ int main(void)
     PShaderStageDesc stages[] = {
         {    .stage = P_SHADER_STAGE_MESH_BIT, .code = (const uint32_t*) triangle_mesh_spv, .code_size = sizeof(triangle_mesh_spv)},
         {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) triangle_frag_spv, .code_size = sizeof(triangle_frag_spv)},
+        {    .stage = P_SHADER_STAGE_TASK_BIT, .code = (const uint32_t*) triangle_task_spv, .code_size = sizeof(triangle_task_spv)},
     };
+
+    uint32_t stage_count = sizeof(stages) / sizeof(stages[0]);
+    if(!pigment_supports(pigment, P_FEATURE_TASK_SHADER))
+    {
+        stage_count--;
+    }
 
     PFormat format              = pigment_get_color_format(renderer);
     PPipelineDesc pipeline_desc = {
         .layout             = layout,
         .stages             = stages,
-        .stage_count        = sizeof(stages) / sizeof(stages[0]),
+        .stage_count        = stage_count,
         .color_formats      = &format,
         .color_format_count = 1,
         .sample_count       = pigment_get_sample_count(renderer),

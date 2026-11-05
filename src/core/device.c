@@ -538,9 +538,25 @@ PDeviceLimits pigment_device_limits(Pigment* pigment)
 
     const VkPhysicalDeviceMeshShaderPropertiesEXT* mesh = &mesh_properties;
 
+    if(pigment->device->features[P_FEATURE_TASK_SHADER])
+    {
+        limits.max_task_work_group_total_count         = mesh->maxTaskWorkGroupTotalCount;
+        limits.max_task_work_group_invocations         = mesh->maxTaskWorkGroupInvocations;
+        limits.max_task_payload_size                   = mesh->maxTaskPayloadSize;
+        limits.max_task_shared_memory_size             = mesh->maxTaskSharedMemorySize;
+        limits.max_task_payload_and_shared_memory_size = mesh->maxTaskPayloadAndSharedMemorySize;
+
+        for(uint32_t i = 0; i < 3; i++)
+        {
+            limits.max_task_work_group_count[i] = mesh->maxTaskWorkGroupCount[i];
+            limits.max_task_work_group_size[i]  = mesh->maxTaskWorkGroupSize[i];
+        }
+    }
+
     limits.max_mesh_work_group_total_count         = mesh->maxMeshWorkGroupTotalCount;
     limits.max_mesh_work_group_invocations         = mesh->maxMeshWorkGroupInvocations;
     limits.max_mesh_shared_memory_size             = mesh->maxMeshSharedMemorySize;
+    limits.max_mesh_payload_and_shared_memory_size = mesh->maxMeshPayloadAndSharedMemorySize;
     limits.max_mesh_output_memory_size             = mesh->maxMeshOutputMemorySize;
     limits.max_mesh_payload_and_output_memory_size = mesh->maxMeshPayloadAndOutputMemorySize;
     limits.max_mesh_output_components              = mesh->maxMeshOutputComponents;
@@ -715,6 +731,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
 
     device->features[P_FEATURE_MULTIVIEW]             = (PBool) available_11.multiview;
     device->features[P_FEATURE_MESH_SHADER]           = (PBool) available_mesh.meshShader;
+    device->features[P_FEATURE_TASK_SHADER]           = (PBool) (available_mesh.meshShader && available_mesh.taskShader);
     device->features[P_FEATURE_MULTIVIEW_MESH_SHADER] = (PBool) (available_11.multiview && available_mesh.meshShader && available_mesh.multiviewMeshShader);
     device->features[P_FEATURE_SAMPLE_RATE_SHADING]   = (PBool) available_2.features.sampleRateShading;
     device->features[P_FEATURE_INDEPENDENT_BLEND]     = (PBool) available_2.features.independentBlend;
@@ -748,6 +765,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
 
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh_features = {
         .sType               = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+        .taskShader          = device->features[P_FEATURE_TASK_SHADER] ? VK_TRUE : VK_FALSE,
         .meshShader          = device->features[P_FEATURE_MESH_SHADER] ? VK_TRUE : VK_FALSE,
         .multiviewMeshShader = device->features[P_FEATURE_MULTIVIEW_MESH_SHADER] ? VK_TRUE : VK_FALSE,
     };
@@ -767,14 +785,26 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         vkGetPhysicalDeviceProperties2(device->physical_device, &properties);
 
         device->mesh_limits = (PMeshShaderLimits) {
-            .max_work_group_total_count = mesh_properties.maxMeshWorkGroupTotalCount,
-            .max_work_group_count       = {
-                                           mesh_properties.maxMeshWorkGroupCount[0],
-                                           mesh_properties.maxMeshWorkGroupCount[1],
-                                           mesh_properties.maxMeshWorkGroupCount[2],
-                                           },
+            .mesh.max_work_group_total_count = mesh_properties.maxMeshWorkGroupTotalCount,
+            .mesh.max_work_group_count       = {
+                                                mesh_properties.maxMeshWorkGroupCount[0],
+                                                mesh_properties.maxMeshWorkGroupCount[1],
+                                                mesh_properties.maxMeshWorkGroupCount[2],
+                                                },
             .max_multiview_view_count = mesh_properties.maxMeshMultiviewViewCount,
         };
+
+        if(device->features[P_FEATURE_TASK_SHADER])
+        {
+            device->mesh_limits.task = (PWorkGroupLimits) {
+                .max_work_group_total_count = mesh_properties.maxTaskWorkGroupTotalCount,
+                .max_work_group_count       = {
+                                               mesh_properties.maxTaskWorkGroupCount[0],
+                                               mesh_properties.maxTaskWorkGroupCount[1],
+                                               mesh_properties.maxTaskWorkGroupCount[2],
+                                               },
+            };
+        }
     }
 
     VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchain_maint1_features = {0};

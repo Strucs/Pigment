@@ -180,6 +180,7 @@ typedef struct PPipelineDesc {
     /**
      * Exactly one VERTEX or MESH stage and optionally one FRAGMENT stage, in any order.
      * MESH requires P_FEATURE_MESH_SHADER and cannot be combined with VERTEX.
+     * An optional TASK stage requires MESH and P_FEATURE_TASK_SHADER.
      * A nonzero view_mask with MESH requires P_FEATURE_MULTIVIEW_MESH_SHADER.
      * The array and its referenced inputs are borrowed until creation returns.
      */

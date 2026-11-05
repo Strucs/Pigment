@@ -189,9 +189,14 @@ typedef struct PQueueRange {
     uint32_t count;
 } PQueueRange;
 
-typedef struct PMeshShaderLimits {
+typedef struct PWorkGroupLimits {
     uint32_t max_work_group_total_count;
     uint32_t max_work_group_count[3];
+} PWorkGroupLimits;
+
+typedef struct PMeshShaderLimits {
+    PWorkGroupLimits mesh;
+    PWorkGroupLimits task;
     uint32_t max_multiview_view_count;
 } PMeshShaderLimits;
 
@@ -253,6 +258,7 @@ struct PPipeline {
     VkPipeline pipeline;
     PLayout* layout;
     PPipelineType type;
+    PShaderStageFlags stage_flags;
     PResourceTracker tracker;
 };
 
@@ -277,6 +283,7 @@ struct PPipelineBuild {
     PShaderStageBuild* shaders;
     uint32_t shader_stage_count;
     PPipelineType type;
+    PShaderStageFlags stage_flags;
     VkPipelineShaderStageCreateInfo* shader_stages;
     VkVertexInputBindingDescription* vk_vertex_bindings;
     uint32_t vk_vertex_binding_count;
@@ -323,7 +330,9 @@ struct PCommandBuffer {
     uint32_t use_count;
     uint32_t use_capacity;
     PBool recording_failed;
-    PPipelineType graphics_pipeline_type;    // Unaffected by compute pipeline binds.
+    // Graphics bindings are unaffected by compute pipeline binds.
+    PPipelineType graphics_pipeline_type;
+    PShaderStageFlags graphics_shader_stages;
 
     PCommandBuffer* next_retired;
 };

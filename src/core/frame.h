@@ -254,6 +254,8 @@ PIGMENT_API void pigment_cmd_draw_indexed_indirect_count(Pigment* pigment, PComm
  * @brief Draw mesh workgroups inside an active render pass.
  *
  * Requires P_FEATURE_MESH_SHADER and a bound MESH pipeline.
+ * Counts and their product are checked against TASK limits when TASK is present, otherwise MESH limits.
+ * TASK shaders must respect MESH limits when emitting mesh workgroups.
  * Invalid calls log an error and are ignored.
  *
  * @param pigment Pigment instance.

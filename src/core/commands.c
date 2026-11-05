@@ -392,6 +392,7 @@ void pigment_cmd_execute_commands(Pigment* pigment, PCommandBuffer* primary, PCo
 
     vkCmdExecuteCommands(primary->buffer, count, vk_secondaries);
     primary->graphics_pipeline_type = P_PIPELINE_TYPE_NONE;
+    primary->graphics_shader_stages = 0;
     P_STACK_OR_HEAP_FREE(pigment, vk_secondaries);
 }
 
@@ -1015,6 +1016,7 @@ static void cmd_release_uses(Pigment* pigment, PCommandBuffer* cmd)
     cmd->use_count              = 0;
     cmd->recording_failed       = P_FALSE;
     cmd->graphics_pipeline_type = P_PIPELINE_TYPE_NONE;
+    cmd->graphics_shader_stages = 0;
 }
 
 void stamp_uses_submit(PCommandBuffer** cmds, uint32_t count, uint32_t queue_slot, uint64_t value)

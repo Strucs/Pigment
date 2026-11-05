@@ -1278,14 +1278,15 @@ void pigment_cmd_draw_mesh_tasks(Pigment* pigment, PCommandBuffer* cmd, uint32_t
         return;
     }
 
-    const PMeshShaderLimits* limits = &pigment->device->mesh_limits;
-    uint64_t groups_xy              = (uint64_t) group_x * group_y;
+    PBool task                     = (cmd->graphics_shader_stages & P_SHADER_STAGE_TASK_BIT) != 0;
+    const PWorkGroupLimits* limits = task ? &pigment->device->mesh_limits.task : &pigment->device->mesh_limits.mesh;
+    uint64_t groups_xy             = (uint64_t) group_x * group_y;
     if(group_x > limits->max_work_group_count[0]
        || group_y > limits->max_work_group_count[1]
        || group_z > limits->max_work_group_count[2]
        || (group_z != 0 && groups_xy > limits->max_work_group_total_count / group_z))
     {
-        PLOG_ERROR(pigment, "Mesh draw group counts exceed the device mesh workgroup limits.");
+        PLOG_ERROR(pigment, "Mesh draw group counts exceed the device %s workgroup limits.", task ? "task" : "mesh");
         return;
     }
 
