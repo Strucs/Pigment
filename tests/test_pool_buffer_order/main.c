@@ -15,7 +15,7 @@ static uint32_t errors;
 
 static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const PigmentLogRecord* record, void* user_data)
 {
-    if((severity & PIGMENT_LOG_ERROR_BIT) || ((severity & PIGMENT_LOG_WARN_BIT) && (type & PIGMENT_LOG_TYPE_VALIDATION_BIT)))
+    if(severity & PIGMENT_LOG_ERROR_BIT)
     {
         errors++;
     }
@@ -126,9 +126,10 @@ int main(void)
     };
 
     PigmentConfig config = {
-        .loggers           = loggers,
-        .logger_count      = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation = P_TRUE,
+        .loggers               = loggers,
+        .logger_count          = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
     };
 
     Pigment* pigment = init_pigment(&app_info, &config);

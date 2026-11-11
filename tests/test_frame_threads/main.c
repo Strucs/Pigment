@@ -149,7 +149,6 @@ static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const
     }
 
     if((severity & PIGMENT_LOG_ERROR_BIT)
-       || ((severity & PIGMENT_LOG_WARN_BIT) && (type & PIGMENT_LOG_TYPE_VALIDATION_BIT))
        || (record->message != NULL && strstr(record->message, "Disabling validation") != NULL))
     {
         atomic_fetch_add_explicit(&test->errors, 1, memory_order_relaxed);
@@ -558,12 +557,13 @@ int main(void)
     };
 
     PigmentConfig config = {
-        .max_frames_in_flight = slot_count,
-        .loggers              = &logger,
-        .logger_count         = 1,
-        .enable_validation    = P_TRUE,
-        .queue_requests       = queues,
-        .queue_request_count  = sizeof(queues) / sizeof(queues[0]),
+        .max_frames_in_flight  = slot_count,
+        .loggers               = &logger,
+        .logger_count          = 1,
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
+        .queue_requests        = queues,
+        .queue_request_count   = sizeof(queues) / sizeof(queues[0]),
     };
 
     test.pigment = init_pigment(&app, &config);

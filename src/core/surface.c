@@ -722,6 +722,17 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         .surface = surface->surface
     };
 
+    VkSwapchainPresentModesCreateInfoKHR present_modes_info = {
+        .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR,
+        .presentModeCount = 1,
+        .pPresentModes    = &present_mode,
+    };
+
+    if(pigment_has_swapchain_maintenance1(pigment))
+    {
+        create_info.pNext = &present_modes_info;
+    }
+
     create_info.minImageCount      = image_count;
     create_info.imageFormat        = surface_format.format;
     create_info.imageColorSpace    = surface_format.colorSpace;

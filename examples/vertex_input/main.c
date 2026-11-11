@@ -56,10 +56,11 @@ int main(void)
          },
     };
     PigmentConfig config = {
-        .max_frames_in_flight = FRAMES_IN_FLIGHT,
-        .loggers              = loggers,
-        .logger_count         = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation    = P_TRUE,
+        .max_frames_in_flight  = FRAMES_IN_FLIGHT,
+        .loggers               = loggers,
+        .logger_count          = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
     };
 
     pigment = init_pigment(&app_info, &config);

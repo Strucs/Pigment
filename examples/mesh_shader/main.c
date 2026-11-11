@@ -20,10 +20,11 @@ int main(void)
     };
 
     PigmentConfig config = {
-        .max_frames_in_flight = FRAMES_IN_FLIGHT,
-        .enable_validation    = P_TRUE,
-        .loggers              = &logger,
-        .logger_count         = 1,
+        .max_frames_in_flight  = FRAMES_IN_FLIGHT,
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
+        .loggers               = &logger,
+        .logger_count          = 1,
     };
 
     Pigment* pigment = init_pigment(&app, &config);

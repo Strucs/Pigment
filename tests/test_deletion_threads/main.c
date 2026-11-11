@@ -150,8 +150,17 @@ int main(void)
         .app_version = PIGMENT_MAKE_VERSION(1, 0, 0),
     };
 
+    PigmentLoggerCreateInfo logger = {
+        .severity_filter = PIGMENT_LOG_INFO_BIT | PIGMENT_LOG_WARN_BIT | PIGMENT_LOG_ERROR_BIT,
+        .type_filter     = PIGMENT_LOG_TYPE_GENERAL_BIT | PIGMENT_LOG_TYPE_VALIDATION_BIT | PIGMENT_LOG_TYPE_PERFORMANCE_BIT,
+        .callback        = pigment_default_log_callback,
+    };
+
     PigmentConfig config = {
-        .enable_validation = P_TRUE,
+        .loggers               = &logger,
+        .logger_count          = 1,
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
     };
 
     Pigment* pigment = init_pigment(&app_info, &config);

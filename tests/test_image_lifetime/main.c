@@ -47,7 +47,7 @@ static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const
         return;
     }
 
-    if((severity & PIGMENT_LOG_ERROR_BIT) || ((severity & PIGMENT_LOG_WARN_BIT) && (type & PIGMENT_LOG_TYPE_VALIDATION_BIT)))
+    if(severity & PIGMENT_LOG_ERROR_BIT)
     {
         atomic_fetch_add_explicit(&errors, 1, memory_order_relaxed);
     }
@@ -436,10 +436,11 @@ int main(void)
     allocator.calloc     = test_calloc;
 
     PigmentConfig config = {
-        .allocator         = &allocator,
-        .enable_validation = P_TRUE,
-        .loggers           = &logger,
-        .logger_count      = 1
+        .allocator             = &allocator,
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
+        .loggers               = &logger,
+        .logger_count          = 1
     };
 
     Pigment* pigment = init_pigment(&app, &config);

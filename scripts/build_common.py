@@ -47,12 +47,18 @@ def public_path_for_header(file: str) -> str | None:
 def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
     if os.path.exists(dst):
         dst_mtime = os.path.getmtime(dst)
-        sources_mtime = max(os.path.getmtime(p) for p in [src] + deps)
+        sources_mtime = max(os.path.getmtime(p) for p in [src, __file__] + deps)
         if dst_mtime >= sources_mtime:
             return False
-    command = ["glslc", src, "-o", dst]
-    if os.path.splitext(src)[1] in (".mesh", ".task"):
-        command.append("--target-env=vulkan1.3")
+    target_spv = "spv1.5" if os.path.splitext(src)[1] == ".frag" else "spv1.6"
+    command = [
+        "glslc",
+        src,
+        "-o",
+        dst,
+        "--target-env=vulkan1.3",
+        f"--target-spv={target_spv}",
+    ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         print(result.stdout)

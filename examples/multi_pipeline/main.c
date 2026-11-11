@@ -23,6 +23,7 @@ int main(void)
     PCommandPool* pool               = NULL;
     PWindowRenderer* renderer        = NULL;
     PStdBindless* bindless           = NULL;
+    PPipelineCache* pipeline_cache   = NULL;
     PCamera* camera                  = NULL;
     PInstances* instance_batch       = NULL;
     PMaterials* materials            = NULL;
@@ -63,10 +64,11 @@ int main(void)
          },
     };
     PigmentConfig config = {
-        .max_frames_in_flight = FRAMES_IN_FLIGHT,
-        .loggers              = loggers,
-        .logger_count         = sizeof(loggers) / sizeof(loggers[0]),
-        .enable_validation    = P_TRUE,
+        .max_frames_in_flight  = FRAMES_IN_FLIGHT,
+        .loggers               = loggers,
+        .logger_count          = sizeof(loggers) / sizeof(loggers[0]),
+        .enable_validation     = P_TRUE,
+        .enable_best_practices = P_TRUE,
     };
 
     pigment = init_pigment(&app_info, &config);
@@ -167,7 +169,13 @@ int main(void)
     desc_additive.blend_attachments     = &additive_blend;
 
     PPipelineDesc descs[sizeof(pipelines) / sizeof(pipelines[0])] = {desc_opaque, desc_additive};
-    if(pigment_create_graphic_pipelines(pigment, NULL, descs, sizeof(descs) / sizeof(descs[0]), pipelines) != PIGMENT_SUCCESS)
+    if(pigment_create_pipeline_cache(pigment, NULL, 0, &pipeline_cache) != PIGMENT_SUCCESS)
+    {
+        fprintf(stderr, "Failed to create pipeline cache!\n");
+        goto FREE;
+    }
+
+    if(pigment_create_graphic_pipelines(pigment, pipeline_cache, descs, sizeof(descs) / sizeof(descs[0]), pipelines) != PIGMENT_SUCCESS)
     {
         fprintf(stderr, "Failed to create pipelines!\n");
         goto FREE;
@@ -380,6 +388,7 @@ FREE:
     pigment_gltf_free_mesh(pigment, asset2);
     pigment_destroy_pipeline(pigment, pipelines[0]);
     pigment_destroy_pipeline(pigment, pipelines[1]);
+    pigment_destroy_pipeline_cache(pigment, pipeline_cache);
     pigment_renderer_destroy(pigment, renderer);
     pigment_destroy_command_pool(pigment, pool);
     pigment_std_destroy_camera(pigment, camera);

@@ -22,7 +22,7 @@
 
 static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
 static PResult build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count);
-static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count);
+static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count, PBool enable_layer_settings);
 static PigmentLogSeverity vk_severity_to_pigment(VkDebugUtilsMessageSeverityFlagBitsEXT severity);
 static PigmentLogType vk_type_to_pigment(VkDebugUtilsMessageTypeFlagsEXT type);
 static void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT* create_info, Pigment* pigment);
@@ -42,8 +42,11 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     PInstance* instance                         = NULL;
     VkLayerProperties* available_layers         = NULL;
     VkExtensionProperties* available_extensions = NULL;
+    VkExtensionProperties* layer_extensions     = NULL;
     uint32_t available_layer_count              = 0;
     uint32_t available_extension_count          = 0;
+    uint32_t layer_extension_count              = 0;
+    PBool layer_settings_available              = P_FALSE;
 
     instance = P_NEW_FOR_INSTANCE(pigment, instance);
     if(instance == NULL)
@@ -97,6 +100,28 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         }
     }
 
+    if(pigment->config.validation_enabled && pigment->config.best_practices_enabled)
+    {
+        vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &layer_extension_count, NULL);
+        if(layer_extension_count > 0)
+        {
+            layer_extensions = P_NEW_ARRAY_FOR_COMMAND(pigment, layer_extensions, layer_extension_count);
+            if(layer_extensions == NULL)
+            {
+                goto ERROR;
+            }
+            vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &layer_extension_count, layer_extensions);
+        }
+
+        layer_settings_available = extension_available(available_extensions, available_extension_count, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME)
+                                   || extension_available(layer_extensions, layer_extension_count, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
+        if(!layer_settings_available)
+        {
+            PLOG_WARN(pigment, "VK_EXT_layer_settings not available. Disabling best practices.");
+            pigment->config.best_practices_enabled = P_FALSE;
+        }
+    }
+
     if(pigment->config.debug_utils_enabled && !extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
     {
         PLOG_WARN(pigment, "VK_EXT_debug_utils not available. Disabling debug names, command labels and debug messenger.");
@@ -108,7 +133,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         goto ERROR;
     }
 
-    if(build_instance_extensions(pigment, instance, vk_init, available_extensions, available_extension_count) != PIGMENT_SUCCESS)
+    if(build_instance_extensions(pigment, instance, vk_init, available_extensions, available_extension_count, layer_settings_available) != PIGMENT_SUCCESS)
     {
         goto ERROR;
     }
@@ -133,11 +158,18 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     create_info.ppEnabledLayerNames     = instance->layers->size > 0 ? instance->layers->names : NULL;
 
     VkDebugUtilsMessengerCreateInfoEXT debug_create_info = {0};
-    VkValidationFeatureEnableEXT enabled_features[]      = {VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};
-    VkValidationFeaturesEXT validation_features          = {
-        .sType                         = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-        .enabledValidationFeatureCount = sizeof(enabled_features) / sizeof(enabled_features[0]),
-        .pEnabledValidationFeatures    = enabled_features,
+    VkBool32 enable_best_practices                       = VK_TRUE;
+    VkLayerSettingEXT best_practices_setting             = {
+        .pLayerName   = "VK_LAYER_KHRONOS_validation",
+        .pSettingName = "validate_best_practices",
+        .type         = VK_LAYER_SETTING_TYPE_BOOL32_EXT,
+        .valueCount   = 1,
+        .pValues      = &enable_best_practices,
+    };
+    VkLayerSettingsCreateInfoEXT layer_settings = {
+        .sType        = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+        .settingCount = 1,
+        .pSettings    = &best_practices_setting,
     };
 
     if(pigment->config.validation_enabled && pigment->config.debug_utils_enabled)
@@ -148,7 +180,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     if(pigment->config.validation_enabled && pigment->config.best_practices_enabled)
     {
-        pigment_vk_append_pnext(&create_info, &validation_features);
+        pigment_vk_append_pnext(&create_info, &layer_settings);
     }
 
     if(vk_init != NULL && vk_init->instance_pnext_chain != NULL)
@@ -167,12 +199,14 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     P_FREE(pigment, available_layers);
     P_FREE(pigment, available_extensions);
+    P_FREE(pigment, layer_extensions);
 
     return instance;
 
 ERROR:
     P_FREE(pigment, available_layers);
     P_FREE(pigment, available_extensions);
+    P_FREE(pigment, layer_extensions);
     if(instance != NULL)
     {
         if(instance->layers != NULL)
@@ -271,7 +305,7 @@ ERROR:
     return PIGMENT_ERROR_OUT_OF_MEMORY;
 }
 
-static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count)
+static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count, PBool enable_layer_settings)
 {
     const char** names = NULL;
     uint32_t count     = 0;
@@ -312,6 +346,10 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     {
         max_extensions++;
     }
+    if(enable_layer_settings)
+    {
+        max_extensions++;
+    }
 
     max_extensions += 3;
 
@@ -344,6 +382,10 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     if(pigment->config.debug_utils_enabled && !name_in_list((const char* const*) names, count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
     {
         names[count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    }
+    if(enable_layer_settings && !name_in_list((const char* const*) names, count, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME))
+    {
+        names[count++] = VK_EXT_LAYER_SETTINGS_EXTENSION_NAME;
     }
     if(extension_available(available, available_count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)
        && !name_in_list((const char* const*) names, count, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))
