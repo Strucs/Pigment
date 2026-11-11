@@ -392,16 +392,26 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
     {
         names[count++] = VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME;
     }
+    const char* surface_maintenance1_extension = NULL;
+    if(extension_available(available, available_count, VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME))
+    {
+        surface_maintenance1_extension = VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+    }
+    else if(extension_available(available, available_count, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME))
+    {
+        surface_maintenance1_extension = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+    }
+
     if(extension_available(available, available_count, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)
-       && extension_available(available, available_count, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME))
+       && surface_maintenance1_extension != NULL)
     {
         if(!name_in_list((const char* const*) names, count, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME))
         {
             names[count++] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
         }
-        if(!name_in_list((const char* const*) names, count, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME))
+        if(!name_in_list((const char* const*) names, count, surface_maintenance1_extension))
         {
-            names[count++] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+            names[count++] = surface_maintenance1_extension;
         }
     }
 

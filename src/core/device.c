@@ -809,11 +809,13 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         }
     }
 
-    VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchain_maint1_features = {0};
-    PBool enable_swapchain_maint1                                              = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchain_maint1_features = {0};
+
+    PBool enable_swapchain_maint1 = name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)
+                                    || name_in_list((const char* const*) device->extensions->names, device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
     if(enable_swapchain_maint1)
     {
-        swapchain_maint1_features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT;
+        swapchain_maint1_features.sType                 = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
         swapchain_maint1_features.swapchainMaintenance1 = VK_TRUE;
         swapchain_maint1_features.pNext                 = features_head;
         features_head                                   = &swapchain_maint1_features;
@@ -966,15 +968,12 @@ PDevice* create_device(Pigment* pigment)
     };
     const uint32_t default_req_count = sizeof(default_req_extensions) / sizeof(default_req_extensions[0]);
 
-    PBool instance_has_surface_maint1 = name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME)
+    PBool instance_has_surface_maint1 = (name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME)
+                                         || name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME))
                                         && name_in_list((const char* const*) pigment->instance->extensions->names, pigment->instance->extensions->size, VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
 
-    const char* default_opt_extensions[4] = {0};
-    uint32_t default_opt_count            = 0;
-    if(instance_has_surface_maint1)
-    {
-        default_opt_extensions[default_opt_count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
-    }
+    const char* default_opt_extensions[4]       = {0};
+    uint32_t default_opt_count                  = 0;
     default_opt_extensions[default_opt_count++] = VK_EXT_HOST_IMAGE_COPY_EXTENSION_NAME;
     default_opt_extensions[default_opt_count++] = VK_EXT_MEMORY_BUDGET_EXTENSION_NAME;
     default_opt_extensions[default_opt_count++] = VK_EXT_MESH_SHADER_EXTENSION_NAME;
@@ -1022,6 +1021,18 @@ PDevice* create_device(Pigment* pigment)
             goto ERROR;
         }
         vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, available_extensions);
+    }
+
+    if(instance_has_surface_maint1)
+    {
+        if(extension_available(available_extensions, available_extension_count, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME))
+        {
+            default_opt_extensions[default_opt_count++] = VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+        }
+        else if(extension_available(available_extensions, available_extension_count, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME))
+        {
+            default_opt_extensions[default_opt_count++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+        }
     }
 
     PBool has_portability_subset = extension_available(available_extensions, available_extension_count, "VK_KHR_portability_subset");

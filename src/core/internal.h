@@ -252,7 +252,8 @@ static inline PBool pigment_has_swapchain_maintenance1(Pigment* pigment)
     {
         return P_FALSE;
     }
-    return name_in_list((const char* const*) pigment->device->extensions->names, pigment->device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
+    return name_in_list((const char* const*) pigment->device->extensions->names, pigment->device->extensions->size, VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME)
+           || name_in_list((const char* const*) pigment->device->extensions->names, pigment->device->extensions->size, VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME);
 }
 
 // surface.c
