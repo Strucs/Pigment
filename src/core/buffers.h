@@ -24,14 +24,14 @@ extern "C" {
 #include "defines.h"
 
 typedef enum PBufferUsage {
-    P_BUFFER_USAGE_VERTEX         = 1 << 0,
-    P_BUFFER_USAGE_INDEX          = 1 << 1,
-    P_BUFFER_USAGE_STORAGE        = 1 << 2,
-    P_BUFFER_USAGE_UNIFORM        = 1 << 3,
-    P_BUFFER_USAGE_SHADER_ADDRESS = 1 << 4,
-    P_BUFFER_USAGE_TRANSFER_SRC   = 1 << 5,
-    P_BUFFER_USAGE_TRANSFER_DST   = 1 << 6,
-    P_BUFFER_USAGE_INDIRECT       = 1 << 7,
+    P_BUFFER_USAGE_VERTEX         = 1U << 0,
+    P_BUFFER_USAGE_INDEX          = 1U << 1,
+    P_BUFFER_USAGE_STORAGE        = 1U << 2,
+    P_BUFFER_USAGE_UNIFORM        = 1U << 3,
+    P_BUFFER_USAGE_SHADER_ADDRESS = 1U << 4,
+    P_BUFFER_USAGE_TRANSFER_SRC   = 1U << 5,
+    P_BUFFER_USAGE_TRANSFER_DST   = 1U << 6,
+    P_BUFFER_USAGE_INDIRECT       = 1U << 7,
 } PBufferUsage;
 
 typedef struct PMemoryRequest {
@@ -40,7 +40,7 @@ typedef struct PMemoryRequest {
 } PMemoryRequest;
 
 typedef enum PBufferFlags {
-    P_BUFFER_DEDICATED_BIT = 1 << 0,
+    P_BUFFER_DEDICATED_BIT = 1U << 0,
 } PBufferFlags;
 
 typedef enum PIndexType {

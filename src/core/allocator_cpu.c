@@ -37,7 +37,7 @@ typedef struct {
 } alloc_header;
 #endif
 
-const PAllocator pigment_default_allocator = {
+static const PAllocator pigment_default_allocator = {
     .user_data             = NULL,
     .alloc                 = default_alloc,
     .calloc                = default_calloc,
@@ -46,6 +46,11 @@ const PAllocator pigment_default_allocator = {
     .internal_alloc_notify = NULL,
     .internal_free_notify  = NULL,
 };
+
+PAllocator pigment_get_default_allocator(void)
+{
+    return pigment_default_allocator;
+}
 
 static void* default_alloc(void* user_data, uint64_t size, uint64_t alignment, PAllocScope scope)
 {

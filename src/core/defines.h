@@ -58,17 +58,17 @@ typedef struct PSubmitHandle {
 } PSubmitHandle;
 
 typedef enum PigmentLogSeverity {
-    PIGMENT_LOG_TRACE_BIT = 1 << 0,
-    PIGMENT_LOG_DEBUG_BIT = 1 << 1,
-    PIGMENT_LOG_INFO_BIT  = 1 << 2,
-    PIGMENT_LOG_WARN_BIT  = 1 << 3,
-    PIGMENT_LOG_ERROR_BIT = 1 << 4,
+    PIGMENT_LOG_TRACE_BIT = 1U << 0,
+    PIGMENT_LOG_DEBUG_BIT = 1U << 1,
+    PIGMENT_LOG_INFO_BIT  = 1U << 2,
+    PIGMENT_LOG_WARN_BIT  = 1U << 3,
+    PIGMENT_LOG_ERROR_BIT = 1U << 4,
 } PigmentLogSeverity;
 
 typedef enum PigmentLogType {
-    PIGMENT_LOG_TYPE_GENERAL_BIT     = 1 << 0,
-    PIGMENT_LOG_TYPE_VALIDATION_BIT  = 1 << 1,
-    PIGMENT_LOG_TYPE_PERFORMANCE_BIT = 1 << 2,
+    PIGMENT_LOG_TYPE_GENERAL_BIT     = 1U << 0,
+    PIGMENT_LOG_TYPE_VALIDATION_BIT  = 1U << 1,
+    PIGMENT_LOG_TYPE_PERFORMANCE_BIT = 1U << 2,
 } PigmentLogType;
 
 typedef enum PFeature {
@@ -123,9 +123,9 @@ typedef enum PColorSpace {
 #define P_PRESENT_MODE_DEFAULT P_PRESENT_MODE_MAILBOX
 
 typedef enum PQueueFlags {
-    P_QUEUE_GRAPHICS_BIT = 1 << 0,
-    P_QUEUE_COMPUTE_BIT  = 1 << 1,
-    P_QUEUE_TRANSFER_BIT = 1 << 2,
+    P_QUEUE_GRAPHICS_BIT = 1U << 0,
+    P_QUEUE_COMPUTE_BIT  = 1U << 1,
+    P_QUEUE_TRANSFER_BIT = 1U << 2,
 } PQueueFlags;
 
 /**
@@ -138,16 +138,16 @@ typedef struct PQueueRequest {
 } PQueueRequest;
 
 typedef enum PCommandPoolFlags {
-    P_COMMAND_POOL_FLAG_NONE         = 0,
-    P_COMMAND_POOL_FLAG_TRANSIENT    = 1 << 0,
-    P_COMMAND_POOL_FLAG_RESET_BUFFER = 1 << 1,
+    P_COMMAND_POOL_FLAG_NONE         = 0U,
+    P_COMMAND_POOL_FLAG_TRANSIENT    = 1U << 0,
+    P_COMMAND_POOL_FLAG_RESET_BUFFER = 1U << 1,
 } PCommandPoolFlags;
 
 typedef enum PCommandBufferUsage {
-    P_CMD_BUFFER_USAGE_DEFAULT                  = 0,
-    P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT      = 1 << 0,
-    P_CMD_BUFFER_USAGE_SIMULTANEOUS_USE_BIT     = 1 << 1,
-    P_CMD_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT = 1 << 2,    // secondary buffer inside a render pass
+    P_CMD_BUFFER_USAGE_DEFAULT                  = 0U,
+    P_CMD_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT      = 1U << 0,
+    P_CMD_BUFFER_USAGE_SIMULTANEOUS_USE_BIT     = 1U << 1,
+    P_CMD_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT = 1U << 2,    // secondary buffer inside a render pass
 } PCommandBufferUsage;
 
 typedef struct PCommandPoolDesc {
@@ -270,11 +270,11 @@ typedef struct PSwapchainRecreateEvent {
 typedef void (*PSwapchainRecreateFn)(Pigment* pigment, const PSwapchainRecreateEvent* event, void* user_data);
 
 typedef enum PShaderStageFlags {
-    P_SHADER_STAGE_VERTEX_BIT   = 1 << 0,
-    P_SHADER_STAGE_FRAGMENT_BIT = 1 << 4,
-    P_SHADER_STAGE_COMPUTE_BIT  = 1 << 5,
-    P_SHADER_STAGE_TASK_BIT     = 1 << 6,
-    P_SHADER_STAGE_MESH_BIT     = 1 << 7,
+    P_SHADER_STAGE_VERTEX_BIT   = 1U << 0,
+    P_SHADER_STAGE_FRAGMENT_BIT = 1U << 4,
+    P_SHADER_STAGE_COMPUTE_BIT  = 1U << 5,
+    P_SHADER_STAGE_TASK_BIT     = 1U << 6,
+    P_SHADER_STAGE_MESH_BIT     = 1U << 7,
     // ALL masks select enabled stages when used for descriptor or push constant visibility.
     P_SHADER_STAGE_ALL_GRAPHICS = P_SHADER_STAGE_VERTEX_BIT | P_SHADER_STAGE_TASK_BIT | P_SHADER_STAGE_MESH_BIT | P_SHADER_STAGE_FRAGMENT_BIT,
     P_SHADER_STAGE_ALL          = P_SHADER_STAGE_ALL_GRAPHICS | P_SHADER_STAGE_COMPUTE_BIT,
@@ -286,21 +286,21 @@ typedef enum PFilteringMode {
 } PFilteringMode;
 
 typedef enum PSampleCount {
-    P_SAMPLE_COUNT_1  = 1,
-    P_SAMPLE_COUNT_2  = 2,
-    P_SAMPLE_COUNT_4  = 4,
-    P_SAMPLE_COUNT_8  = 8,
-    P_SAMPLE_COUNT_16 = 16,
-    P_SAMPLE_COUNT_32 = 32,
-    P_SAMPLE_COUNT_64 = 64,
+    P_SAMPLE_COUNT_1  = 1U,
+    P_SAMPLE_COUNT_2  = 2U,
+    P_SAMPLE_COUNT_4  = 4U,
+    P_SAMPLE_COUNT_8  = 8U,
+    P_SAMPLE_COUNT_16 = 16U,
+    P_SAMPLE_COUNT_32 = 32U,
+    P_SAMPLE_COUNT_64 = 64U,
 } PSampleCount;
 
 typedef enum PResolveMode {
-    P_RESOLVE_MODE_AUTO        = 0,    // AVERAGE for color, SAMPLE_ZERO for depth/stencil
-    P_RESOLVE_MODE_SAMPLE_ZERO = 1,
-    P_RESOLVE_MODE_AVERAGE     = 2,
-    P_RESOLVE_MODE_MIN         = 4,
-    P_RESOLVE_MODE_MAX         = 8,
+    P_RESOLVE_MODE_AUTO        = 0U,    // AVERAGE for color, SAMPLE_ZERO for depth/stencil
+    P_RESOLVE_MODE_SAMPLE_ZERO = 1U,
+    P_RESOLVE_MODE_AVERAGE     = 2U,
+    P_RESOLVE_MODE_MIN         = 4U,
+    P_RESOLVE_MODE_MAX         = 8U,
 } PResolveMode;
 
 typedef enum PLoadOp {
@@ -424,22 +424,22 @@ typedef enum PCompareOp {
 } PCompareOp;
 
 typedef enum PPipelineStage {
-    P_PIPELINE_STAGE_NONE                        = 0,
-    P_PIPELINE_STAGE_DRAW_INDIRECT_BIT           = 1 << 0,
-    P_PIPELINE_STAGE_VERTEX_INPUT_BIT            = 1 << 1,
-    P_PIPELINE_STAGE_INDEX_INPUT_BIT             = 1 << 2,
-    P_PIPELINE_STAGE_VERTEX_SHADER_BIT           = 1 << 3,
-    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT         = 1 << 4,
-    P_PIPELINE_STAGE_COMPUTE_SHADER_BIT          = 1 << 5,
-    P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT    = 1 << 6,
-    P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT     = 1 << 7,
-    P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 1 << 8,
-    P_PIPELINE_STAGE_TRANSFER_BIT                = 1 << 9,
-    P_PIPELINE_STAGE_HOST_BIT                    = 1 << 10,
-    P_PIPELINE_STAGE_ALL_GRAPHICS_BIT            = 1 << 11,
-    P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1 << 12,
-    P_PIPELINE_STAGE_MESH_SHADER_BIT             = 1 << 13,
-    P_PIPELINE_STAGE_TASK_SHADER_BIT             = 1 << 14,
+    P_PIPELINE_STAGE_NONE                        = 0U,
+    P_PIPELINE_STAGE_DRAW_INDIRECT_BIT           = 1U << 0,
+    P_PIPELINE_STAGE_VERTEX_INPUT_BIT            = 1U << 1,
+    P_PIPELINE_STAGE_INDEX_INPUT_BIT             = 1U << 2,
+    P_PIPELINE_STAGE_VERTEX_SHADER_BIT           = 1U << 3,
+    P_PIPELINE_STAGE_FRAGMENT_SHADER_BIT         = 1U << 4,
+    P_PIPELINE_STAGE_COMPUTE_SHADER_BIT          = 1U << 5,
+    P_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT    = 1U << 6,
+    P_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT     = 1U << 7,
+    P_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 1U << 8,
+    P_PIPELINE_STAGE_TRANSFER_BIT                = 1U << 9,
+    P_PIPELINE_STAGE_HOST_BIT                    = 1U << 10,
+    P_PIPELINE_STAGE_ALL_GRAPHICS_BIT            = 1U << 11,
+    P_PIPELINE_STAGE_ALL_COMMANDS_BIT            = 1U << 12,
+    P_PIPELINE_STAGE_MESH_SHADER_BIT             = 1U << 13,
+    P_PIPELINE_STAGE_TASK_SHADER_BIT             = 1U << 14,
 } PPipelineStage;
 
 typedef enum PSubmitWaitType {
@@ -469,31 +469,31 @@ typedef enum PCommandBufferLevel {
 } PCommandBufferLevel;
 
 typedef enum PMemoryFlags {
-    P_MEMORY_DEVICE_LOCAL_BIT  = 1 << 0,
-    P_MEMORY_HOST_VISIBLE_BIT  = 1 << 1,
-    P_MEMORY_HOST_COHERENT_BIT = 1 << 2,
-    P_MEMORY_HOST_CACHED_BIT   = 1 << 3,
+    P_MEMORY_DEVICE_LOCAL_BIT  = 1U << 0,
+    P_MEMORY_HOST_VISIBLE_BIT  = 1U << 1,
+    P_MEMORY_HOST_COHERENT_BIT = 1U << 2,
+    P_MEMORY_HOST_CACHED_BIT   = 1U << 3,
 } PMemoryFlags;
 
 typedef enum PMemoryAccess {
-    P_MEMORY_ACCESS_NONE                               = 0,
-    P_MEMORY_ACCESS_INDIRECT_COMMAND_READ_BIT          = 1 << 0,
-    P_MEMORY_ACCESS_INDEX_READ_BIT                     = 1 << 1,
-    P_MEMORY_ACCESS_VERTEX_ATTRIBUTE_READ_BIT          = 1 << 2,
-    P_MEMORY_ACCESS_UNIFORM_READ_BIT                   = 1 << 3,
-    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT            = 1 << 4,
-    P_MEMORY_ACCESS_SHADER_STORAGE_READ_BIT            = 1 << 5,
-    P_MEMORY_ACCESS_SHADER_STORAGE_WRITE_BIT           = 1 << 6,
-    P_MEMORY_ACCESS_COLOR_ATTACHMENT_READ_BIT          = 1 << 7,
-    P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT         = 1 << 8,
-    P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT  = 1 << 9,
-    P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT = 1 << 10,
-    P_MEMORY_ACCESS_TRANSFER_READ_BIT                  = 1 << 11,
-    P_MEMORY_ACCESS_TRANSFER_WRITE_BIT                 = 1 << 12,
-    P_MEMORY_ACCESS_HOST_READ_BIT                      = 1 << 13,
-    P_MEMORY_ACCESS_HOST_WRITE_BIT                     = 1 << 14,
-    P_MEMORY_ACCESS_MEMORY_READ_BIT                    = 1 << 15,
-    P_MEMORY_ACCESS_MEMORY_WRITE_BIT                   = 1 << 16,
+    P_MEMORY_ACCESS_NONE                               = 0U,
+    P_MEMORY_ACCESS_INDIRECT_COMMAND_READ_BIT          = 1U << 0,
+    P_MEMORY_ACCESS_INDEX_READ_BIT                     = 1U << 1,
+    P_MEMORY_ACCESS_VERTEX_ATTRIBUTE_READ_BIT          = 1U << 2,
+    P_MEMORY_ACCESS_UNIFORM_READ_BIT                   = 1U << 3,
+    P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT            = 1U << 4,
+    P_MEMORY_ACCESS_SHADER_STORAGE_READ_BIT            = 1U << 5,
+    P_MEMORY_ACCESS_SHADER_STORAGE_WRITE_BIT           = 1U << 6,
+    P_MEMORY_ACCESS_COLOR_ATTACHMENT_READ_BIT          = 1U << 7,
+    P_MEMORY_ACCESS_COLOR_ATTACHMENT_WRITE_BIT         = 1U << 8,
+    P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT  = 1U << 9,
+    P_MEMORY_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT = 1U << 10,
+    P_MEMORY_ACCESS_TRANSFER_READ_BIT                  = 1U << 11,
+    P_MEMORY_ACCESS_TRANSFER_WRITE_BIT                 = 1U << 12,
+    P_MEMORY_ACCESS_HOST_READ_BIT                      = 1U << 13,
+    P_MEMORY_ACCESS_HOST_WRITE_BIT                     = 1U << 14,
+    P_MEMORY_ACCESS_MEMORY_READ_BIT                    = 1U << 15,
+    P_MEMORY_ACCESS_MEMORY_WRITE_BIT                   = 1U << 16,
 } PMemoryAccess;
 
 typedef enum PImageLayout {
@@ -562,7 +562,10 @@ typedef struct PAllocator {
     void (*internal_free_notify)(void* user_data, uint64_t size, PInternalAllocationType type, PAllocScope scope);
 } PAllocator;
 
-PIGMENT_API extern const PAllocator pigment_default_allocator;
+/**
+ * @return The default allocator that can be customized by the caller.
+ */
+PIGMENT_API PAllocator pigment_get_default_allocator(void);
 
 typedef struct PigmentConfig {
     uint32_t max_frames_in_flight;
@@ -571,7 +574,7 @@ typedef struct PigmentConfig {
     PBool enable_validation;
     PBool enable_best_practices;
     float depth_clear_value;                // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
-    const PAllocator* allocator;            // NULL = uses pigment_default_allocator (malloc/free)
+    const PAllocator* allocator;            // NULL = uses pigment_get_default_allocator()
     const PQueueRequest* queue_requests;    // explicit queue layout. NULL or count=0 = default policy (1 graphics + 1 compute + 1 transfer, most specialized the hardware exposes).
     uint32_t queue_request_count;
     const void* extra;

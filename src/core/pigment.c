@@ -25,7 +25,7 @@
 
 Pigment* init_pigment(PAppInfo* app_info, PigmentConfig* config)
 {
-    PAllocator cpu_alloc = (config != NULL && config->allocator != NULL) ? *config->allocator : pigment_default_allocator;
+    PAllocator cpu_alloc = (config != NULL && config->allocator != NULL) ? *config->allocator : pigment_get_default_allocator();
 
     Pigment* pigment = cpu_alloc.alloc(cpu_alloc.user_data, sizeof(*pigment), _Alignof(Pigment), P_ALLOC_SCOPE_INSTANCE);
     if(pigment == NULL)

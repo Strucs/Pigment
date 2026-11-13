@@ -146,7 +146,7 @@ static uint32_t find_memory_type_index(const VkPhysicalDeviceMemoryProperties* p
 {
     for(uint32_t i = 0; i < props->memoryTypeCount; i++)
     {
-        if((type_filter & (1 << i)) && (props->memoryTypes[i].propertyFlags & properties) == properties)
+        if((type_filter & (1U << i)) && (props->memoryTypes[i].propertyFlags & properties) == properties)
         {
             return i;
         }

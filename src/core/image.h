@@ -24,13 +24,13 @@ extern "C" {
 #include "defines.h"
 
 typedef enum PImageUsage {
-    P_IMAGE_USAGE_SAMPLED       = 1 << 0,
-    P_IMAGE_USAGE_RENDER_COLOR  = 1 << 1,
-    P_IMAGE_USAGE_RENDER_DEPTH  = 1 << 2,
-    P_IMAGE_USAGE_STORAGE       = 1 << 3,
-    P_IMAGE_USAGE_TRANSFER_SRC  = 1 << 4,
-    P_IMAGE_USAGE_TRANSFER_DST  = 1 << 5,
-    P_IMAGE_USAGE_HOST_TRANSFER = 1 << 6,    // pigment_image_write / _read, needs P_FEATURE_HOST_IMAGE_COPY
+    P_IMAGE_USAGE_SAMPLED       = 1U << 0,
+    P_IMAGE_USAGE_RENDER_COLOR  = 1U << 1,
+    P_IMAGE_USAGE_RENDER_DEPTH  = 1U << 2,
+    P_IMAGE_USAGE_STORAGE       = 1U << 3,
+    P_IMAGE_USAGE_TRANSFER_SRC  = 1U << 4,
+    P_IMAGE_USAGE_TRANSFER_DST  = 1U << 5,
+    P_IMAGE_USAGE_HOST_TRANSFER = 1U << 6,    // pigment_image_write / _read, needs P_FEATURE_HOST_IMAGE_COPY
 } PImageUsage;
 
 typedef enum PImageType {
@@ -42,20 +42,20 @@ typedef enum PImageType {
 } PImageType;
 
 typedef enum PImageFlags {
-    P_IMAGE_FLAG_HOST_MAPPED = 1 << 0
+    P_IMAGE_FLAG_HOST_MAPPED = 1U << 0
 } PImageFlags;
 
 typedef enum PFormatFeature {
-    P_FORMAT_FEATURE_SAMPLED                  = 1 << 0,
-    P_FORMAT_FEATURE_SAMPLED_FILTER_LINEAR    = 1 << 1,
-    P_FORMAT_FEATURE_STORAGE                  = 1 << 2,
-    P_FORMAT_FEATURE_COLOR_ATTACHMENT         = 1 << 3,
-    P_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND   = 1 << 4,
-    P_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT = 1 << 5,
-    P_FORMAT_FEATURE_BLIT_SRC                 = 1 << 6,
-    P_FORMAT_FEATURE_BLIT_DST                 = 1 << 7,
-    P_FORMAT_FEATURE_TRANSFER_SRC             = 1 << 8,
-    P_FORMAT_FEATURE_TRANSFER_DST             = 1 << 9,
+    P_FORMAT_FEATURE_SAMPLED                  = 1U << 0,
+    P_FORMAT_FEATURE_SAMPLED_FILTER_LINEAR    = 1U << 1,
+    P_FORMAT_FEATURE_STORAGE                  = 1U << 2,
+    P_FORMAT_FEATURE_COLOR_ATTACHMENT         = 1U << 3,
+    P_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND   = 1U << 4,
+    P_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT = 1U << 5,
+    P_FORMAT_FEATURE_BLIT_SRC                 = 1U << 6,
+    P_FORMAT_FEATURE_BLIT_DST                 = 1U << 7,
+    P_FORMAT_FEATURE_TRANSFER_SRC             = 1U << 8,
+    P_FORMAT_FEATURE_TRANSFER_DST             = 1U << 9,
 } PFormatFeature;
 
 typedef struct PImageDesc {

@@ -32,7 +32,7 @@ typedef struct PBufferUploadDesc {
 } PBufferUploadDesc;
 
 typedef enum PImageUploadFlags {
-    P_IMAGE_GENERATE_MIPMAPS = 1 << 0    // generate a full mip chain by blit from level 0. Mutually exclusive with mip_count > 1.
+    P_IMAGE_GENERATE_MIPMAPS = 1U << 0    // generate a full mip chain by blit from level 0. Mutually exclusive with mip_count > 1.
 } PImageUploadFlags;
 
 typedef struct PImageUploadDesc {

@@ -27,8 +27,8 @@ typedef struct PSyncFlags {
 } PSyncFlags;
 
 typedef enum PDependencyFlags {
-    P_DEPENDENCY_NONE      = 0,
-    P_DEPENDENCY_BY_REGION = 1 << 0,
+    P_DEPENDENCY_NONE      = 0U,
+    P_DEPENDENCY_BY_REGION = 1U << 0,
 } PDependencyFlags;
 
 typedef struct PImageBarrier {

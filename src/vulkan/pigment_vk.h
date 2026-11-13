@@ -29,9 +29,9 @@ typedef struct PVkAllocation PVkAllocation;
 typedef struct PVkAllocator PVkAllocator;
 
 typedef enum PVkAllocationFlagBits {
-    P_VK_ALLOCATION_HOST_RANDOM_BIT    = 1 << 0,
-    P_VK_ALLOCATION_DEDICATED_BIT      = 1 << 1,
-    P_VK_ALLOCATION_PERSISTENT_MAP_BIT = 1 << 2,
+    P_VK_ALLOCATION_HOST_RANDOM_BIT    = 1U << 0,
+    P_VK_ALLOCATION_DEDICATED_BIT      = 1U << 1,
+    P_VK_ALLOCATION_PERSISTENT_MAP_BIT = 1U << 2,
 } PVkAllocationFlagBits;
 
 typedef VkFlags PVkAllocationFlags;

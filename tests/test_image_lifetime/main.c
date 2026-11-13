@@ -36,7 +36,7 @@ static void* test_calloc(void* user_data, uint64_t size, uint64_t alignment, PAl
         return NULL;
     }
 
-    return pigment_default_allocator.calloc(user_data, size, alignment, scope);
+    return pigment_get_default_allocator().calloc(user_data, size, alignment, scope);
 }
 
 static void log_callback(PigmentLogSeverity severity, PigmentLogType type, const PigmentLogRecord* record, void* user_data)
@@ -432,7 +432,7 @@ int main(void)
         .callback        = log_callback,
     };
 
-    PAllocator allocator = pigment_default_allocator;
+    PAllocator allocator = pigment_get_default_allocator();
     allocator.calloc     = test_calloc;
 
     PigmentConfig config = {

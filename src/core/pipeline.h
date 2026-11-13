@@ -35,9 +35,9 @@ typedef enum PStencilOp {
 } PStencilOp;
 
 typedef enum PStencilFaceFlags {
-    P_STENCIL_FACE_FRONT_BIT      = 1,
-    P_STENCIL_FACE_BACK_BIT       = 2,
-    P_STENCIL_FACE_FRONT_AND_BACK = 3,
+    P_STENCIL_FACE_FRONT_BIT      = 1U,
+    P_STENCIL_FACE_BACK_BIT       = 2U,
+    P_STENCIL_FACE_FRONT_AND_BACK = 3U,
 } PStencilFaceFlags;
 
 typedef enum PTopology {
@@ -56,10 +56,10 @@ typedef enum PPolygonMode {
 } PPolygonMode;
 
 typedef enum PCullMode {
-    P_CULL_MODE_NONE           = 0,
-    P_CULL_MODE_FRONT          = 1,
-    P_CULL_MODE_BACK           = 2,
-    P_CULL_MODE_FRONT_AND_BACK = 3,
+    P_CULL_MODE_NONE           = 0U,
+    P_CULL_MODE_FRONT          = 1U,
+    P_CULL_MODE_BACK           = 2U,
+    P_CULL_MODE_FRONT_AND_BACK = 3U,
 } PCullMode;
 
 typedef enum PFrontFace {
@@ -105,10 +105,10 @@ typedef enum PBlendOp {
 } PBlendOp;
 
 typedef enum PColorComponentFlags {
-    P_COLOR_COMPONENT_R_BIT = 1 << 0,
-    P_COLOR_COMPONENT_G_BIT = 1 << 1,
-    P_COLOR_COMPONENT_B_BIT = 1 << 2,
-    P_COLOR_COMPONENT_A_BIT = 1 << 3,
+    P_COLOR_COMPONENT_R_BIT = 1U << 0,
+    P_COLOR_COMPONENT_G_BIT = 1U << 1,
+    P_COLOR_COMPONENT_B_BIT = 1U << 2,
+    P_COLOR_COMPONENT_A_BIT = 1U << 3,
     P_COLOR_COMPONENT_RGB   = P_COLOR_COMPONENT_R_BIT | P_COLOR_COMPONENT_G_BIT | P_COLOR_COMPONENT_B_BIT,
     P_COLOR_COMPONENT_RGBA  = P_COLOR_COMPONENT_RGB | P_COLOR_COMPONENT_A_BIT,
 } PColorComponentFlags;
