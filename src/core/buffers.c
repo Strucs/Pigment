@@ -91,12 +91,21 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
     buffer->size         = desc->size;
     buffer->memory_flags = alloc->get_memory_flags(alloc->user_data, buffer->allocation);
 
+    if((buffer->memory_flags & alloc_info.required_flags) != alloc_info.required_flags)
+    {
+        PLOG_ERROR(pigment, "Buffer allocation does not satisfy required memory flags (required=%u, actual=%u)", (unsigned int) alloc_info.required_flags, (unsigned int) buffer->memory_flags);
+        alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
+        pigment_resource_tracker_destroy(pigment, &buffer->tracker);
+        P_FREE(pigment, buffer);
+        return NULL;
+    }
+
     if(buffer->memory_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
         result = alloc->map(alloc->user_data, buffer->allocation, &buffer->mapped);
-        if(device_result(pigment, result) != PIGMENT_SUCCESS)
+        if(device_result(pigment, result) != PIGMENT_SUCCESS || buffer->mapped == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to map buffer (result: %d)", result);
+            PLOG_ERROR(pigment, "Failed to map buffer (result=%d, mapped=%p)", result, buffer->mapped);
             alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
             pigment_resource_tracker_destroy(pigment, &buffer->tracker);
             P_FREE(pigment, buffer);

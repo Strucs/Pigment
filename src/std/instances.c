@@ -126,7 +126,13 @@ PStdBufferVersion* pigment_std_instances_prepare(Pigment* pigment, PInstances* i
     // The caller writes through alloc's pointer, so each publication copies the data.
     uint64_t used = (uint64_t) instances->count * instances->instance_size;
 
-    memcpy(pigment_buffer_mapped(buffer), instances->data, (size_t) used);
+    void* mapped = pigment_buffer_mapped(buffer);
+    if(mapped == NULL)
+    {
+        return NULL;
+    }
+
+    memcpy(mapped, instances->data, (size_t) used);
     pigment_buffer_flush(pigment, buffer, 0, used);
 
     instances->buffers.current->count = instances->count;

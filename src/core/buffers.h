@@ -64,6 +64,11 @@ typedef struct PBufferCopy {
     uint64_t size;
 } PBufferCopy;
 
+/**
+ * @brief Create a buffer that satisfies the required memory flags.
+ *
+ * @return The buffer on success, or NULL on failure.
+ */
 PIGMENT_API PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc);
 PIGMENT_API void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
 

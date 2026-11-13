@@ -104,7 +104,13 @@ PStdBufferVersion* pigment_std_camera_prepare(Pigment* pigment, PCamera* camera)
             return NULL;
         }
 
-        memcpy(pigment_buffer_mapped(buffer), &camera->data, sizeof(camera->data));
+        void* mapped = pigment_buffer_mapped(buffer);
+        if(mapped == NULL)
+        {
+            return NULL;
+        }
+
+        memcpy(mapped, &camera->data, sizeof(camera->data));
         pigment_buffer_flush(pigment, buffer, 0, sizeof(camera->data));
 
         camera->buffers.current->count = 1;

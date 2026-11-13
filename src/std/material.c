@@ -156,7 +156,13 @@ PStdBufferVersion* pigment_std_materials_prepare(Pigment* pigment, PMaterials* m
 
         uint64_t used = (uint64_t) materials->count * sizeof(*materials->data);
 
-        memcpy(pigment_buffer_mapped(buffer), materials->data, (size_t) used);
+        void* mapped = pigment_buffer_mapped(buffer);
+        if(mapped == NULL)
+        {
+            return NULL;
+        }
+
+        memcpy(mapped, materials->data, (size_t) used);
         pigment_buffer_flush(pigment, buffer, 0, used);
 
         materials->buffers.current->count = materials->count;

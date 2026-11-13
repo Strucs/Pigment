@@ -177,6 +177,11 @@ PStdBufferVersion* pigment_std_lights_prepare(Pigment* pigment, PLights* lights)
         uint64_t used = (uint64_t) lights->header.count * sizeof(*lights->data);
 
         unsigned char* mapped = pigment_buffer_mapped(buffer);
+        if(mapped == NULL)
+        {
+            return NULL;
+        }
+
         memcpy(mapped, &lights->header, sizeof(lights->header));
         memcpy(mapped + sizeof(lights->header), lights->data, (size_t) used);
         pigment_buffer_flush(pigment, buffer, 0, sizeof(lights->header) + used);
