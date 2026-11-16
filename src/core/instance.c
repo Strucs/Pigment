@@ -20,6 +20,8 @@
 
 #include "internal.h"
 
+#include <stdlib.h>
+
 static PBool layer_available(const VkLayerProperties* available, uint32_t count, const char* name);
 static PResult build_instance_layers(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkLayerProperties* available, uint32_t available_count);
 static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, const PVkInitInfo* vk_init, const VkExtensionProperties* available, uint32_t available_count, PBool enable_layer_settings);

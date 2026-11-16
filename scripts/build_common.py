@@ -160,7 +160,6 @@ def configure_build(config: powermake.Config):
                 config.add_ld_flags("/LTCG")
                 config.add_shared_linker_flags("/LTCG")
     else:
-        config.add_c_flags("-std=c17")
         if not config.debug:
             config.add_c_flags("-flto=auto")
 
