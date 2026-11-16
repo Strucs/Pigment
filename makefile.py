@@ -21,11 +21,15 @@ def on_build(config: powermake.Config):
         build_package.build_all_apple(config)
         return
 
+    config.add_lib(powermake.package.find_lib(config, "SDL3"))
+
     pigment_artifact = build_lib.build_pigment(config, shared_build)
     build_package.build_framework_package(config, shared_build)
     sdl_artifact = build_lib.build_sdl_integration(config)
     gltf_artifact = build_lib.build_gltf_tool(config)
-    build_lib.build_shaderc_tool(config)
+
+    if not config.target_is_android():
+        build_lib.build_shaderc_tool(config)
 
     selected_examples = [
         example
@@ -34,7 +38,6 @@ def on_build(config: powermake.Config):
     ]
 
     if selected_examples:
-        config.add_shared_libs("SDL3")
         archives = [a for a in (sdl_artifact, gltf_artifact, pigment_artifact) if a]
         for example in selected_examples:
             build_examples.build_example(config, example, shared_build, archives)
@@ -82,9 +85,21 @@ def on_test(config: powermake.Config, args: list[str]):
     build_tests.on_test(config, args, shared_build)
 
 
+def on_install(config: powermake.Config, location: str | None):
+    for header in powermake.get_files("./src/**/*.h"):
+        public_path = build_common.public_path_for_header(header)
+        if public_path is not None:
+            config.add_exported_headers(header, subfolder=os.path.dirname(public_path))
+
+    config.add_exported_headers("external/volk/volk.h")
+
+    powermake.default_on_install(config, location)
+
+
 powermake.run(
     "pigment",
     build_callback=on_build,
+    install_callback=on_install,
     test_callback=on_test,
     args_parsed=args_parsed,
 )

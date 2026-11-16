@@ -50,7 +50,9 @@ def on_test(config: powermake.Config, args: list[str], shared: bool):
         )
 
     build_common.configure_build(config)
-    config.add_shared_libs("SDL3")
+
+    config.add_lib(powermake.package.find_lib(config, "SDL3"))
+
     pigment_artifact = build_lib.build_pigment(config, shared)
     sdl_artifact = build_lib.build_sdl_integration(config)
     archives = [artifact for artifact in (sdl_artifact, pigment_artifact) if artifact]
