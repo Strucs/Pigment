@@ -43,8 +43,11 @@ static VkColorSpaceKHR color_space_to_vk(PColorSpace color_space);
 static PColorSpace color_space_from_vk(VkColorSpaceKHR color_space);
 static SwapChainSupportDetails* query_swapchain_support(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface);
 static void destroy_support_details(Pigment* pigment, SwapChainSupportDetails* details);
-static void destroy_surface(Pigment* pigment, PSurface* surface);
+static PSurface* create_surface(Pigment* pigment, const PWindowHandles* handles);
+static void destroy_surface(Pigment* pigment, void* resource);
+static void release_surface(Pigment* pigment, PSurface* surface);
 static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc, PSurface* surface, PSwapchain* old_swapchain);
+static void destroy_swapchain(Pigment* pigment, void* resource);
 static void release_swapchain(Pigment* pigment, PSwapchain* swapchain);
 static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* renderer);
 
@@ -83,27 +86,25 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
     }
 
     PWindowRenderer* renderer = NULL;
-    PSurface* surface         = NULL;
-    VkSurfaceKHR vk_surface   = create_vk_surface_from_handles(pigment, handles);
-    if(vk_surface == VK_NULL_HANDLE)
-    {
-        goto ERROR;
-    }
-
-    surface = P_NEW_FOR_OBJECT(pigment, surface);
+    PSurface* surface         = create_surface(pigment, handles);
     if(surface == NULL)
     {
         goto ERROR;
     }
-    surface->surface = vk_surface;
 
     uint32_t width  = desc->width;
     uint32_t height = desc->height;
     if(width == 0 || height == 0)
     {
         VkSurfaceCapabilitiesKHR caps;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pigment->device->physical_device, vk_surface, &caps);
-        if(caps.currentExtent.width != 0xFFFFFFFF)
+        VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pigment->device->physical_device, surface->surface, &caps);
+        if(result != VK_SUCCESS)
+        {
+            PLOG_ERROR(pigment, "Failed to query surface capabilities (result: %d)", result);
+            goto ERROR;
+        }
+
+        if(caps.currentExtent.width != UINT32_MAX)
         {
             width  = caps.currentExtent.width;
             height = caps.currentExtent.height;
@@ -190,11 +191,7 @@ ERROR:
     }
     else if(surface != NULL)
     {
-        destroy_surface(pigment, surface);
-    }
-    else if(vk_surface != VK_NULL_HANDLE)
-    {
-        vkDestroySurfaceKHR(pigment->instance->vulkan_instance, vk_surface, &pigment->vk_alloc);
+        release_surface(pigment, surface);
     }
 
     return NULL;
@@ -265,14 +262,62 @@ void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples)
     renderer->needs_recreate = P_TRUE;
 }
 
-static void destroy_surface(Pigment* pigment, PSurface* surface)
+static PSurface* create_surface(Pigment* pigment, const PWindowHandles* handles)
+{
+    VkSurfaceKHR vk_surface = create_vk_surface_from_handles(pigment, handles);
+    if(vk_surface == VK_NULL_HANDLE)
+    {
+        return NULL;
+    }
+
+    PSurface* surface = P_NEW_FOR_OBJECT(pigment, surface);
+    if(surface == NULL)
+    {
+        goto ERROR;
+    }
+
+    surface->surface = vk_surface;
+
+    if(pigment_resource_tracker_init(pigment, &surface->tracker) != PIGMENT_SUCCESS)
+    {
+        goto ERROR;
+    }
+
+    return surface;
+
+ERROR:
+    vkDestroySurfaceKHR(pigment->instance->vulkan_instance, vk_surface, &pigment->vk_alloc);
+    P_FREE(pigment, surface);
+    return NULL;
+}
+
+static void destroy_surface(Pigment* pigment, void* resource)
+{
+    PSurface* surface = resource;
+    if(surface == NULL)
+    {
+        return;
+    }
+
+    vkDestroySurfaceKHR(pigment->instance->vulkan_instance, surface->surface, &pigment->vk_alloc);
+    pigment_resource_tracker_destroy(pigment, &surface->tracker);
+    P_FREE(pigment, surface);
+}
+
+static void release_surface(Pigment* pigment, PSurface* surface)
 {
     if(surface == NULL)
     {
         return;
     }
-    vkDestroySurfaceKHR(pigment->instance->vulkan_instance, surface->surface, &pigment->vk_alloc);
-    P_FREE(pigment, surface);
+
+    if(surface->tracker.last_used == NULL)
+    {
+        destroy_surface(pigment, surface);
+        return;
+    }
+
+    pigment_defer_destroy_tracked(pigment, destroy_surface, surface, &surface->tracker);
 }
 
 PFormat pigment_get_color_format(PWindowRenderer* renderer)
@@ -341,20 +386,121 @@ void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, 
     }
 }
 
+PResult pigment_recreate_surface(Pigment* pigment, PWindowRenderer* renderer, const PWindowHandles* handles)
+{
+    if(pigment == NULL || renderer == NULL || handles == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    if(pigment_device_lost(pigment))
+    {
+        return PIGMENT_ERROR_DEVICE_LOST;
+    }
+
+    renderer->surface_lost   = P_TRUE;
+    renderer->needs_recreate = P_TRUE;
+
+    // Ensure that no frame is still active.
+    for(uint32_t i = 0; i < pigment->config.max_frames_in_flight; i++)
+    {
+        if(renderer->frames[i].active)
+        {
+            return PIGMENT_NOT_READY;
+        }
+    }
+
+    // Release the current swapchain.
+    if(renderer->swapchain != NULL)
+    {
+        PSwapchain* swapchain = renderer->swapchain;
+        renderer->swapchain   = NULL;
+        release_swapchain(pigment, swapchain);
+    }
+
+    // Wait until all swapchains referencing the surface are destroyed.
+    if(renderer->surface != NULL)
+    {
+        if(atomic_load_explicit(&renderer->surface->tracker.references, memory_order_acquire) != 1)
+        {
+            return PIGMENT_NOT_READY;
+        }
+
+        release_surface(pigment, renderer->surface);
+        renderer->surface = NULL;
+    }
+
+    renderer->surface = create_surface(pigment, handles);
+    if(renderer->surface == NULL)
+    {
+        return PIGMENT_ERROR;
+    }
+
+    return recreate_swapchain(pigment, renderer);
+}
+
+void pigment_renderer_invalidate_swapchain(PWindowRenderer* renderer)
+{
+    if(renderer != NULL)
+    {
+        renderer->needs_recreate = P_TRUE;
+    }
+}
+
 PResult recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
 {
+    renderer->needs_recreate = P_TRUE;
+
+    VkSurfaceCapabilitiesKHR caps;
+    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pigment->device->physical_device, renderer->surface->surface, &caps);
+    if(result != VK_SUCCESS)
+    {
+        if(result == VK_ERROR_SURFACE_LOST_KHR)
+        {
+            renderer->surface_lost = P_TRUE;
+            return PIGMENT_ERROR_SURFACE_LOST;
+        }
+
+        return device_result(pigment, result);
+    }
+
+    if(caps.currentExtent.width != UINT32_MAX)
+    {
+        renderer->desc.width  = caps.currentExtent.width;
+        renderer->desc.height = caps.currentExtent.height;
+    }
+
+    if(renderer->desc.width == 0 || renderer->desc.height == 0)
+    {
+        return PIGMENT_RECREATE_REQUIRED;
+    }
+
     PSwapchain* old_swapchain = renderer->swapchain;
     PSwapchain* new_swapchain = create_swapchain(pigment, &renderer->desc, renderer->surface, old_swapchain);
+
     if(new_swapchain == NULL)
     {
         PLOG_ERROR(pigment, "Failed to recreate swapchain.");
-        return PIGMENT_ERROR;
+        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR;
     }
 
     new_swapchain->renderer = renderer;
     resource_tracker_retain(&renderer->tracker);
+
     renderer->swapchain = new_swapchain;
     release_swapchain(pigment, old_swapchain);
+
+    renderer->surface_lost   = P_FALSE;
+    renderer->needs_recreate = P_FALSE;
+
+    PSwapchainRecreateEvent event = {
+        .renderer = renderer,
+        .width    = new_swapchain->extent.width,
+        .height   = new_swapchain->extent.height,
+    };
+
+    dispatch_swapchain_recreate(pigment, &event);
+
     return PIGMENT_SUCCESS;
 }
 
@@ -370,40 +516,17 @@ PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer)
         return PIGMENT_ERROR_DEVICE_LOST;
     }
 
+    if(renderer->surface_lost)
+    {
+        return PIGMENT_ERROR_SURFACE_LOST;
+    }
+
     if(!renderer->needs_recreate)
     {
         return PIGMENT_SUCCESS;
     }
 
-    renderer->needs_recreate = P_FALSE;
-
-    VkSurfaceCapabilitiesKHR caps;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pigment->device->physical_device, renderer->surface->surface, &caps);
-    if(caps.currentExtent.width != 0xFFFFFFFF)
-    {
-        renderer->desc.width  = caps.currentExtent.width;
-        renderer->desc.height = caps.currentExtent.height;
-    }
-    if(renderer->desc.width == 0 || renderer->desc.height == 0)
-    {
-        renderer->needs_recreate = P_TRUE;
-        return PIGMENT_ERROR;
-    }
-
-    if(recreate_swapchain(pigment, renderer) != PIGMENT_SUCCESS)
-    {
-        renderer->needs_recreate = P_TRUE;
-        return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR;
-    }
-
-    PSwapchainRecreateEvent event = {
-        .renderer = renderer,
-        .width    = renderer->swapchain->extent.width,
-        .height   = renderer->swapchain->extent.height,
-    };
-    dispatch_swapchain_recreate(pigment, &event);
-
-    return PIGMENT_SUCCESS;
+    return recreate_swapchain(pigment, renderer);
 }
 
 static SwapChainSupportDetails* query_swapchain_support(Pigment* pigment, VkPhysicalDevice device, VkSurfaceKHR surface)
@@ -655,6 +778,9 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
+    swapchain->surface = surface;
+    resource_tracker_retain(&surface->tracker);
+
     PDeviceQueue* graphics = device_find_queue(device, P_QUEUE_GRAPHICS_BIT);
     if(graphics == NULL)
     {
@@ -855,7 +981,7 @@ ERROR:
     return NULL;
 }
 
-void destroy_swapchain(Pigment* pigment, void* resource)
+static void destroy_swapchain(Pigment* pigment, void* resource)
 {
     PSwapchain* swapchain = resource;
     if(swapchain != NULL)
@@ -866,6 +992,12 @@ void destroy_swapchain(Pigment* pigment, void* resource)
         destroy_swapchain_depth(pigment, swapchain);
         P_FREE(pigment, swapchain->image_wrappers);
         vkDestroySwapchainKHR(device->logical_device, swapchain->swapchain, &pigment->vk_alloc);
+
+        if(swapchain->surface != NULL)
+        {
+            resource_tracker_release(pigment, &swapchain->surface->tracker);
+        }
+
         P_FREE(pigment, swapchain->images);
         pigment_resource_tracker_destroy(pigment, &swapchain->tracker);
         if(swapchain->renderer != NULL)
@@ -1086,7 +1218,7 @@ static void destroy_renderer_internal(Pigment* pigment, PWindowRenderer* rendere
         return;
     }
 
-    destroy_surface(pigment, renderer->surface);
+    release_surface(pigment, renderer->surface);
     pigment_resource_tracker_destroy(pigment, &renderer->tracker);
     if(renderer->per_slot_trackers != NULL)
     {

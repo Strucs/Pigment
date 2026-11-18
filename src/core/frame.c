@@ -173,6 +173,11 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         return PIGMENT_NOT_READY;
     }
 
+    if(renderer->surface_lost)
+    {
+        return PIGMENT_ERROR_SURFACE_LOST;
+    }
+
     if(renderer->needs_recreate)
     {
         return PIGMENT_RECREATE_REQUIRED;
@@ -222,13 +227,23 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
         return PIGMENT_TIMEOUT;
     }
 
+    if(result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        renderer->swapchain->out_of_date = P_TRUE;
+        renderer->needs_recreate         = P_TRUE;
+        renderer->surface_lost           = P_TRUE;
+
+        return PIGMENT_ERROR_SURFACE_LOST;
+    }
+
     if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         renderer->swapchain->out_of_date = P_TRUE;
         renderer->needs_recreate         = P_TRUE;
         return PIGMENT_RECREATE_REQUIRED;
     }
-    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+
+    if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
         PLOG_ERROR(pigment, "Failed to acquire swapchain image (result: %d)", result);
         return device_result(pigment, result);
@@ -983,15 +998,28 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
     {
         frame->sync->presentations[current_frame].pending = P_TRUE;
     }
-    if(result == VK_ERROR_OUT_OF_DATE_KHR)
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR)
     {
         frame->swapchain->out_of_date = P_TRUE;
     }
-    if((result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) && frame->swapchain == frame->renderer->swapchain)
+
+    if((result == VK_ERROR_OUT_OF_DATE_KHR
+        || result == VK_SUBOPTIMAL_KHR
+        || result == VK_ERROR_SURFACE_LOST_KHR)
+       && frame->swapchain == frame->renderer->swapchain)
     {
         frame->renderer->needs_recreate = P_TRUE;
+
+        if(result == VK_ERROR_SURFACE_LOST_KHR)
+        {
+            frame->renderer->surface_lost = P_TRUE;
+        }
     }
-    if(result != VK_SUCCESS && result != VK_ERROR_OUT_OF_DATE_KHR && result != VK_SUBOPTIMAL_KHR)
+
+    if(result != VK_SUCCESS
+       && result != VK_ERROR_OUT_OF_DATE_KHR
+       && result != VK_SUBOPTIMAL_KHR
+       && result != VK_ERROR_SURFACE_LOST_KHR)
     {
         PLOG_ERROR(pigment, "Failed to present swapchain image (result: %d)", result);
     }
@@ -999,7 +1027,13 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
     frame->active = P_FALSE;
     resource_tracker_release(pigment, &frame->swapchain->tracker);
 
-    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    if(result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        return PIGMENT_ERROR_SURFACE_LOST;
+    }
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR
+       || result == VK_SUBOPTIMAL_KHR)
     {
         return PIGMENT_RECREATE_REQUIRED;
     }

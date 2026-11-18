@@ -40,6 +40,35 @@ PIGMENT_API void pigment_set_color_space(PWindowRenderer* renderer, PColorSpace 
 PIGMENT_API void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCount samples);
 
 /**
+ * @brief Recreate the renderer's surface and its associated swapchain using new native window handles.
+ *
+ * Requires all active frames to be completed or cancelled before recreation.
+ * Old swapchains are released automatically.
+ * Returns PIGMENT_NOT_READY until their destruction is complete.
+ * Dispatches recreate callbacks on this thread. Synchronize access to their resources.
+ *
+ * @param pigment Pigment instance.
+ * @param renderer The renderer to recreate the surface for.
+ * @param handles Native window handles used to create the new surface.
+ *
+ * @return PIGMENT_SUCCESS on success.
+ * PIGMENT_NOT_READY if active frames or old swapchain references remain.
+ * PIGMENT_RECREATE_REQUIRED if the surface has no valid extent.
+ * On failure, the renderer remains flagged for recreation.
+ */
+PIGMENT_API PResult pigment_recreate_surface(Pigment* pigment, PWindowRenderer* renderer, const PWindowHandles* handles);
+
+/**
+ * @brief Mark the renderer's swapchain as requiring recreation.
+ *
+ * Does not recreate or release any resources immediately.
+ * The next acquisition returns PIGMENT_RECREATE_REQUIRED unless the surface is lost.
+ * Call pigment_recreate_swapchain to perform the recreation.
+ *
+ * @param renderer The renderer whose swapchain should be invalidated.
+ */
+PIGMENT_API void pigment_renderer_invalidate_swapchain(PWindowRenderer* renderer);
+/**
  * @brief Recreate the renderer's swapchain if it was flagged dirty by an acquire failure or a
  *        pigment_renderer_resize / present_mode / sample_count / color_space change.
  *
@@ -51,7 +80,8 @@ PIGMENT_API void pigment_set_sample_count(PWindowRenderer* renderer, PSampleCoun
  * @param renderer The renderer to recreate the swapchain for.
  *
  * @return PIGMENT_SUCCESS on success or no-op.
- * On failure, subsequent acquisitions return PIGMENT_RECREATE_REQUIRED.
+ * On failure, subsequent acquisitions return PIGMENT_RECREATE_REQUIRED
+ * or PIGMENT_ERROR_SURFACE_LOST if the surface was lost.
  */
 PIGMENT_API PResult pigment_recreate_swapchain(Pigment* pigment, PWindowRenderer* renderer);
 

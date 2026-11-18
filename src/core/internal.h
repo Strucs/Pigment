@@ -276,9 +276,6 @@ VkImageLayout image_layout_to_vk(PImageLayout layout);
 void image_destroy_view_cache(Pigment* pigment, PImage* image);
 PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PImageViewDesc* desc);
 
-// surface.c
-void destroy_swapchain(Pigment* pigment, void* resource);
-
 // synchronization.c
 PResult wait_acquisition(Pigment* pigment, PSync* sync, uint32_t slot, uint64_t timeout_ns);
 

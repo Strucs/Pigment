@@ -153,6 +153,7 @@ struct PWindowRenderer {
     PResourceTracker* per_slot_trackers;
     PFrame* frames;
     PBool needs_recreate;
+    PBool surface_lost;
     PSwapchainDesc desc;
     PDeviceQueue** shared_queues;
     PResourceTracker tracker;
@@ -217,6 +218,7 @@ struct PDevice {
 
 struct PSurface {
     VkSurfaceKHR surface;
+    PResourceTracker tracker;
 };
 
 struct SwapChainSupportDetails {
@@ -229,6 +231,7 @@ struct SwapChainSupportDetails {
 
 struct PSwapchain {
     PWindowRenderer* renderer;
+    PSurface* surface;
     PSync* sync;
     PResourceTracker tracker;
     PBool retired;
