@@ -81,7 +81,7 @@ PSampler* pigment_create_sampler(Pigment* pigment, const PSamplerDesc* desc)
         return NULL;
     }
 
-    set_object_name(device->logical_device, VK_OBJECT_TYPE_SAMPLER, (uint64_t) sampler->sampler, desc->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_SAMPLER, (uint64_t) sampler->sampler, desc->name);
 
     return sampler;
 }

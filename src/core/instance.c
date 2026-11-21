@@ -124,6 +124,7 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         }
     }
 
+    pigment->config.debug_utils_enabled = pigment->config.validation_enabled || pigment->config.debug_names_enabled;
     if(pigment->config.debug_utils_enabled && !extension_available(available_extensions, available_extension_count, VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
     {
         PLOG_WARN(pigment, "VK_EXT_debug_utils not available. Disabling debug names, command labels and debug messenger.");

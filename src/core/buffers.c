@@ -86,7 +86,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         return NULL;
     }
 
-    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, desc->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_BUFFER, (uint64_t) buffer->buffer, desc->name);
 
     buffer->size         = desc->size;
     buffer->memory_flags = alloc->get_memory_flags(alloc->user_data, buffer->allocation);

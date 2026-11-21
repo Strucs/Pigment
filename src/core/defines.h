@@ -574,7 +574,7 @@ typedef struct PigmentConfig {
     uint32_t logger_count;
     PBool enable_validation;
     PBool enable_best_practices;
-    PBool enable_debug_names;               // Enable object names and command labels without validation. Also enabled by enable_validation.
+    PBool enable_debug_names;               // Enable object names and command labels.
     float depth_clear_value;                // 0.0 = reverse Z (default), 1.0 = standard Z. Convention shared across all pipelines.
     const PAllocator* allocator;            // NULL = uses pigment_get_default_allocator()
     const PQueueRequest* queue_requests;    // explicit queue layout. NULL or count=0 = default policy (1 graphics + 1 compute + 1 transfer, most specialized the hardware exposes).

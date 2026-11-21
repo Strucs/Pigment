@@ -166,9 +166,14 @@ static inline void layout_to_dst_sync(PImageLayout layout, PPipelineStage* out_s
     }
 }
 
-static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t handle, const char* name)
+static inline PBool debug_names_active(const Pigment* pigment)
 {
-    if(name == NULL || handle == 0 || vkSetDebugUtilsObjectNameEXT == NULL)
+    return pigment != NULL && pigment->config.debug_names_enabled && pigment->config.debug_utils_enabled;
+}
+
+static inline void set_object_name(const Pigment* pigment, VkObjectType type, uint64_t handle, const char* name)
+{
+    if(!debug_names_active(pigment) || name == NULL || handle == 0 || vkSetDebugUtilsObjectNameEXT == NULL)
     {
         return;
     }
@@ -180,7 +185,7 @@ static inline void set_object_name(VkDevice device, VkObjectType type, uint64_t 
         .pObjectName  = name,
     };
 
-    vkSetDebugUtilsObjectNameEXT(device, &info);
+    vkSetDebugUtilsObjectNameEXT(pigment->device->logical_device, &info);
 }
 
 static inline uint32_t unique_queue_families(PDeviceQueue* const* queues, uint32_t count, uint32_t* out_families)

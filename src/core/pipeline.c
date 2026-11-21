@@ -591,7 +591,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
         temp_pipelines[i]->stage_flags = builds[i]->stage_flags;
         out[i]                         = temp_pipelines[i];
 
-        set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
+        set_object_name(pigment, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], builds[i]->name);
     }
 
     temp_pipelines_done = 0;
@@ -715,7 +715,7 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
         temp_pipelines[i]->stage_flags = P_SHADER_STAGE_COMPUTE_BIT;
         out[i]                         = temp_pipelines[i];
 
-        set_object_name(device, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], descs[i].name);
+        set_object_name(pigment, VK_OBJECT_TYPE_PIPELINE, (uint64_t) vk_pipelines[i], descs[i].name);
     }
 
     temp_pipelines_done = 0;
@@ -1260,7 +1260,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
     layout->push_size   = desc->push_size;
     layout->push_stages = vk_stages;
 
-    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t) vk_layout, desc->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t) vk_layout, desc->name);
 
     return layout;
 }

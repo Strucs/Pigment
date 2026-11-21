@@ -198,7 +198,7 @@ PDescriptorSetLayout* pigment_create_descriptor_set_layout(Pigment* pigment, con
         goto ERROR;
     }
 
-    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t) layout->layout, desc->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t) layout->layout, desc->name);
 
     P_FREE(pigment, bindings);
     P_FREE(pigment, binding_flags);
@@ -277,7 +277,7 @@ PDescriptorPool* pigment_create_descriptor_pool(Pigment* pigment, const PDescrip
 
     pool->allow_free_set = desc->allow_free_set;
 
-    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t) pool->pool, desc->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_DESCRIPTOR_POOL, (uint64_t) pool->pool, desc->name);
 
     P_FREE(pigment, sizes);
     return pool;
@@ -478,7 +478,7 @@ PResult pigment_create_descriptor_sets(Pigment* pigment, PDescriptorPool* pool, 
     {
         temp_sets[i]->set         = vk_sets[i];
         temp_sets[i]->source_pool = pool;
-        set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t) vk_sets[i], allocs[i].name);
+        set_object_name(pigment, VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t) vk_sets[i], allocs[i].name);
 
         pool->sets[pool->set_count++] = temp_sets[i];
         out_sets[i]                   = temp_sets[i];

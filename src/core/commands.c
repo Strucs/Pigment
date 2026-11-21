@@ -74,7 +74,7 @@ PCommandPool* pigment_create_command_pool(Pigment* pigment, PCommandPoolDesc* de
     atomic_init(&command_pool->references, 1);
     atomic_init(&command_pool->retired_buffers, NULL);
 
-    set_object_name(device->logical_device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) pool, desc->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) pool, desc->name);
 
     return command_pool;
 
@@ -820,8 +820,7 @@ void pigment_destroy_command_buffers(Pigment* pigment, PCommandBuffer** cmds, ui
 
 void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name)
 {
-    (void) pigment;
-    if(cmd == NULL || name == NULL || vkCmdBeginDebugUtilsLabelEXT == NULL)
+    if(!debug_names_active(pigment) || cmd == NULL || name == NULL || vkCmdBeginDebugUtilsLabelEXT == NULL)
     {
         return;
     }
@@ -834,8 +833,7 @@ void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* 
 
 void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd)
 {
-    (void) pigment;
-    if(cmd == NULL || vkCmdEndDebugUtilsLabelEXT == NULL)
+    if(!debug_names_active(pigment) || cmd == NULL || vkCmdEndDebugUtilsLabelEXT == NULL)
     {
         return;
     }
@@ -844,8 +842,7 @@ void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd)
 
 void pigment_cmd_insert_label(Pigment* pigment, PCommandBuffer* cmd, const char* name)
 {
-    (void) pigment;
-    if(cmd == NULL || name == NULL || vkCmdInsertDebugUtilsLabelEXT == NULL)
+    if(!debug_names_active(pigment) || cmd == NULL || name == NULL || vkCmdInsertDebugUtilsLabelEXT == NULL)
     {
         return;
     }

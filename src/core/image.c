@@ -982,7 +982,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
         return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR_VULKAN;
     }
 
-    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_IMAGE, (uint64_t) image->image, image->name);
+    set_object_name(pigment, VK_OBJECT_TYPE_IMAGE, (uint64_t) image->image, image->name);
 
     return PIGMENT_SUCCESS;
 }
@@ -1085,8 +1085,11 @@ PImageView* image_get_or_create_view(Pigment* pigment, PImage* image, const PIma
     view->desc = view_desc;
     view->view = new_handle;
 
-    char auto_name[160];
-    set_object_name(pigment->device->logical_device, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t) new_handle, resolve_view_name(&view_desc, image, auto_name, sizeof(auto_name)));
+    if(debug_names_active(pigment))
+    {
+        char auto_name[160];
+        set_object_name(pigment, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t) new_handle, resolve_view_name(&view_desc, image, auto_name, sizeof(auto_name)));
+    }
 
     cache->views[cache->count++] = view;
     return view;

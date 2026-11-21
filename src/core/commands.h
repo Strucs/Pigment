@@ -269,7 +269,7 @@ PIGMENT_API PBool pigment_submit_complete(Pigment* pigment, PSubmitHandle handle
  */
 PIGMENT_API PResult pigment_submit_wait(Pigment* pigment, PSubmitHandle handle);
 
-// Labels require enable_debug_names or enable_validation and backend support.
+// Labels require enable_debug_names and backend support.
 
 PIGMENT_API void pigment_cmd_begin_label(Pigment* pigment, PCommandBuffer* cmd, const char* name);
 PIGMENT_API void pigment_cmd_end_label(Pigment* pigment, PCommandBuffer* cmd);
