@@ -217,7 +217,7 @@ int main(void)
             pigment_recreate_swapchain(pigment, renderer);
             continue;
         }
-        if(acquire_result != PIGMENT_SUCCESS)
+        if(acquire_result != PIGMENT_SUCCESS && acquire_result != PIGMENT_SUBOPTIMAL)
         {
             break;
         }

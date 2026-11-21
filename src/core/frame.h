@@ -119,6 +119,7 @@ PIGMENT_API PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* 
  * The caller must wait for prior GPU use of the slot and synchronize renderer and frame access.
  * Call pigment_drain_pending separately to collect deferred destructions.
  * Contexts survive swapchain recreation. Present or cancel them before destroying the renderer.
+ * PIGMENT_NOT_READY covers an active slot or an indefinite acquisition waiting on pending frames.
  *
  * @param pigment Pigment instance.
  * @param renderer Frame owner.
@@ -126,8 +127,7 @@ PIGMENT_API PResult pigment_wait_frame_ready(Pigment* pigment, PWindowRenderer* 
  * @param timeout_ns Image acquisition timeout in nanoseconds. Zero polls, UINT64_MAX requests an indefinite wait.
  * @param out_frame Context valid until present or cancellation, or NULL on failure.
  *
- * @return PIGMENT_SUCCESS (including suboptimal), PIGMENT_NOT_READY, PIGMENT_TIMEOUT, PIGMENT_RECREATE_REQUIRED or an error.
- * NOT_READY also covers an active slot or an indefinite acquisition requiring pending frames to be presented first.
+ * @return PIGMENT_SUCCESS or PIGMENT_SUBOPTIMAL with a usable frame, or a failure status.
  */
 PIGMENT_API PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer, uint32_t slot, uint64_t timeout_ns, PFrame** out_frame);
 
@@ -191,7 +191,7 @@ PIGMENT_API void pigment_cmd_end_swapchain_pass(PCommandBuffer* cmd, const PFram
  * @param pigment Pigment instance.
  * @param frame Submitted frame.
  *
- * @return PIGMENT_SUCCESS, PIGMENT_RECREATE_REQUIRED, or an error code.
+ * @return PIGMENT_SUCCESS or PIGMENT_SUBOPTIMAL on presentation, or a failure status.
  */
 PIGMENT_API PResult pigment_present_frame(Pigment* pigment, PFrame* frame);
 

@@ -153,7 +153,7 @@ int main(void)
             continue;
         }
 
-        if(acquire_result != PIGMENT_SUCCESS)
+        if(acquire_result != PIGMENT_SUCCESS && acquire_result != PIGMENT_SUBOPTIMAL)
         {
             break;
         }

@@ -39,6 +39,7 @@ typedef enum PResult {
     PIGMENT_RECREATE_REQUIRED   = 6,
     PIGMENT_ERROR_DEVICE_LOST   = 7,
     PIGMENT_ERROR_SURFACE_LOST  = 8,
+    PIGMENT_SUBOPTIMAL          = 9,
 } PResult;
 
 #define PIGMENT_MAKE_VERSION(major, minor, patch) \

@@ -251,12 +251,6 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
 
     sync->acquisitions[slot].pending = P_TRUE;
 
-    // SUBOPTIMAL still acquires a usable image.
-    if(result == VK_SUBOPTIMAL_KHR)
-    {
-        renderer->needs_recreate = P_TRUE;
-    }
-
     renderer->frames[slot] = (PFrame) {
         .renderer    = renderer,
         .swapchain   = renderer->swapchain,
@@ -269,7 +263,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
 
     resource_tracker_retain(&renderer->swapchain->tracker);
     *out_frame = &renderer->frames[slot];
-    return PIGMENT_SUCCESS;
+    return result == VK_SUBOPTIMAL_KHR ? PIGMENT_SUBOPTIMAL : PIGMENT_SUCCESS;
 }
 
 uint32_t pigment_frame_slot(const PFrame* frame)
@@ -1003,9 +997,7 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
         frame->swapchain->out_of_date = P_TRUE;
     }
 
-    if((result == VK_ERROR_OUT_OF_DATE_KHR
-        || result == VK_SUBOPTIMAL_KHR
-        || result == VK_ERROR_SURFACE_LOST_KHR)
+    if((result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR)
        && frame->swapchain == frame->renderer->swapchain)
     {
         frame->renderer->needs_recreate = P_TRUE;
@@ -1032,10 +1024,14 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
         return PIGMENT_ERROR_SURFACE_LOST;
     }
 
-    if(result == VK_ERROR_OUT_OF_DATE_KHR
-       || result == VK_SUBOPTIMAL_KHR)
+    if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         return PIGMENT_RECREATE_REQUIRED;
+    }
+
+    if(result == VK_SUBOPTIMAL_KHR)
+    {
+        return PIGMENT_SUBOPTIMAL;
     }
 
     return device_result(pigment, result);

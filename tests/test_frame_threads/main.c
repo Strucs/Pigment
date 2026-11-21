@@ -688,7 +688,7 @@ int main(void)
             uint64_t timeout          = timeouts[sequence % 3];
             uint32_t slot             = sequence % slot_count;
             PResult result            = pigment_begin_frame_context(test.pigment, test.renderer, slot, timeout, &test.frame);
-            if(result == PIGMENT_SUCCESS)
+            if(result == PIGMENT_SUCCESS || result == PIGMENT_SUBOPTIMAL)
             {
                 CHECK(test.frame != NULL);
                 break;

@@ -293,7 +293,7 @@ int main(void)
                 CHECK(worker->frame == NULL);
                 break;
             }
-            CHECK(result == PIGMENT_SUCCESS);
+            CHECK(result == PIGMENT_SUCCESS || result == PIGMENT_SUBOPTIMAL);
             CHECK(worker->frame != NULL);
             worker->cmd   = worker->cmds[(batch + slot) % GRAPHICS_QUEUES];
             worker->image = pigment_frame_image(worker->frame);
