@@ -273,6 +273,11 @@ FREE:
     return status;
 }
 
+uint32_t pigment_command_buffer_queue_family(const PCommandBuffer* cmd)
+{
+    return (cmd != NULL && cmd->source_pool != NULL) ? cmd->source_pool->queue_family_index : UINT32_MAX;
+}
+
 void pigment_begin_recording(Pigment* pigment, PCommandBuffer* cmd, PCommandBufferUsage flags, const PCommandBufferInheritance* inheritance)
 {
     if(pigment == NULL || cmd == NULL)

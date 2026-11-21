@@ -26,6 +26,16 @@ static PResult prepare_image_upload(Pigment* pigment, PImage** out_image, PBuffe
 static PResult record_image_upload(Pigment* pigment, PCommandBuffer* cmd, PImage* image, PBuffer* staging, const PImageUploadDesc* upload);
 static PResult host_copy_image(Pigment* pigment, PImage** out_image, const PImageUploadDesc* upload);
 
+/**
+ * @brief Select a destination scope for a sampled image on the recording queue.
+ *
+ * @param pigment Pigment instance.
+ * @param cmd Command buffer that records the layout transition.
+ *
+ * @return A scope supported by the command buffer's queue family.
+ */
+static PSyncFlags sampled_image_dst_sync(Pigment* pigment, const PCommandBuffer* cmd);
+
 static inline uint32_t desc_layer_count(const PImageUploadDesc* upload)
 {
     return upload->layer_count ? upload->layer_count : 1;
@@ -450,6 +460,23 @@ PResult pigment_std_cmd_image_upload(Pigment* pigment, PCommandBuffer* cmd, cons
     return image_upload(pigment, cmd, uploads, count, out_images, P_FALSE, &recorded);
 }
 
+static PSyncFlags sampled_image_dst_sync(Pigment* pigment, const PCommandBuffer* cmd)
+{
+    const uint32_t family      = pigment_command_buffer_queue_family(cmd);
+    const uint32_t queue_count = pigment_get_queue_count(pigment);
+    for(uint32_t i = 0; i < queue_count; i++)
+    {
+        PDeviceQueue* queue = pigment_get_queue_at(pigment, i);
+        if(pigment_queue_family(queue) == family && (pigment_queue_flags(queue) & (P_QUEUE_GRAPHICS_BIT | P_QUEUE_COMPUTE_BIT)) != 0)
+        {
+            return (PSyncFlags) {P_PIPELINE_STAGE_ALL_COMMANDS_BIT, P_MEMORY_ACCESS_SHADER_SAMPLED_READ_BIT};
+        }
+    }
+
+    // A separate sampling queue waits on the submit that transitions the image.
+    return (PSyncFlags) {P_PIPELINE_STAGE_NONE, P_MEMORY_ACCESS_NONE};
+}
+
 PResult pigment_std_cmd_image_finalize(Pigment* pigment, PCommandBuffer* cmd, PImage* const* images, const PImageUploadDesc* uploads, uint32_t count)
 {
     if(pigment == NULL || cmd == NULL || images == NULL || uploads == NULL || count == 0)
@@ -457,6 +484,7 @@ PResult pigment_std_cmd_image_finalize(Pigment* pigment, PCommandBuffer* cmd, PI
         return PIGMENT_ERROR;
     }
 
+    const PSyncFlags sampling = sampled_image_dst_sync(pigment, cmd);
     for(uint32_t i = 0; i < count; i++)
     {
         if(uploads[i].flags & P_IMAGE_GENERATE_MIPMAPS)
@@ -469,8 +497,8 @@ PResult pigment_std_cmd_image_finalize(Pigment* pigment, PCommandBuffer* cmd, PI
             .image       = images[i],
             .old_layout  = P_IMAGE_LAYOUT_TRANSFER_DST,
             .new_layout  = P_IMAGE_LAYOUT_SHADER_READ_ONLY,
-            .src         = {    P_PIPELINE_STAGE_TRANSFER_BIT, P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
-            .dst         = {P_PIPELINE_STAGE_ALL_COMMANDS_BIT,    P_MEMORY_ACCESS_MEMORY_READ_BIT},
+            .src         = {P_PIPELINE_STAGE_TRANSFER_BIT, P_MEMORY_ACCESS_TRANSFER_WRITE_BIT},
+            .dst         = sampling,
             .layer_count = desc_layer_count(&uploads[i]),
         };
         pigment_cmd_image_barriers(pigment, cmd, &to_sampled, 1);

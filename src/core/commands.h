@@ -160,6 +160,15 @@ PIGMENT_API void pigment_reset_command_pool(Pigment* pigment, PCommandPool* pool
 PIGMENT_API PResult pigment_create_command_buffers(Pigment* pigment, PCommandPool* pool, PCommandBufferLevel level, uint32_t count, PCommandBuffer** out_cmds);
 
 /**
+ * @brief Get the queue family of a command buffer.
+ *
+ * @param cmd Command buffer to query.
+ *
+ * @return The queue family index, or UINT32_MAX if the buffer has no pool or is NULL.
+ */
+PIGMENT_API uint32_t pigment_command_buffer_queue_family(const PCommandBuffer* cmd);
+
+/**
  * @brief Retire command buffers after their GPU work completes.
  *
  * NULL entries and consecutive duplicates are ignored.
