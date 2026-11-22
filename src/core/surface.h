@@ -89,6 +89,7 @@ PIGMENT_API PFormat pigment_get_color_format(PWindowRenderer* renderer);
 PIGMENT_API PFormat pigment_get_depth_format(PWindowRenderer* renderer);
 PIGMENT_API PColorSpace pigment_get_color_space(PWindowRenderer* renderer);
 PIGMENT_API PSampleCount pigment_get_sample_count(PWindowRenderer* renderer);
+PIGMENT_API PSurfaceTransform pigment_get_swapchain_pre_transform(PWindowRenderer* renderer);
 PIGMENT_API void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height);
 
 #ifdef __cplusplus

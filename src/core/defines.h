@@ -113,6 +113,21 @@ typedef enum {
     P_PRESENT_MODE_FIFO_RELAXED = 3,    // vsync, tears if frame is late
 } PPresentMode;
 
+typedef enum PSurfaceTransform {
+    P_SURFACE_TRANSFORM_DEFAULT                      = 0,    // Prefer identity, otherwise use the current transform.
+    P_SURFACE_TRANSFORM_IDENTITY                     = 1U << 0,
+    P_SURFACE_TRANSFORM_ROTATE_90                    = 1U << 1,
+    P_SURFACE_TRANSFORM_ROTATE_180                   = 1U << 2,
+    P_SURFACE_TRANSFORM_ROTATE_270                   = 1U << 3,
+    P_SURFACE_TRANSFORM_HORIZONTAL_MIRROR            = 1U << 4,
+    P_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90  = 1U << 5,
+    P_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180 = 1U << 6,
+    P_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270 = 1U << 7,
+    P_SURFACE_TRANSFORM_INHERIT                      = 1U << 8,
+    P_SURFACE_TRANSFORM_CURRENT                      = 1U << 9,    // Resolve to the surface's current transform.
+    P_SURFACE_TRANSFORM_UNDEFINED                    = 0x7FFFFFFF,
+} PSurfaceTransform;
+
 typedef enum PColorSpace {
     P_COLOR_SPACE_SRGB_NONLINEAR       = 0,    // SDR sRGB nonlinear (default)
     P_COLOR_SPACE_DISPLAY_P3_NONLINEAR = 1,    // wide gamut, SDR
@@ -412,6 +427,11 @@ typedef struct PSwapchainDesc {
      */
     PDeviceQueue* const* shared_queues;
     uint32_t shared_queue_count;
+    /**
+     * Transform applied when rendering. Explicit values require surface support.
+     * An unsupported rotated extent falls back to identity when available.
+     */
+    PSurfaceTransform pre_transform;
 } PSwapchainDesc;
 
 typedef enum PCompareOp {

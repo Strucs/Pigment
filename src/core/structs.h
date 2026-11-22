@@ -243,6 +243,7 @@ struct PSwapchain {
     VkFormat image_format;
     VkColorSpaceKHR color_space;
     VkExtent2D extent;
+    PSurfaceTransform pre_transform;
     uint32_t min_image_count;
     PBool out_of_date;
     PImage** depth;

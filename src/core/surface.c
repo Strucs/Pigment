@@ -31,7 +31,8 @@ static void destroy_swapchain_image_wrappers(Pigment* pigment, PSwapchain* swapc
 static const VkFormat* preferred_formats_for_color_space(VkColorSpaceKHR color_space, uint32_t* out_count);
 static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR* available_formats, uint32_t formats_count, PColorSpace preferred);
 static VkPresentModeKHR choose_surface_present_mode(Pigment* pigment, VkPresentModeKHR* available_present_modes, uint32_t present_modes_count, PPresentMode preferred);
-static VkExtent2D choose_swapchain_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height);
+static VkSurfaceTransformFlagBitsKHR choose_surface_pre_transform(Pigment* pigment, const VkSurfaceCapabilitiesKHR* capabilities, PSurfaceTransform requested);
+static PBool choose_swapchain_extent(const VkSurfaceCapabilitiesKHR* capabilities, VkExtent2D framebuffer_extent, PBool swap_axes, VkExtent2D* out_extent);
 static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, PBool transparent);
 static PFormat pick_depth_format(Pigment* pigment);
 static PResult create_swapchain_depth(Pigment* pigment, PSwapchain* swapchain, const PSwapchainDesc* settings);
@@ -358,6 +359,16 @@ PSampleCount pigment_get_sample_count(PWindowRenderer* renderer)
     }
 
     return (PSampleCount) renderer->swapchain->samples;
+}
+
+PSurfaceTransform pigment_get_swapchain_pre_transform(PWindowRenderer* renderer)
+{
+    if(renderer == NULL || renderer->swapchain == NULL)
+    {
+        return P_SURFACE_TRANSFORM_UNDEFINED;
+    }
+
+    return renderer->swapchain->pre_transform;
 }
 
 void pigment_get_swapchain_size(PWindowRenderer* renderer, uint32_t* out_width, uint32_t* out_height)
@@ -698,22 +709,45 @@ static VkPresentModeKHR choose_surface_present_mode(Pigment* pigment, VkPresentM
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-static VkExtent2D choose_swapchain_extent(const VkSurfaceCapabilitiesKHR capabilities, uint32_t framebuffer_width, uint32_t framebuffer_height)
+static VkSurfaceTransformFlagBitsKHR choose_surface_pre_transform(Pigment* pigment, const VkSurfaceCapabilitiesKHR* capabilities, PSurfaceTransform requested)
 {
-    if(capabilities.currentExtent.width != UINT32_MAX)
+    if(requested == P_SURFACE_TRANSFORM_CURRENT)
     {
-        return capabilities.currentExtent;
+        return capabilities->currentTransform;
     }
 
-    VkExtent2D actual_extent = {
-        framebuffer_width,
-        framebuffer_height
-    };
+    if(requested == P_SURFACE_TRANSFORM_DEFAULT)
+    {
+        return (capabilities->supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0
+                   ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+                   : capabilities->currentTransform;
+    }
 
-    actual_extent.width  = clamp(actual_extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-    actual_extent.height = clamp(actual_extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+    VkSurfaceTransformFlagsKHR transform = (VkSurfaceTransformFlagsKHR) requested;
+    if((transform & (transform - 1U)) == 0 && (capabilities->supportedTransforms & transform) != 0)
+    {
+        return (VkSurfaceTransformFlagBitsKHR) transform;
+    }
 
-    return actual_extent;
+    PLOG_ERROR(pigment, "Unsupported swapchain pre-transform (%u).", transform);
+    return 0;
+}
+
+static PBool choose_swapchain_extent(const VkSurfaceCapabilitiesKHR* capabilities, VkExtent2D framebuffer_extent, PBool swap_axes, VkExtent2D* out_extent)
+{
+    PBool has_current_extent = capabilities->currentExtent.width != UINT32_MAX;
+    VkExtent2D extent        = has_current_extent ? capabilities->currentExtent : framebuffer_extent;
+    *out_extent              = swap_axes ? (VkExtent2D) {extent.height, extent.width} : extent;
+
+    if(!has_current_extent)
+    {
+        out_extent->width  = clamp(out_extent->width, capabilities->minImageExtent.width, capabilities->maxImageExtent.width);
+        out_extent->height = clamp(out_extent->height, capabilities->minImageExtent.height, capabilities->maxImageExtent.height);
+    }
+
+    return out_extent->width > 0 && out_extent->height > 0
+           && out_extent->width >= capabilities->minImageExtent.width && out_extent->width <= capabilities->maxImageExtent.width
+           && out_extent->height >= capabilities->minImageExtent.height && out_extent->height <= capabilities->maxImageExtent.height;
 }
 
 static VkCompositeAlphaFlagBitsKHR choose_composite_alpha(VkCompositeAlphaFlagsKHR supported, PBool transparent)
@@ -829,9 +863,32 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
-    VkSurfaceFormatKHR surface_format = choose_surface_format(support_details->formats, support_details->formats_count, desc->color_space);
-    VkPresentModeKHR present_mode     = choose_surface_present_mode(pigment, support_details->present_modes, support_details->present_modes_count, desc->present_mode);
-    VkExtent2D extent                 = choose_swapchain_extent(support_details->capabilities, desc->width, desc->height);
+    const VkSurfaceCapabilitiesKHR* capabilities = &support_details->capabilities;
+    VkSurfaceFormatKHR surface_format            = choose_surface_format(support_details->formats, support_details->formats_count, desc->color_space);
+    VkPresentModeKHR present_mode                = choose_surface_present_mode(pigment, support_details->present_modes, support_details->present_modes_count, desc->present_mode);
+    VkSurfaceTransformFlagBitsKHR pre_transform  = choose_surface_pre_transform(pigment, capabilities, desc->pre_transform);
+    if(pre_transform == 0)
+    {
+        goto ERROR;
+    }
+
+    const VkSurfaceTransformFlagsKHR quarter_turns = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR
+                                                     | VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR;
+    PBool swap_axes               = (pre_transform & quarter_turns) != 0;
+    VkExtent2D framebuffer_extent = {desc->width, desc->height};
+    VkExtent2D extent;
+    PBool extent_supported = choose_swapchain_extent(capabilities, framebuffer_extent, swap_axes, &extent);
+    if(!extent_supported && swap_axes && (capabilities->supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) != 0)
+    {
+        PLOG_WARN(pigment, "Rotated swapchain extent %ux%u is unsupported. Trying identity.", extent.width, extent.height);
+        pre_transform    = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        extent_supported = choose_swapchain_extent(capabilities, framebuffer_extent, P_FALSE, &extent);
+    }
+    if(!extent_supported)
+    {
+        PLOG_ERROR(pigment, "Unsupported swapchain extent %ux%u for pre-transform %u.", extent.width, extent.height, (unsigned) pre_transform);
+        goto ERROR;
+    }
 
     uint32_t image_count = desc->image_count != 0 ? desc->image_count : support_details->capabilities.minImageCount + 1;
     if(image_count < support_details->capabilities.minImageCount)
@@ -898,14 +955,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    if(support_details->capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-    {
-        create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    }
-    else
-    {
-        create_info.preTransform = support_details->capabilities.currentTransform;
-    }
+    create_info.preTransform   = pre_transform;
     create_info.compositeAlpha = choose_composite_alpha(support_details->capabilities.supportedCompositeAlpha, desc->transparent);
     create_info.presentMode    = present_mode;
     create_info.clipped        = VK_TRUE;
@@ -920,7 +970,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     VkResult result = vkCreateSwapchainKHR(device->logical_device, &create_info, &pigment->vk_alloc, &(swapchain->swapchain));
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create swap chain! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create swapchain at %ux%u with pre-transform %u (result %d).", extent.width, extent.height, (unsigned) pre_transform, result);
         goto ERROR;
     }
 
@@ -944,6 +994,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     swapchain->image_format         = surface_format.format;
     swapchain->color_space          = surface_format.colorSpace;
     swapchain->extent               = extent;
+    swapchain->pre_transform        = (PSurfaceTransform) pre_transform;
     swapchain->samples              = clamp_sample_count(pigment, desc->samples);
     swapchain->present_queue        = present_queue;
     swapchain->present_family_index = present_family_index;
