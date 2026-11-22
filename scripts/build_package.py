@@ -8,8 +8,8 @@ from scripts import build_lib, framework
 ARCH = "arm64"
 
 MIN_MACOS = "13.0"
-MIN_IOS = "16.0"
-MIN_TVOS = "16.0"
+MIN_IOS = "17.0"
+MIN_TVOS = "17.0"
 MIN_VISIONOS = "1.0"
 
 APPLE_SLICES = [
@@ -140,7 +140,37 @@ def build_all_apple(config: powermake.Config):
         c_static = apple_config.copy()
         c_static.remove_flags("-flto=auto", "-flto")
         build_lib.build_gltf_tool(c_static)
-        build_lib.build_sdl_integration(c_static)
+
+        sdl_objects = []
+        if os_name == "ios":
+            source = "src/integrations/sdl/pigment_sdl_ios.m"
+
+            objc_config = c_static.copy()
+            objc_config.target_name = "pigment_sdl"
+            objc_config.add_c_flags("-fobjc-arc")
+            compiler = objc_config.c_compiler
+
+            output = os.path.join(
+                objc_config.obj_build_directory, source + compiler.obj_extension
+            )
+
+            os.makedirs(os.path.dirname(output), exist_ok=True)
+            arguments = compiler.format_args(
+                objc_config.defines,
+                objc_config.additional_includedirs,
+                objc_config.c_flags,
+            )
+
+            operation = powermake.Operation(
+                output,
+                {source},
+                objc_config,
+                compiler.basic_compile_command(output, source, arguments),
+            )
+
+            sdl_objects.append(operation.execute())
+
+        build_lib.build_sdl_integration(c_static, extra_objects=sdl_objects)
 
         base = os.path.dirname(apple_config.lib_build_directory)
         include_dir = os.path.join(base, "include", "pigment")

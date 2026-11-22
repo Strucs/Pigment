@@ -18,29 +18,116 @@
 
 #include <SDL3/SDL.h>
 
-#define PIGMENT_PROP_SDL_METAL_VIEW "pigment.sdl.metal_view"
+#define PIGMENT_PROP_SDL_METAL_VIEW "PIGMENT.SDL.metal_view"
+
+#if defined(SDL_PLATFORM_IOS) && !defined(SDL_PLATFORM_TVOS) && !defined(SDL_PLATFORM_VISIONOS)
+
+// Implemented in pigment_sdl_ios.m. UIKit stays out of this C integration.
+void* pigment_sdl_ios_metal_layer(SDL_Window* window);
+
+#elif defined(SDL_PLATFORM_APPLE)
+static void SDLCALL destroy_metal_view(void* userdata, void* value)
+{
+    (void) userdata;
+    SDL_Metal_DestroyView((SDL_MetalView) value);
+}
+
+    #if defined(SDL_PLATFORM_MACOS)
+        #ifndef SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE
+            #define SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE "SDL_VIDEO_METAL_AUTO_RESIZE_DRAWABLE"
+        #endif
+
+static SDL_MetalView create_metal_view(SDL_Window* window)
+{
+    char* saved_hint = NULL;
+    bool changed     = false;
+
+    if(SDL_GetVersion() >= SDL_VERSIONNUM(3, 4, 0))
+    {
+        // Try the hint only when we can restore the application's setting.
+        const char* previous = SDL_GetHint(SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE);
+        saved_hint           = previous != NULL ? SDL_strdup(previous) : NULL;
+        if(previous == NULL || saved_hint != NULL)
+        {
+            changed = SDL_SetHint(SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE, "0");
+        }
+    }
+
+    SDL_MetalView view = SDL_Metal_CreateView(window);
+    if(changed)
+    {
+        if(saved_hint != NULL)
+        {
+            SDL_SetHint(SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE, saved_hint);
+        }
+        else
+        {
+            SDL_ResetHint(SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE);
+        }
+    }
+
+    SDL_free(saved_hint);
+    return view;
+}
+    #endif
+#endif
 
 PWindowHandles pigment_sdl_get_window_handles(SDL_Window* window)
 {
     PWindowHandles handles = {0};
     if(window == NULL)
     {
+        SDL_InvalidParamError("window");
+        return handles;
+    }
+
+    if(!SDL_IsMainThread())
+    {
+        SDL_SetError("Pigment SDL window handles must be retrieved on the main thread");
         return handles;
     }
 
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
+    if(props == 0)
+    {
+        return handles;
+    }
 
 #ifdef SDL_PLATFORM_WIN32
     handles.type            = P_WINDOW_HANDLE_WIN32;
     handles.win32.hwnd      = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
     handles.win32.hinstance = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, NULL);
+#elif defined(SDL_PLATFORM_IOS) && !defined(SDL_PLATFORM_TVOS) && !defined(SDL_PLATFORM_VISIONOS)
+    void* metal_layer = pigment_sdl_ios_metal_layer(window);
+    if(metal_layer == NULL)
+    {
+        return handles;
+    }
+
+    handles.type                 = P_WINDOW_HANDLE_METAL;
+    handles.metal.ca_metal_layer = metal_layer;
+
 #elif defined(SDL_PLATFORM_APPLE)
     SDL_MetalView metal_view = (SDL_MetalView) SDL_GetPointerProperty(props, PIGMENT_PROP_SDL_METAL_VIEW, NULL);
     if(metal_view == NULL)
     {
+    #if defined(SDL_PLATFORM_MACOS)
+        metal_view = create_metal_view(window);
+    #else
         metal_view = SDL_Metal_CreateView(window);
-        SDL_SetPointerProperty(props, PIGMENT_PROP_SDL_METAL_VIEW, metal_view);
+    #endif
+
+        if(metal_view == NULL)
+        {
+            return handles;
+        }
+
+        if(!SDL_SetPointerPropertyWithCleanup(props, PIGMENT_PROP_SDL_METAL_VIEW, metal_view, destroy_metal_view, NULL))
+        {
+            return handles;
+        }
     }
+
     handles.type                 = P_WINDOW_HANDLE_METAL;
     handles.metal.ca_metal_layer = SDL_Metal_GetLayer(metal_view);
 #elif defined(SDL_PLATFORM_LINUX)

@@ -97,7 +97,9 @@ def build_pigment(config: powermake.Config, shared: bool) -> str:
     return artifact
 
 
-def build_sdl_integration(config: powermake.Config) -> str | None:
+def build_sdl_integration(
+    config: powermake.Config, extra_objects: list[str] | None = None
+) -> str | None:
     sdl_files = list(powermake.get_files("./src/integrations/sdl/**/*.c"))
     if not sdl_files:
         return None
@@ -111,7 +113,7 @@ def build_sdl_integration(config: powermake.Config) -> str | None:
 
     objects = powermake.compile_files(sdl_config, sdl_files)
 
-    return powermake.archive_files(sdl_config, objects)
+    return powermake.archive_files(sdl_config, objects + (extra_objects or []))
 
 
 def build_gltf_tool(config: powermake.Config) -> str | None:
