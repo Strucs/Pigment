@@ -80,7 +80,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
     P_STACK_OR_HEAP_FREE(pigment, families);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d)", (unsigned long long) desc->size, result);
+        PLOG_ERROR(pigment, "Failed to create buffer (size=%llu, result=%d).", (unsigned long long) desc->size, result);
         pigment_resource_tracker_destroy(pigment, &buffer->tracker);
         P_FREE(pigment, buffer);
         return NULL;
@@ -93,7 +93,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
 
     if((buffer->memory_flags & alloc_info.required_flags) != alloc_info.required_flags)
     {
-        PLOG_ERROR(pigment, "Buffer allocation does not satisfy required memory flags (required=%u, actual=%u)", (unsigned int) alloc_info.required_flags, (unsigned int) buffer->memory_flags);
+        PLOG_ERROR(pigment, "Buffer allocation does not satisfy required memory flags (required=%u, actual=%u).", (unsigned int) alloc_info.required_flags, (unsigned int) buffer->memory_flags);
         alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
         pigment_resource_tracker_destroy(pigment, &buffer->tracker);
         P_FREE(pigment, buffer);
@@ -105,7 +105,7 @@ PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* desc)
         result = alloc->map(alloc->user_data, buffer->allocation, &buffer->mapped);
         if(device_result(pigment, result) != PIGMENT_SUCCESS || buffer->mapped == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to map buffer (result=%d, mapped=%p)", result, buffer->mapped);
+            PLOG_ERROR(pigment, "Failed to map buffer (result=%d, mapped=%p).", result, buffer->mapped);
             alloc->destroy_buffer(alloc->user_data, buffer->buffer, buffer->allocation);
             pigment_resource_tracker_destroy(pigment, &buffer->tracker);
             P_FREE(pigment, buffer);

@@ -543,7 +543,7 @@ PImage* pigment_create_image(Pigment* pigment, const PImageDesc* desc)
 
     if(allocate_resources(pigment, image, desc->width, desc->height) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d)", desc->width, desc->height, desc->format);
+        PLOG_ERROR(pigment, "Failed to create image (%ux%u, format=%d).", desc->width, desc->height, desc->format);
         P_FREE(pigment, image->shared_families);
         pigment_destroy_resource_tracker(pigment, image->tracker);
         P_FREE(pigment, image);
@@ -672,7 +672,7 @@ void pigment_image_resize(Pigment* pigment, PImage* image, uint32_t width, uint3
         free_resources(pigment, &replacement);
         pigment_destroy_resource_tracker(pigment, replacement.tracker);
         P_FREE(pigment, old);
-        PLOG_ERROR(pigment, "Failed to resize image to %ux%u", width, height);
+        PLOG_ERROR(pigment, "Failed to resize image to %ux%u.", width, height);
         return;
     }
 
@@ -850,7 +850,7 @@ void pigment_image_write(Pigment* pigment, PImage* image, PImageLayout layout, c
     VkResult result = vkCopyMemoryToImageEXT(pigment->device->logical_device, &info);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "vkCopyMemoryToImage failed (result: %d)", result);
+        PLOG_ERROR(pigment, "vkCopyMemoryToImage failed (result: %d).", result);
     }
 
     P_STACK_OR_HEAP_FREE(pigment, vk_regions);
@@ -897,7 +897,7 @@ void pigment_image_read(Pigment* pigment, PImage* image, PImageLayout layout, co
     VkResult result = vkCopyImageToMemoryEXT(pigment->device->logical_device, &info);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "vkCopyImageToMemory failed (result: %d)", result);
+        PLOG_ERROR(pigment, "vkCopyImageToMemory failed (result: %d).", result);
     }
 
     P_STACK_OR_HEAP_FREE(pigment, vk_regions);
@@ -943,7 +943,7 @@ void pigment_image_host_transition(Pigment* pigment, const PHostImageTransition*
         VkResult result = vkTransitionImageLayoutEXT(pigment->device->logical_device, valid, vk_transitions);
         if(device_result(pigment, result) != PIGMENT_SUCCESS)
         {
-            PLOG_ERROR(pigment, "vkTransitionImageLayout failed (result: %d)", result);
+            PLOG_ERROR(pigment, "vkTransitionImageLayout failed (result: %d).", result);
         }
     }
 
@@ -978,7 +978,7 @@ PResult create_vk_image(Pigment* pigment, PImage* image, uint32_t width, uint32_
     VkResult result = alloc->create_image(alloc->user_data, &image_create_info, alloc_info, &image->image, &image->image_allocation);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_TRACE(pigment, "Failed to create image (result: %d)", result);
+        PLOG_TRACE(pigment, "Failed to create image (result: %d).", result);
         return pigment_device_lost(pigment) ? PIGMENT_ERROR_DEVICE_LOST : PIGMENT_ERROR_VULKAN;
     }
 
@@ -1007,7 +1007,7 @@ VkImageView create_image_view(Pigment* pigment, VkImage image, VkImageViewType v
     VkResult result = vkCreateImageView(device, &view_create_info, &pigment->vk_alloc, &image_view);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create image view! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create image view! (result: %d).", result);
         return NULL;
     }
 

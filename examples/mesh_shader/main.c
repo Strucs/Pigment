@@ -51,14 +51,14 @@ int main(void)
 
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
-        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_Init: %s.\n", SDL_GetError());
         goto FREE;
     }
 
     window = SDL_CreateWindow("Mesh Shader", 1280, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
     if(window == NULL)
     {
-        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_CreateWindow: %s.\n", SDL_GetError());
         goto FREE;
     }
 

@@ -83,7 +83,7 @@ PWindowHandles pigment_sdl_get_window_handles(SDL_Window* window)
 
     if(!SDL_IsMainThread())
     {
-        SDL_SetError("Pigment SDL window handles must be retrieved on the main thread");
+        SDL_SetError("Pigment SDL window handles must be retrieved on the main thread.");
         return handles;
     }
 

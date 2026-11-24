@@ -91,7 +91,7 @@ void* pigment_sdl_ios_metal_layer(SDL_Window* window)
 {
     if(window == NULL || ![NSThread isMainThread])
     {
-        SDL_SetError("Pigment SDL iOS Metal views must be created on the main thread with a valid window");
+        SDL_SetError("Pigment SDL iOS Metal views must be created on the main thread with a valid window.");
         return NULL;
     }
 
@@ -113,7 +113,7 @@ void* pigment_sdl_ios_metal_layer(SDL_Window* window)
         UIView* parent      = ui_window.rootViewController.view;
         if(parent == nil)
         {
-            SDL_SetError("Pigment SDL could not find the iOS window's SDL view");
+            SDL_SetError("Pigment SDL could not find the iOS window's SDL view.");
             return NULL;
         }
 

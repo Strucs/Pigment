@@ -502,7 +502,7 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     VkResult result = vkCreateBuffer(alloc->device, buffer_info, &alloc->pigment->vk_alloc, out_buffer);
     if(result != VK_SUCCESS)
     {
-        PLOG_TRACE(alloc->pigment, "vkCreateBuffer failed (result=%d)", result);
+        PLOG_TRACE(alloc->pigment, "vkCreateBuffer failed (result=%d).", result);
         return result;
     }
 
@@ -521,7 +521,7 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     }
     if(preferred_type_index == UINT32_MAX && fallback_type_index == UINT32_MAX)
     {
-        PLOG_TRACE(alloc->pigment, "Failed to find suitable memory type for buffer");
+        PLOG_TRACE(alloc->pigment, "Failed to find suitable memory type for buffer.");
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         goto ERROR;
     }
@@ -544,14 +544,14 @@ static VkResult default_create_buffer(void* user_data, const VkBufferCreateInfo*
     if(allocation == NULL)
     {
         pigment_rwlock_wrunlock(&alloc->lock);
-        PLOG_TRACE(alloc->pigment, "Failed to allocate buffer memory (size=%llu, preferred_type=%u, fallback_type=%u)", (unsigned long long) requirements.size, preferred_type_index, fallback_type_index);
+        PLOG_TRACE(alloc->pigment, "Failed to allocate buffer memory (size=%llu, preferred_type=%u, fallback_type=%u).", (unsigned long long) requirements.size, preferred_type_index, fallback_type_index);
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         goto ERROR;
     }
 
     if((result = vkBindBufferMemory(alloc->device, *out_buffer, allocation->memory, allocation->offset)) != VK_SUCCESS)
     {
-        PLOG_TRACE(alloc->pigment, "vkBindBufferMemory failed (result=%d)", result);
+        PLOG_TRACE(alloc->pigment, "vkBindBufferMemory failed (result=%d).", result);
         release_allocation(alloc, allocation);
         pigment_rwlock_wrunlock(&alloc->lock);
         goto ERROR;
@@ -589,7 +589,7 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     VkResult result = vkCreateImage(alloc->device, image_info, &alloc->pigment->vk_alloc, out_image);
     if(result != VK_SUCCESS)
     {
-        PLOG_TRACE(alloc->pigment, "vkCreateImage failed (result=%d)", result);
+        PLOG_TRACE(alloc->pigment, "vkCreateImage failed (result=%d).", result);
         return result;
     }
 
@@ -608,7 +608,7 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     }
     if(preferred_type_index == UINT32_MAX && fallback_type_index == UINT32_MAX)
     {
-        PLOG_TRACE(alloc->pigment, "Failed to find suitable memory type for image");
+        PLOG_TRACE(alloc->pigment, "Failed to find suitable memory type for image.");
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         goto ERROR;
     }
@@ -631,14 +631,14 @@ static VkResult default_create_image(void* user_data, const VkImageCreateInfo* i
     if(allocation == NULL)
     {
         pigment_rwlock_wrunlock(&alloc->lock);
-        PLOG_TRACE(alloc->pigment, "Failed to allocate image memory (size=%llu, preferred_type=%u, fallback_type=%u)", (unsigned long long) requirements.size, preferred_type_index, fallback_type_index);
+        PLOG_TRACE(alloc->pigment, "Failed to allocate image memory (size=%llu, preferred_type=%u, fallback_type=%u).", (unsigned long long) requirements.size, preferred_type_index, fallback_type_index);
         result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
         goto ERROR;
     }
 
     if((result = vkBindImageMemory(alloc->device, *out_image, allocation->memory, allocation->offset)) != VK_SUCCESS)
     {
-        PLOG_TRACE(alloc->pigment, "vkBindImageMemory failed (result=%d)", result);
+        PLOG_TRACE(alloc->pigment, "vkBindImageMemory failed (result=%d).", result);
         release_allocation(alloc, allocation);
         pigment_rwlock_wrunlock(&alloc->lock);
         goto ERROR;
@@ -802,7 +802,7 @@ PResult init_gpu_allocator(Pigment* pigment)
 
         if(init_result != VK_SUCCESS)
         {
-            PLOG_ERROR(pigment, "Custom PVkAllocator init failed (result=%d)", init_result);
+            PLOG_ERROR(pigment, "Custom PVkAllocator init failed (result=%d).", init_result);
             return PIGMENT_ERROR_VULKAN;
         }
     }

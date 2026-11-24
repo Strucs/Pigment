@@ -211,7 +211,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
     VkResult result       = vkResetFences(device->logical_device, 1, &acquire_fence);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to reset acquisition fence (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to reset acquisition fence (result: %d).", result);
         return device_result(pigment, result);
     }
 
@@ -245,7 +245,7 @@ PResult pigment_begin_frame_context(Pigment* pigment, PWindowRenderer* renderer,
 
     if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
-        PLOG_ERROR(pigment, "Failed to acquire swapchain image (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to acquire swapchain image (result: %d).", result);
         return device_result(pigment, result);
     }
 
@@ -377,7 +377,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
     PImageView* swapchain_view = image_get_or_create_view(pigment, swapchain->image_wrappers[image_index], &(PImageViewDesc) {0});
     if(swapchain_view == NULL)
     {
-        PLOG_ERROR(pigment, "Failed to get swapchain image view");
+        PLOG_ERROR(pigment, "Failed to get swapchain image view.");
         return;
     }
 
@@ -388,7 +388,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
         PImageView* msaa_view = image_get_or_create_view(pigment, swapchain->color_multisample[frame->slot], &(PImageViewDesc) {0});
         if(msaa_view == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to get multisample color view");
+            PLOG_ERROR(pigment, "Failed to get multisample color view.");
             return;
         }
         color_view = msaa_view->view;
@@ -415,7 +415,7 @@ void pigment_cmd_begin_swapchain_pass(Pigment* pigment, PCommandBuffer* cmd, con
         PImageView* depth_view = image_get_or_create_view(pigment, swapchain->depth[frame->slot], &(PImageViewDesc) {0});
         if(depth_view == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to get depth view");
+            PLOG_ERROR(pigment, "Failed to get depth view.");
             return;
         }
 
@@ -621,7 +621,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
         if(view == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to get color view for attachment %u", i);
+            PLOG_ERROR(pigment, "Failed to get color view for attachment %u.", i);
             goto FREE;
         }
 
@@ -649,7 +649,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
             PImageView* resolve_view = image_get_or_create_view(pigment, ref->resolve_image, &resolve_view_desc);
             if(resolve_view == NULL)
             {
-                PLOG_ERROR(pigment, "Failed to get color resolve view for attachment %u", i);
+                PLOG_ERROR(pigment, "Failed to get color resolve view for attachment %u.", i);
                 goto FREE;
             }
             resolve_view_handle = resolve_view->view;
@@ -696,7 +696,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
         PImageView* view = image_get_or_create_view(pigment, img, &view_desc);
         if(view == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to get depth view");
+            PLOG_ERROR(pigment, "Failed to get depth view.");
             goto FREE;
         }
 
@@ -724,7 +724,7 @@ void pigment_begin_render_pass(Pigment* pigment, PCommandBuffer* cmd, const PRen
             PImageView* resolve_view = image_get_or_create_view(pigment, ref->resolve_image, &resolve_view_desc);
             if(resolve_view == NULL)
             {
-                PLOG_ERROR(pigment, "Failed to get depth resolve view");
+                PLOG_ERROR(pigment, "Failed to get depth resolve view.");
                 goto FREE;
             }
             depth_resolve_view_handle = resolve_view->view;
@@ -952,7 +952,7 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
             result = vkWaitForFences(pigment->device->logical_device, 1, &presentation->fence, VK_TRUE, UINT64_MAX);
             if(device_result(pigment, result) != PIGMENT_SUCCESS)
             {
-                PLOG_ERROR(pigment, "Failed to wait for presentation (result: %d)", result);
+                PLOG_ERROR(pigment, "Failed to wait for presentation (result: %d).", result);
                 return device_result(pigment, result);
             }
             presentation->pending = P_FALSE;
@@ -961,7 +961,7 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
         result = vkResetFences(pigment->device->logical_device, 1, &presentation->fence);
         if(device_result(pigment, result) != PIGMENT_SUCCESS)
         {
-            PLOG_ERROR(pigment, "Failed to reset presentation fence (result: %d)", result);
+            PLOG_ERROR(pigment, "Failed to reset presentation fence (result: %d).", result);
             return device_result(pigment, result);
         }
         present_fence_info.sType          = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
@@ -984,7 +984,7 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
     if(result == VK_ERROR_OUT_OF_HOST_MEMORY || result == VK_ERROR_OUT_OF_DEVICE_MEMORY)
     {
         // Nothing was queued. Keep the frame and its present semaphore for a retry.
-        PLOG_ERROR(pigment, "Failed to queue presentation (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to queue presentation (result: %d).", result);
         return device_result(pigment, result);
     }
 
@@ -1013,7 +1013,7 @@ PResult pigment_present_frame(Pigment* pigment, PFrame* frame)
        && result != VK_SUBOPTIMAL_KHR
        && result != VK_ERROR_SURFACE_LOST_KHR)
     {
-        PLOG_ERROR(pigment, "Failed to present swapchain image (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to present swapchain image (result: %d).", result);
     }
 
     frame->active = P_FALSE;

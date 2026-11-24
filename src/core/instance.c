@@ -64,32 +64,41 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
     VkResult volk_result = volkInitialize();
     if(volk_result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Vulkan loader not found (result: %d)", volk_result);
+        PLOG_ERROR(pigment, "Vulkan loader not found (result: %d).", volk_result);
         goto ERROR;
     }
 
     const PVkInitInfo* vk_init = (const PVkInitInfo*) pigment->config.extra;
 
-    vkEnumerateInstanceLayerProperties(&available_layer_count, NULL);
-    if(available_layer_count > 0)
+    VkResult result;
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        available_layer_count,
+        available_layers,
+        P_ALLOC_SCOPE_COMMAND,
+        vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers)
+    );
+
+    if(result != VK_SUCCESS)
     {
-        available_layers = P_NEW_ARRAY_FOR_COMMAND(pigment, available_layers, available_layer_count);
-        if(available_layers == NULL)
-        {
-            goto ERROR;
-        }
-        vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers);
+        PLOG_ERROR(pigment, "Failed to enumerate instance layers (result: %d).", result);
+        goto ERROR;
     }
 
-    vkEnumerateInstanceExtensionProperties(NULL, &available_extension_count, NULL);
-    if(available_extension_count > 0)
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        available_extension_count,
+        available_extensions,
+        P_ALLOC_SCOPE_COMMAND,
+        vkEnumerateInstanceExtensionProperties(NULL, &available_extension_count, available_extensions)
+    );
+
+    if(result != VK_SUCCESS)
     {
-        available_extensions = P_NEW_ARRAY_FOR_COMMAND(pigment, available_extensions, available_extension_count);
-        if(available_extensions == NULL)
-        {
-            goto ERROR;
-        }
-        vkEnumerateInstanceExtensionProperties(NULL, &available_extension_count, available_extensions);
+        PLOG_ERROR(pigment, "Failed to enumerate instance extensions (result: %d).", result);
+        goto ERROR;
     }
 
     if(pigment->config.validation_enabled)
@@ -104,15 +113,19 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
 
     if(pigment->config.validation_enabled && pigment->config.best_practices_enabled)
     {
-        vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &layer_extension_count, NULL);
-        if(layer_extension_count > 0)
+        P_VK_ENUMERATE(
+            pigment,
+            result,
+            layer_extension_count,
+            layer_extensions,
+            P_ALLOC_SCOPE_COMMAND,
+            vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &layer_extension_count, layer_extensions)
+        );
+
+        if(result != VK_SUCCESS)
         {
-            layer_extensions = P_NEW_ARRAY_FOR_COMMAND(pigment, layer_extensions, layer_extension_count);
-            if(layer_extensions == NULL)
-            {
-                goto ERROR;
-            }
-            vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &layer_extension_count, layer_extensions);
+            PLOG_ERROR(pigment, "Failed to enumerate validation layer extensions (result: %d).", result);
+            goto ERROR;
         }
 
         layer_settings_available = extension_available(available_extensions, available_extension_count, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME)
@@ -191,10 +204,9 @@ PInstance* create_instance(Pigment* pigment, PAppInfo* info)
         pigment_vk_append_pnext(&create_info, vk_init->instance_pnext_chain);
     }
 
-    VkResult result;
     if((result = vkCreateInstance(&create_info, &pigment->vk_alloc, &(instance->vulkan_instance))) != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create an instance. (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create an instance. (result: %d).", result);
         goto ERROR;
     }
 
@@ -273,7 +285,7 @@ static PResult build_instance_layers(Pigment* pigment, PInstance* instance, cons
         const char* name = vk_init->req_instance_layers[i];
         if(!layer_available(available, available_count, name))
         {
-            PLOG_ERROR(pigment, "Required instance layer not available: %s", name);
+            PLOG_ERROR(pigment, "Required instance layer not available: %s.", name);
             goto ERROR;
         }
         if(!name_in_list((const char* const*) instance->layers->names, instance->layers->size, name))
@@ -287,7 +299,7 @@ static PResult build_instance_layers(Pigment* pigment, PInstance* instance, cons
         const char* name = vk_init->opt_instance_layers[i];
         if(!layer_available(available, available_count, name))
         {
-            PLOG_WARN(pigment, "Optional instance layer not available, skipping: %s", name);
+            PLOG_WARN(pigment, "Optional instance layer not available, skipping: %s.", name);
             continue;
         }
         if(!name_in_list((const char* const*) instance->layers->names, instance->layers->size, name))
@@ -425,7 +437,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
             const char* name = vk_init->req_instance_extensions[i];
             if(!extension_available(available, available_count, name))
             {
-                PLOG_ERROR(pigment, "Required instance extension not available: %s", name);
+                PLOG_ERROR(pigment, "Required instance extension not available: %s.", name);
                 goto ERROR;
             }
             if(!name_in_list((const char* const*) names, count, name))
@@ -439,7 +451,7 @@ static PResult build_instance_extensions(Pigment* pigment, PInstance* instance, 
             const char* name = vk_init->opt_instance_extensions[i];
             if(!extension_available(available, available_count, name))
             {
-                PLOG_WARN(pigment, "Optional instance extension not available, skipping: %s", name);
+                PLOG_WARN(pigment, "Optional instance extension not available, skipping: %s.", name);
                 continue;
             }
             if(!name_in_list((const char* const*) names, count, name))
@@ -573,7 +585,7 @@ void setup_debug_messenger(Pigment* pigment)
     VkResult result;
     if((result = create_debug_utils_messenger(instance->vulkan_instance, &create_info, &pigment->vk_alloc, &instance->debug_messenger)) != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to set up debug messenger! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to set up debug messenger! (result: %d).", result);
     }
 }
 

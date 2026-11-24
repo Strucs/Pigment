@@ -139,7 +139,7 @@ PRenderTarget* pigment_std_create_render_target(Pigment* pigment, const PRenderT
     return target;
 
 ERROR:
-    PLOG_ERROR(pigment, "Failed to create render target");
+    PLOG_ERROR(pigment, "Failed to create render target.");
     pigment_std_destroy_render_target(pigment, target);
     return NULL;
 }

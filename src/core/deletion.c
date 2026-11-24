@@ -481,7 +481,7 @@ PBool drain_deletion_queue(Pigment* pigment, PDeletionMode mode, uint64_t* destr
 
                 if(idle_result != VK_SUCCESS && idle_result != VK_ERROR_DEVICE_LOST)
                 {
-                    PLOG_ERROR(pigment, "Failed to wait for swapchain destruction (result: %d)", idle_result);
+                    PLOG_ERROR(pigment, "Failed to wait for swapchain destruction (result: %d).", idle_result);
                 }
             }
 
@@ -829,7 +829,7 @@ static PBool wait_target(Pigment* pigment, const PWaitTarget* target)
     device_record_loss(pigment, result);
     if(result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST)
     {
-        PLOG_ERROR(pigment, "Deferred destroy wait failed (result: %d)", result);
+        PLOG_ERROR(pigment, "Deferred destroy wait failed (result: %d).", result);
         return P_FALSE;
     }
 

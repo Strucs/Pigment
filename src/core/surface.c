@@ -101,7 +101,7 @@ PWindowRenderer* pigment_renderer_create(Pigment* pigment, const PWindowHandles*
         VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(pigment->device->physical_device, surface->surface, &caps);
         if(result != VK_SUCCESS)
         {
-            PLOG_ERROR(pigment, "Failed to query surface capabilities (result: %d)", result);
+            PLOG_ERROR(pigment, "Failed to query surface capabilities (result: %d).", result);
             goto ERROR;
         }
 
@@ -549,23 +549,42 @@ static SwapChainSupportDetails* query_swapchain_support(Pigment* pigment, VkPhys
         goto ERROR;
     }
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details->capabilities);
-
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formats_count, NULL);
-    details->formats = P_NEW_ARRAY_FOR_OBJECT(pigment, details->formats, details->formats_count);
-    if(details->formats == NULL)
+    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details->capabilities);
+    if(result != VK_SUCCESS)
     {
+        PLOG_ERROR(pigment, "Failed to query surface capabilities (result: %d).", result);
         goto ERROR;
     }
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formats_count, details->formats);
 
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details->present_modes_count, NULL);
-    details->present_modes = P_NEW_ARRAY_FOR_OBJECT(pigment, details->present_modes, details->present_modes_count);
-    if(details->present_modes == NULL)
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        details->formats_count,
+        details->formats,
+        P_ALLOC_SCOPE_OBJECT,
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formats_count, details->formats)
+    );
+
+    if(result != VK_SUCCESS || details->formats_count == 0)
     {
+        PLOG_ERROR(pigment, "Failed to enumerate surface formats (result: %d, count: %u).", result, details->formats_count);
         goto ERROR;
     }
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details->present_modes_count, details->present_modes);
+
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        details->present_modes_count,
+        details->present_modes,
+        P_ALLOC_SCOPE_OBJECT,
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details->present_modes_count, details->present_modes)
+    );
+
+    if(result != VK_SUCCESS || details->present_modes_count == 0)
+    {
+        PLOG_ERROR(pigment, "Failed to enumerate surface present modes (result: %d, count: %u).", result, details->present_modes_count);
+        goto ERROR;
+    }
 
     return details;
 
@@ -818,7 +837,7 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     PDeviceQueue* graphics = device_find_queue(device, P_QUEUE_GRAPHICS_BIT);
     if(graphics == NULL)
     {
-        PLOG_ERROR(pigment, "Cannot create swapchain: device has no graphics queue");
+        PLOG_ERROR(pigment, "Cannot create swapchain: device has no graphics queue.");
         goto ERROR;
     }
 
@@ -850,11 +869,11 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
 
         if(present_queue == NULL)
         {
-            PLOG_ERROR(pigment, "No queue family on the picked GPU supports presentation on this surface");
+            PLOG_ERROR(pigment, "No queue family on the picked GPU supports presentation on this surface.");
             goto ERROR;
         }
 
-        PLOG_INFO(pigment, "Graphics family does not support present, using separate present family %u", present_family_index);
+        PLOG_INFO(pigment, "Graphics family does not support present, using separate present family %u.", present_family_index);
     }
 
     support_details = query_swapchain_support(pigment, device->physical_device, surface->surface);
@@ -923,7 +942,6 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
     create_info.imageArrayLayers   = 1;
     VkImageUsageFlags wanted_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     create_info.imageUsage         = wanted_usage & support_details->capabilities.supportedUsageFlags;
-    create_info.imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     shared_families = P_NEW_ARRAY_FOR_COMMAND(pigment, shared_families, (uint64_t) desc->shared_queue_count + 1);
     if(shared_families == NULL)
@@ -974,18 +992,17 @@ static PSwapchain* create_swapchain(Pigment* pigment, const PSwapchainDesc* desc
         goto ERROR;
     }
 
-    vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, NULL);
-
-    swapchain->images = P_NEW_ARRAY_FOR_OBJECT(pigment, swapchain->images, image_count);
-    if(swapchain->images == NULL)
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        image_count,
+        swapchain->images,
+        P_ALLOC_SCOPE_OBJECT,
+        vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images)
+    );
+    if(device_result(pigment, result) != PIGMENT_SUCCESS || image_count == 0)
     {
-        goto ERROR;
-    }
-
-    result = vkGetSwapchainImagesKHR(device->logical_device, swapchain->swapchain, &image_count, swapchain->images);
-    if(device_result(pigment, result) != PIGMENT_SUCCESS)
-    {
-        PLOG_ERROR(pigment, "Failed to get swapchain images! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to enumerate swapchain images (result: %d, count: %u).", result, image_count);
         goto ERROR;
     }
 
@@ -1222,7 +1239,7 @@ static VkSampleCountFlagBits clamp_sample_count(Pigment* pigment, PSampleCount r
         }
     }
 
-    PLOG_WARN(pigment, "Requested %dx MSAA not supported, falling back to %dx", (int) requested, (int) fallback);
+    PLOG_WARN(pigment, "Requested %dx MSAA not supported, falling back to %dx.", (int) requested, (int) fallback);
     return fallback;
 }
 

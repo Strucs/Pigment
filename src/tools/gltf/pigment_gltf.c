@@ -459,13 +459,13 @@ PGltfMesh* pigment_gltf_load_mesh(Pigment* pigment, const IOCallbacks* io, const
 
     if(cgltf_parse_file(&options, filepath, &data) != cgltf_result_success)
     {
-        PLOG_ERROR(pigment, "Failed to parse glTF file: %s", filepath);
+        PLOG_ERROR(pigment, "Failed to parse glTF file: %s.", filepath);
         return NULL;
     }
 
     if(cgltf_load_buffers(&options, data, filepath) != cgltf_result_success)
     {
-        PLOG_ERROR(pigment, "Failed to load glTF buffers: %s", filepath);
+        PLOG_ERROR(pigment, "Failed to load glTF buffers: %s.", filepath);
         goto FREE;
     }
 
@@ -556,7 +556,7 @@ PGltfMesh* pigment_gltf_load_mesh(Pigment* pigment, const IOCallbacks* io, const
 
             if(pixels == NULL)
             {
-                PLOG_WARN(pigment, "Failed to load glTF image %u (uri=%s)", (unsigned int) i, img->uri ? img->uri : "(embedded)");
+                PLOG_WARN(pigment, "Failed to load glTF image %u (uri=%s).", (unsigned int) i, img->uri ? img->uri : "(embedded)");
                 continue;
             }
 

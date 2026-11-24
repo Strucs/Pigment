@@ -563,7 +563,7 @@ uint32_t pigment_std_add_sampler(Pigment* pigment, PStdBindless* bindless, const
 
     if(slot >= samplers->capacity)
     {
-        PLOG_ERROR(pigment, "Max samplers reached (%u)", samplers->capacity);
+        PLOG_ERROR(pigment, "Max samplers reached (%u).", samplers->capacity);
         return UINT32_MAX;
     }
 

@@ -35,14 +35,14 @@ int main(void)
 
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
-        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_Init: %s.\n", SDL_GetError());
         return 1;
     }
 
     window = SDL_CreateWindow("Vertex Input", 1280, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
     if(window == NULL)
     {
-        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_CreateWindow: %s.\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }

@@ -31,14 +31,14 @@ uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_
     compiler = shaderc_compiler_initialize();
     if(compiler == NULL)
     {
-        fprintf(stderr, "pigment_shaderc: failed to initialize shader compiler\n");
+        fprintf(stderr, "pigment_shaderc: failed to initialize shader compiler.\n");
         goto FREE;
     }
 
     options = shaderc_compile_options_initialize();
     if(options == NULL)
     {
-        fprintf(stderr, "pigment_shaderc: failed to initialize shader compile options\n");
+        fprintf(stderr, "pigment_shaderc: failed to initialize shader compile options.\n");
         goto FREE;
     }
 
@@ -60,7 +60,7 @@ uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_
             shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
             break;
         default:
-            fprintf(stderr, "pigment_shaderc: unsupported shader type\n");
+            fprintf(stderr, "pigment_shaderc: unsupported shader type.\n");
             goto FREE;
     }
     const char* input_name = file_name ? file_name : "default";

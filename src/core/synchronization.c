@@ -60,14 +60,14 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 
         if(sync->acquisitions[i].semaphore == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to create synchronization objects");
+            PLOG_ERROR(pigment, "Failed to create synchronization objects.");
             goto ERROR;
         }
 
         sync->acquisitions[i].fence = create_fence(pigment);
         if(sync->acquisitions[i].fence == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to create synchronization objects");
+            PLOG_ERROR(pigment, "Failed to create synchronization objects.");
             goto ERROR;
         }
 
@@ -76,7 +76,7 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
             sync->presentations[i].fence = create_fence(pigment);
             if(sync->presentations[i].fence == NULL)
             {
-                PLOG_ERROR(pigment, "Failed to create synchronization objects");
+                PLOG_ERROR(pigment, "Failed to create synchronization objects.");
                 goto ERROR;
             }
         }
@@ -88,7 +88,7 @@ PSync* create_sync(Pigment* pigment, const uint32_t max_frame, const uint32_t sw
 
         if(sync->render_finished_semaphores[i] == NULL)
         {
-            PLOG_ERROR(pigment, "Failed to create synchronization objects");
+            PLOG_ERROR(pigment, "Failed to create synchronization objects.");
             goto ERROR;
         }
     }
@@ -182,7 +182,7 @@ PResult wait_acquisition(Pigment* pigment, PSync* sync, uint32_t slot, uint64_t 
 
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to wait for acquisition (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to wait for acquisition (result: %d).", result);
         return device_result(pigment, result);
     }
 
@@ -199,7 +199,7 @@ static VkSemaphore create_semaphore(Pigment* pigment)
     VkResult result = vkCreateSemaphore(pigment->device->logical_device, &semaphore_create_info, &pigment->vk_alloc, &semaphore);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create semaphore (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create semaphore (result: %d).", result);
         return NULL;
     }
 
@@ -218,7 +218,7 @@ static VkFence create_fence(Pigment* pigment)
     VkResult result = vkCreateFence(pigment->device->logical_device, &fence_create_info, &pigment->vk_alloc, &fence);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create fence (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create fence (result: %d).", result);
         return NULL;
     }
 

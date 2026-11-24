@@ -193,20 +193,21 @@ static PBool check_device_extensions_supported(Pigment* pigment, VkPhysicalDevic
     uint32_t count                   = 0;
     VkExtensionProperties* available = NULL;
 
-    vkEnumerateDeviceExtensionProperties(device, NULL, &count, NULL);
-    if(count == 0 && required->size > 0)
-    {
-        return P_FALSE;
-    }
+    VkResult result;
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        count,
+        available,
+        P_ALLOC_SCOPE_COMMAND,
+        vkEnumerateDeviceExtensionProperties(device, NULL, &count, available)
+    );
 
-    if(count > 0)
+    if(result != VK_SUCCESS)
     {
-        available = P_NEW_ARRAY_FOR_COMMAND(pigment, available, count);
-        if(available == NULL)
-        {
-            return P_FALSE;
-        }
-        vkEnumerateDeviceExtensionProperties(device, NULL, &count, available);
+        PLOG_TRACE(pigment, "Failed to enumerate device extensions (result: %d).", result);
+        P_FREE(pigment, available);
+        return P_FALSE;
     }
 
     PBool extensions_found = P_TRUE;
@@ -230,13 +231,13 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const Extens
     uint32_t graphics_family = 0;
     if(!find_graphics_family(pigment, device, &graphics_family))
     {
-        PLOG_TRACE(pigment, "Device rejected: no graphics queue family");
+        PLOG_TRACE(pigment, "Device rejected: no graphics queue family.");
         goto FREE;
     }
 
     if(!check_device_extensions_supported(pigment, device, req_extensions))
     {
-        PLOG_TRACE(pigment, "Device rejected: missing required extensions");
+        PLOG_TRACE(pigment, "Device rejected: missing required extensions.");
         goto FREE;
     }
 
@@ -248,7 +249,7 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const Extens
 
     if(!features10_supports(&PIGMENT_REQ_FEATURES, &available_2.features) || !features_chain_supports(&PIGMENT_REQ_FEATURES_12, &available_12, sizeof(available_12)) || !features_chain_supports(&PIGMENT_REQ_FEATURES_13, &available_13, sizeof(available_13)))
     {
-        PLOG_TRACE(pigment, "Device rejected: missing core Pigment features");
+        PLOG_TRACE(pigment, "Device rejected: missing core Pigment features.");
         goto FREE;
     }
 
@@ -256,22 +257,22 @@ static PBool is_suitable(Pigment* pigment, VkPhysicalDevice device, const Extens
     {
         if(!features10_supports(vk_init->req_features, &available_2.features))
         {
-            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.0)");
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.0).");
             goto FREE;
         }
         if(!features_chain_supports(vk_init->req_features_11, &available_11, sizeof(available_11)))
         {
-            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.1)");
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.1).");
             goto FREE;
         }
         if(!features_chain_supports(vk_init->req_features_12, &available_12, sizeof(available_12)))
         {
-            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.2)");
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.2).");
             goto FREE;
         }
         if(!features_chain_supports(vk_init->req_features_13, &available_13, sizeof(available_13)))
         {
-            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.3)");
+            PLOG_TRACE(pigment, "Device rejected: missing user req features (1.3).");
             goto FREE;
         }
     }
@@ -287,21 +288,28 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
     VkPhysicalDevice* devices = NULL;
     uint32_t devices_count    = 0;
 
-    vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, NULL);
+    VkResult result;
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        devices_count,
+        devices,
+        P_ALLOC_SCOPE_COMMAND,
+        vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, devices)
+    );
+
+    if(result != VK_SUCCESS)
+    {
+        PLOG_ERROR(pigment, "Failed to enumerate physical devices (result: %d).", result);
+        P_FREE(pigment, devices);
+        return result == VK_ERROR_OUT_OF_HOST_MEMORY ? PIGMENT_ERROR_OUT_OF_MEMORY : PIGMENT_ERROR_VULKAN;
+    }
 
     if(devices_count == 0)
     {
-        PLOG_ERROR(pigment, "Failed to find GPUs compatible with Vulkan");
+        PLOG_ERROR(pigment, "Failed to find GPUs compatible with Vulkan.");
         return PIGMENT_ERROR_VULKAN;
     }
-
-    devices = P_NEW_ARRAY_FOR_COMMAND(pigment, devices, devices_count);
-    if(devices == NULL)
-    {
-        return PIGMENT_ERROR_OUT_OF_MEMORY;
-    }
-
-    vkEnumeratePhysicalDevices(pigment->instance->vulkan_instance, &devices_count, devices);
 
     for(size_t i = 0; i < devices_count; i++)
     {
@@ -316,7 +324,7 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
 
     if(device->physical_device == VK_NULL_HANDLE)
     {
-        PLOG_ERROR(pigment, "Failed to find a suitable GPU");
+        PLOG_ERROR(pigment, "Failed to find a suitable GPU.");
         return PIGMENT_ERROR_VULKAN;
     }
 
@@ -326,7 +334,7 @@ static PResult pick_physical_device(Pigment* pigment, PDevice* device, const Ext
     device->line_width_range[1]     = device_properties.limits.lineWidthRange[1];
     device->max_draw_indirect_count = device_properties.limits.maxDrawIndirectCount;
 
-    PLOG_INFO(pigment, "GPU picked: %s", device_properties.deviceName);
+    PLOG_INFO(pigment, "GPU picked: %s.", device_properties.deviceName);
 
     return PIGMENT_SUCCESS;
 }
@@ -886,7 +894,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     result = PIGMENT_ERROR_VULKAN;
     if(vkCreateDevice(device->physical_device, &create_info, &pigment->vk_alloc, &(device->logical_device)) != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create logical device");
+        PLOG_ERROR(pigment, "Failed to create logical device.");
         goto ERROR;
     }
     volkLoadDevice(device->logical_device);
@@ -920,7 +928,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
         };
         if(vkCreateSemaphore(device->logical_device, &sem_info, &pigment->vk_alloc, &queue->timeline) != VK_SUCCESS)
         {
-            PLOG_ERROR(pigment, "Failed to create timeline semaphore for queue family %u", resolved[r].family);
+            PLOG_ERROR(pigment, "Failed to create timeline semaphore for queue family %u.", resolved[r].family);
             for(uint32_t j = 0; j < r; j++)
             {
                 vkDestroySemaphore(device->logical_device, device->queues[j].timeline, &pigment->vk_alloc);
@@ -936,7 +944,7 @@ static PResult create_logical_device(Pigment* pigment, PDevice* device)
     for(uint32_t i = 0; i < device->queue_count; i++)
     {
         PDeviceQueue* queue = &device->queues[i];
-        PLOG_DEBUG(pigment, "  [%u] family=%u flags=%s%s%s", i, queue->family_index, (queue->flags & P_QUEUE_GRAPHICS_BIT) ? "GRAPHICS " : "", (queue->flags & P_QUEUE_COMPUTE_BIT) ? "COMPUTE " : "", (queue->flags & P_QUEUE_TRANSFER_BIT) ? "TRANSFER" : "");
+        PLOG_DEBUG(pigment, "  [%u] family=%u flags=%s%s%s.", i, queue->family_index, (queue->flags & P_QUEUE_GRAPHICS_BIT) ? "GRAPHICS " : "", (queue->flags & P_QUEUE_COMPUTE_BIT) ? "COMPUTE " : "", (queue->flags & P_QUEUE_TRANSFER_BIT) ? "TRANSFER" : "");
     }
 
     P_FREE(pigment, queue_infos);
@@ -1012,15 +1020,20 @@ PDevice* create_device(Pigment* pigment)
         goto ERROR;
     }
 
-    vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, NULL);
-    if(available_extension_count > 0)
+    VkResult result;
+    P_VK_ENUMERATE(
+        pigment,
+        result,
+        available_extension_count,
+        available_extensions,
+        P_ALLOC_SCOPE_COMMAND,
+        vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, available_extensions)
+    );
+
+    if(result != VK_SUCCESS)
     {
-        available_extensions = P_NEW_ARRAY_FOR_COMMAND(pigment, available_extensions, available_extension_count);
-        if(available_extensions == NULL)
-        {
-            goto ERROR;
-        }
-        vkEnumerateDeviceExtensionProperties(device->physical_device, NULL, &available_extension_count, available_extensions);
+        PLOG_ERROR(pigment, "Failed to enumerate device extensions (result: %d).", result);
+        goto ERROR;
     }
 
     if(instance_has_surface_maint1)
@@ -1064,7 +1077,7 @@ PDevice* create_device(Pigment* pigment)
         const char* name = default_opt_extensions[i];
         if(!extension_available(available_extensions, available_extension_count, name))
         {
-            PLOG_INFO(pigment, "Optional device extension not available, skipping: %s", name);
+            PLOG_INFO(pigment, "Optional device extension not available, skipping: %s.", name);
             continue;
         }
         if(!name_in_list((const char* const*) device->extensions->names, device->extensions->size, name))
@@ -1080,7 +1093,7 @@ PDevice* create_device(Pigment* pigment)
             const char* name = vk_init->opt_device_extensions[i];
             if(!extension_available(available_extensions, available_extension_count, name))
             {
-                PLOG_WARN(pigment, "Optional device extension not available, skipping: %s", name);
+                PLOG_WARN(pigment, "Optional device extension not available, skipping: %s.", name);
                 continue;
             }
             if(!name_in_list((const char* const*) device->extensions->names, device->extensions->size, name))
@@ -1178,7 +1191,7 @@ PResult device_wait_idle(Pigment* pigment)
     VkResult result = vkDeviceWaitIdle(pigment->device->logical_device);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to wait for device (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to wait for device (result: %d).", result);
     }
 
     return device_result(pigment, result);

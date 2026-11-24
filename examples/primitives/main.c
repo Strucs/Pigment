@@ -65,14 +65,14 @@ int main(void)
 
     if(!SDL_Init(SDL_INIT_VIDEO))
     {
-        fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_Init: %s.\n", SDL_GetError());
         return 1;
     }
 
     window = SDL_CreateWindow("Primitives + Instancing", 1280, 720, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if(window == NULL)
     {
-        fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
+        fprintf(stderr, "SDL_CreateWindow: %s.\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
@@ -265,7 +265,7 @@ int main(void)
     unsigned char* sprite_pixels = stbi_load(CAPTAIN_SPRITE, &sprite_w, &sprite_h, &sprite_channels, STBI_rgb_alpha);
     if(sprite_pixels == NULL)
     {
-        fprintf(stderr, "Failed to load sprite '%s': %s\n", CAPTAIN_SPRITE, stbi_failure_reason());
+        fprintf(stderr, "Failed to load sprite '%s': %s.\n", CAPTAIN_SPRITE, stbi_failure_reason());
         goto FREE;
     }
 

@@ -405,7 +405,7 @@ static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* d
 
     if(desc->layout == NULL)
     {
-        PLOG_ERROR(pigment, "PPipelineDesc.layout is NULL");
+        PLOG_ERROR(pigment, "PPipelineDesc.layout is NULL.");
         status = PIGMENT_ERROR;
         goto ERROR;
     }
@@ -572,7 +572,7 @@ PResult pigment_create_graphic_pipelines(Pigment* pigment, PPipelineCache* cache
     VkResult result          = vkCreateGraphicsPipelines(device, vk_cache, count, pipeline_create_infos, &pigment->vk_alloc, vk_pipelines);
     if((status = device_result(pigment, result)) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create graphics pipelines! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create graphics pipelines! (result: %d).", result);
         for(uint32_t i = 0; i < count; i++)
         {
             if(vk_pipelines[i] != VK_NULL_HANDLE)
@@ -696,7 +696,7 @@ PResult pigment_create_compute_pipelines(Pigment* pigment, PPipelineCache* cache
     VkResult result          = vkCreateComputePipelines(device, vk_cache, count, pipeline_create_infos, &pigment->vk_alloc, vk_pipelines);
     if((status = device_result(pigment, result)) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create compute pipelines! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create compute pipelines! (result: %d).", result);
         for(uint32_t i = 0; i < count; i++)
         {
             if(vk_pipelines[i] != VK_NULL_HANDLE)
@@ -1113,7 +1113,7 @@ PResult pigment_create_pipeline_cache(Pigment* pigment, const void* initial_data
     VkResult result = vkCreatePipelineCache(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &cache->cache);
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create pipeline cache (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create pipeline cache (result: %d).", result);
         P_FREE(pigment, cache);
         return device_result(pigment, result);
     }
@@ -1148,7 +1148,7 @@ PResult pigment_pipeline_cache_get_data(Pigment* pigment, PPipelineCache* cache,
 
     if(result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
-        PLOG_ERROR(pigment, "Failed to query pipeline cache data (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to query pipeline cache data (result: %d).", result);
         return device_result(pigment, result);
     }
 
@@ -1237,7 +1237,7 @@ PLayout* pigment_create_layout(Pigment* pigment, const PLayoutDesc* desc)
 
     if(device_result(pigment, result) != PIGMENT_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create pipeline layout! (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create pipeline layout! (result: %d).", result);
         return NULL;
     }
 

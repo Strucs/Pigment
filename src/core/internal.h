@@ -24,6 +24,64 @@
 
 #include <string.h>
 
+#define P_VK_ENUMERATE_MAX_ATTEMPTS 4
+
+/**
+ * @brief Allocate and fill a Vulkan enumeration array with bounded retries.
+ *
+ * @param pigment Pigment instance.
+ * @param result Receives VK_SUCCESS, VK_INCOMPLETE, or an error.
+ * @param count Receives the number of elements written.
+ * @param items Receives the allocated array. Must initially be NULL.
+ * @param scope Allocation scope of the array.
+ * @param call Vulkan enumeration call using count and items.
+ *
+ * @note result, count and items must be variables.
+ * call is evaluated for the count query and the fill.
+ * On the final VK_INCOMPLETE, the partial array is preserved.
+ * The caller must free any returned array with P_FREE.
+ * On error, items is NULL and count is zero.
+ */
+#define P_VK_ENUMERATE(pigment, result, count, items, scope, call)                                                                      \
+    do                                                                                                                                  \
+    {                                                                                                                                   \
+        (items) = NULL;                                                                                                                 \
+        (count) = 0;                                                                                                                    \
+                                                                                                                                        \
+        for(uint32_t _p_enum_attempt = 0; _p_enum_attempt < P_VK_ENUMERATE_MAX_ATTEMPTS; _p_enum_attempt++)                             \
+        {                                                                                                                               \
+            (result) = (call);                                                                                                          \
+            if((result) != VK_SUCCESS || (count) == 0)                                                                                  \
+            {                                                                                                                           \
+                break;                                                                                                                  \
+            }                                                                                                                           \
+                                                                                                                                        \
+            (items) = (__typeof__(items)) p_calloc_impl((pigment), (count), sizeof(*(items)), _Alignof(__typeof__(*(items))), (scope)); \
+            if((items) == NULL)                                                                                                         \
+            {                                                                                                                           \
+                (result) = VK_ERROR_OUT_OF_HOST_MEMORY;                                                                                 \
+                break;                                                                                                                  \
+            }                                                                                                                           \
+                                                                                                                                        \
+            (result) = (call);                                                                                                          \
+            if((result) != VK_INCOMPLETE || _p_enum_attempt + 1 == P_VK_ENUMERATE_MAX_ATTEMPTS)                                         \
+            {                                                                                                                           \
+                break;                                                                                                                  \
+            }                                                                                                                           \
+                                                                                                                                        \
+            P_FREE(pigment, items);                                                                                                     \
+            (items) = NULL;                                                                                                             \
+        }                                                                                                                               \
+                                                                                                                                        \
+        if((result) != VK_SUCCESS && (result) != VK_INCOMPLETE)                                                                         \
+        {                                                                                                                               \
+            P_FREE(pigment, items);                                                                                                     \
+            (items) = NULL;                                                                                                             \
+            (count) = 0;                                                                                                                \
+        }                                                                                                                               \
+    }                                                                                                                                   \
+    while(0)
+
 VkPipelineStageFlags2 pipeline_stage_to_vk(PPipelineStage stages);
 VkPipelineBindPoint pipeline_bind_point_to_vk(PPipelineType type);
 PBool validate_multiview(Pigment* pigment, uint32_t view_mask);

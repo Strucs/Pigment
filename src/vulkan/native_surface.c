@@ -34,7 +34,7 @@
     PFN_##name name##_func = (PFN_##name) vkGetInstanceProcAddr((instance), #name);               \
     if(name##_func == NULL)                                                                       \
     {                                                                                             \
-        PLOG_ERROR(pigment, #name " not available (extension not enabled at vkCreateInstance?)"); \
+        PLOG_ERROR(pigment, #name " not available (extension not enabled at vkCreateInstance?)."); \
         return VK_NULL_HANDLE;                                                                    \
     }
 
@@ -134,13 +134,13 @@ VkSurfaceKHR create_vk_surface_from_handles(Pigment* pigment, const PWindowHandl
 #endif
 
         default:
-            PLOG_ERROR(pigment, "Unsupported window handle type %d on this platform", (int) handles->type);
+            PLOG_ERROR(pigment, "Unsupported window handle type %d on this platform.", (int) handles->type);
             return VK_NULL_HANDLE;
     }
 
     if(result != VK_SUCCESS)
     {
-        PLOG_ERROR(pigment, "Failed to create Vulkan surface from native handles (result: %d)", result);
+        PLOG_ERROR(pigment, "Failed to create Vulkan surface from native handles (result: %d).", result);
         return VK_NULL_HANDLE;
     }
 
