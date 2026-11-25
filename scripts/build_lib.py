@@ -74,7 +74,16 @@ def build_pigment(config: powermake.Config, shared: bool) -> str:
     objects = powermake.compile_files(p_config, project_files)
 
     if shared:
+        if isinstance(p_config.c_compiler, powermake.compilers.CompilerGNU):
+            linker = (
+                powermake.shared_linkers.SharedLinkerMinGW
+                if p_config.target_is_mingw()
+                else powermake.shared_linkers.SharedLinkerGNU
+            )
+            p_config.shared_linker = linker(p_config.c_compiler.path)
+
         if p_config.target_is_macos():
+            p_config.shared_linker.shared_lib_extension = ".dylib"
             p_config.add_shared_linker_flags(
                 "-Wl,-install_name,@rpath/libpigment.dylib",
                 "-Wl,-compatibility_version,1.0.0",

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import powermake
 
-from scripts import spv_to_header
+from . import spv_to_header
 
 
 @dataclass(frozen=True)
