@@ -17,7 +17,7 @@
 #define SPRITE_SAMPLER 0
 
 typedef struct WavePushConstants {
-    uint64_t heights_address;
+    PBufferAddress heights_address;
     float time;
     uint32_t count;
 } WavePushConstants;
@@ -314,9 +314,10 @@ int main(void)
     PComputePipelineDesc wave_desc = {
         .layout = wave_layout,
         .shader = {
-                   .stage     = P_SHADER_STAGE_COMPUTE_BIT,
-                   .code      = (const uint32_t*) wave_comp_spv,
-                   .code_size = (uint32_t) sizeof(wave_comp_spv),
+                   .stage       = P_SHADER_STAGE_COMPUTE_BIT,
+                   .code        = wave_comp_spv,
+                   .entry_point = "computeMain",
+                   .code_size   = (uint32_t) sizeof(wave_comp_spv),
                    },
         .name = "wave_compute",
     };

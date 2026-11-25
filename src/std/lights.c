@@ -22,11 +22,6 @@
 
 #include <string.h>
 
-typedef struct PIGMENT_ALIGN(16) PLightsHeader {
-    PVec3 ambient_color;
-    uint32_t count;
-} PLightsHeader;
-
 struct PLights {
     PLightsHeader header;
     PLightDesc* data;

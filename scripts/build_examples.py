@@ -2,7 +2,41 @@ import os
 
 import powermake
 
-from scripts import build_common
+from scripts import build_common, build_slang
+
+
+def _shader_stages(
+    source: str, *stages: str, include_dirs: list[str] | None = None
+) -> list[build_slang.SlangShader]:
+    basename = os.path.splitext(os.path.basename(source))[0]
+    suffixes = {"vertex": "vert", "fragment": "frag", "compute": "comp"}
+    include_dirs = include_dirs or []
+    return [
+        build_slang.SlangShader(
+            source=source,
+            entry_point=f"{stage}Main",
+            stage=stage,
+            name=f"{basename}_{suffixes.get(stage, stage)}",
+            include_dirs=include_dirs,
+            profile=(
+                "spirv_1_6+spvMeshShadingEXT" if stage in ("task", "mesh") else None
+            ),
+        )
+        for stage in stages
+    ]
+
+
+EXAMPLE_SHADERS = {
+    "vertex_input": _shader_stages(
+        "examples/vertex_input/test.slang", "vertex", "fragment"
+    ),
+    "primitives": _shader_stages(
+        "examples/primitives/wave.slang", "compute", include_dirs=["shaders"]
+    ),
+    "mesh_shader": _shader_stages(
+        "examples/mesh_shader/triangle.slang", "task", "mesh", "fragment"
+    ),
+}
 
 
 def build_example(
@@ -29,9 +63,8 @@ def build_example(
         ext_config.add_flags("-w")
         ext_config.remove_flags("-flto=auto", "-flto")
 
-    example_c_files = list(powermake.get_files(f"./examples/{example_name}/**/*.c"))
-    has_shaders = build_common.build_shaders(
-        f"./examples/{example_name}/**/*", example_shaders_dir, example_c_files
+    has_shaders = build_slang.build_shaders(
+        config, EXAMPLE_SHADERS.get(example_name, []), example_shaders_dir
     )
     if has_shaders:
         config.add_includedirs(example_shaders_dir)

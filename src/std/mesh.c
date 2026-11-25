@@ -153,13 +153,13 @@ void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh)
     P_FREE(pigment, mesh);
 }
 
-uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh)
+PBufferAddress pigment_std_mesh_vertex_address(PMeshBuffers* mesh)
 {
     if(mesh == NULL)
     {
         return 0;
     }
-    return (uint64_t) pigment_buffer_address(mesh->vertex_buffer);
+    return pigment_buffer_address(mesh->vertex_buffer);
 }
 
 void pigment_std_mesh_use(Pigment* pigment, PCommandBuffer* cmd, PMeshBuffers* mesh)

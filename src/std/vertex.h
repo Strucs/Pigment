@@ -25,7 +25,7 @@ extern "C" {
 
 #include "pigment/defines.h"
 
-typedef struct PIGMENT_ALIGN(16) PVertex {
+typedef struct PVertex {
     PVec3 pos;
     float uv_x;
     PVec3 normal;

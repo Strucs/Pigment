@@ -3,7 +3,18 @@ import subprocess
 
 import powermake
 
-from scripts import build_common, build_lib
+from scripts import build_common, build_lib, build_slang
+
+TEST_SHADERS = {
+    "test_descriptor_order": (
+        build_slang.SlangShader(
+            "tests/test_descriptor_order/empty.slang",
+            "computeMain",
+            "compute",
+            "empty_comp",
+        ),
+    ),
+}
 
 
 def build_test(
@@ -19,8 +30,8 @@ def build_test(
     config.add_includedirs(include_dir, "external/Vulkan-Headers/include")
 
     test_files = list(powermake.get_files(f"./tests/{test_name}/**/*.c"))
-    if build_common.build_shaders(
-        f"./tests/{test_name}/**/*", test_shaders_dir, test_files
+    if build_slang.build_shaders(
+        config, TEST_SHADERS.get(test_name, ()), test_shaders_dir
     ):
         config.add_includedirs(test_shaders_dir)
 

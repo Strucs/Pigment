@@ -152,9 +152,9 @@ void* pigment_buffer_mapped(PBuffer* buffer)
     return (buffer != NULL) ? buffer->mapped : NULL;
 }
 
-uint64_t pigment_buffer_address(PBuffer* buffer)
+PBufferAddress pigment_buffer_address(PBuffer* buffer)
 {
-    return (buffer != NULL) ? (uint64_t) buffer->address : 0;
+    return (buffer != NULL) ? (PBufferAddress) buffer->address : 0;
 }
 
 uint64_t pigment_buffer_size(PBuffer* buffer)

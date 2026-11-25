@@ -91,9 +91,9 @@ int main(void)
     }
 
     PShaderStageDesc stages[] = {
-        {    .stage = P_SHADER_STAGE_MESH_BIT, .code = (const uint32_t*) triangle_mesh_spv, .code_size = sizeof(triangle_mesh_spv)},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) triangle_frag_spv, .code_size = sizeof(triangle_frag_spv)},
-        {    .stage = P_SHADER_STAGE_TASK_BIT, .code = (const uint32_t*) triangle_task_spv, .code_size = sizeof(triangle_task_spv)},
+        {    .stage = P_SHADER_STAGE_MESH_BIT, .code = triangle_mesh_spv,     .entry_point = "meshMain", .code_size = sizeof(triangle_mesh_spv)},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = triangle_frag_spv, .entry_point = "fragmentMain", .code_size = sizeof(triangle_frag_spv)},
+        {    .stage = P_SHADER_STAGE_TASK_BIT, .code = triangle_task_spv,     .entry_point = "taskMain", .code_size = sizeof(triangle_task_spv)},
     };
 
     uint32_t stage_count = sizeof(stages) / sizeof(stages[0]);

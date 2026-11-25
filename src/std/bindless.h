@@ -22,6 +22,7 @@ extern "C" {
 #endif
 
 #include "render_targets.h"
+#include "bindless_bindings.h"
 
 #include "pigment/defines.h"
 #include "pigment/descriptor.h"

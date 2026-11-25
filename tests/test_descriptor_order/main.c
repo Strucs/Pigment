@@ -47,9 +47,10 @@ static void test_recorded_sets(Pigment* pigment, PDescriptorSetLayout* set_layou
         PComputePipelineDesc pipeline_desc = {
             .layout = layout,
             .shader = {
-                       .stage     = P_SHADER_STAGE_COMPUTE_BIT,
-                       .code      = (const uint32_t*) empty_comp_spv,
-                       .code_size = (uint32_t) sizeof(empty_comp_spv),
+                       .stage       = P_SHADER_STAGE_COMPUTE_BIT,
+                       .code        = empty_comp_spv,
+                       .entry_point = "computeMain",
+                       .code_size   = (uint32_t) sizeof(empty_comp_spv),
                        },
         };
         PPipeline* pipeline;

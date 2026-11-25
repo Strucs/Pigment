@@ -75,7 +75,7 @@ PIGMENT_API PMeshBuffers* pigment_std_cmd_upload_mesh(Pigment* pigment, PCommand
 PIGMENT_API PMeshBuffers* pigment_std_upload_mesh(Pigment* pigment, PCommandPool* pool, PDeviceQueue* queue, const PMeshUploadDesc* desc, PSubmitHandle* out_handle);
 PIGMENT_API void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
 
-PIGMENT_API uint64_t pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
+PIGMENT_API PBufferAddress pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
 
 /**
  * @brief Stamp the mesh's vertex buffer as used by `cmd`.

@@ -302,7 +302,7 @@ void pigment_std_draw(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch
     if(batch->bindless != NULL)
     {
         PDescriptorSet* set = pigment_std_bindless_version_set(pigment, batch->bindless, cmd);
-        pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, 0, &set, 1, NULL, 0);
+        pigment_cmd_bind_descriptor_sets(pigment, cmd, pipeline, PIGMENT_BINDLESS_SET, &set, 1, NULL, 0);
     }
 
     switch(batch->type)
@@ -324,11 +324,16 @@ void pigment_std_draw(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch
 
 static void draw_meshes(Pigment* pigment, PCommandBuffer* cmd, const PStdDrawBatch* batch, PPipeline* pipeline)
 {
+    PBufferAddress light_header = pigment_std_buffer_version_address(pigment, batch->lights, cmd);
+
     PStdPushConstants push = {
         .instance_buffer = pigment_std_buffer_version_address(pigment, batch->instances, cmd),
         .camera_buffer   = pigment_std_buffer_version_address(pigment, batch->camera, cmd),
         .material_buffer = pigment_std_buffer_version_address(pigment, batch->materials, cmd),
-        .light_buffer    = pigment_std_buffer_version_address(pigment, batch->lights, cmd),
+        .lights          = {
+                            .header = light_header,
+                            .items  = light_header != 0 ? light_header + sizeof(PLightsHeader) : 0,
+                            },
     };
 
     for(uint32_t i = 0; i < batch->draw_count; i++)
@@ -368,10 +373,11 @@ static void draw_light_gizmos(Pigment* pigment, PCommandBuffer* cmd, const PStdD
     pigment_cmd_use(pigment, cmd, draw->vertex_reference);
     pigment_cmd_use(pigment, cmd, draw->index_reference);
 
+    PBufferAddress light_header = pigment_std_buffer_version_address(pigment, batch->lights, cmd);
     PStdGizmoPushConstants push = {
         .vertex_buffer = pigment_buffer_address(draw->mesh.vertex_buffer),
         .camera_buffer = pigment_std_buffer_version_address(pigment, batch->camera, cmd),
-        .light_buffer  = pigment_std_buffer_version_address(pigment, batch->lights, cmd),
+        .light_buffer  = light_header + sizeof(PLightsHeader),
         .scale         = batch->gizmo_scale,
     };
 

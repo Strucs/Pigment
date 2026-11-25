@@ -124,11 +124,6 @@ struct PStdBindless {
     PStdPipelineLayouts* pipeline_layouts;
 };
 
-#define PIGMENT_BINDLESS_BINDING_SAMPLERS 0
-#define PIGMENT_BINDLESS_BINDING_CUBEMAPS 1
-#define PIGMENT_BINDLESS_BINDING_RENDER_TARGETS 2
-#define PIGMENT_BINDLESS_BINDING_IMAGES 3
-
 static const PSamplerDesc default_sampler_descs[] = {
     {
      .mag_filter     = P_FILTERING_MODE_NEAREST,

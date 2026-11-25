@@ -17,7 +17,10 @@
 #ifndef PIGMENT_STD_INTERNAL_H
 #define PIGMENT_STD_INTERNAL_H
 
+#include "types.h"
+
 #include "pigment/defines.h"
+#include "pigment/buffers.h"
 #include "pigment/queue.h"
 #include "buffer_version.h"
 
@@ -25,6 +28,9 @@
 #include <stddef.h>
 
 #define PIGMENT_STD_FREE_LIST_INITIAL_CAPACITY 8
+
+#define P_STD_VERTEX_ENTRY_POINT "vertexMain"
+#define P_STD_FRAGMENT_ENTRY_POINT "fragmentMain"
 
 struct PStdBufferVersion {
     PBuffer* buffer;
@@ -58,23 +64,33 @@ PBuffer* acquire_buffer_version(Pigment* pigment, PStdBufferVersions* buffers, u
 PStdBufferVersion* retain_buffer_version(Pigment* pigment, PStdBufferVersions* buffers);
 void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers);
 
+typedef struct PLightsHeader {
+    PVec3 ambient_color;
+    uint32_t count;
+} PLightsHeader;
+
+typedef struct PStdLightsView {
+    PBufferAddress header;
+    PBufferAddress items;
+} PStdLightsView;
+
 typedef struct PStdPushConstants {
-    uint64_t vertex_buffer;
-    uint64_t instance_buffer;
-    uint64_t camera_buffer;
-    uint64_t material_buffer;
-    uint64_t light_buffer;
+    PBufferAddress vertex_buffer;
+    PBufferAddress instance_buffer;
+    PBufferAddress camera_buffer;
+    PBufferAddress material_buffer;
+    PStdLightsView lights;
 } PStdPushConstants;
 
 typedef struct PStdGizmoPushConstants {
-    uint64_t vertex_buffer;
-    uint64_t camera_buffer;
-    uint64_t light_buffer;
+    PBufferAddress vertex_buffer;
+    PBufferAddress camera_buffer;
+    PBufferAddress light_buffer;
     float scale;
 } PStdGizmoPushConstants;
 
 typedef struct PStdSkyboxPushConstants {
-    uint64_t camera_buffer;
+    PBufferAddress camera_buffer;
     uint32_t cubemap_id;
     uint32_t sampler_id;
 } PStdSkyboxPushConstants;

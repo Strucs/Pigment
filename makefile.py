@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import powermake
 
@@ -86,6 +87,8 @@ def on_test(config: powermake.Config, args: list[str]):
 
 
 def on_install(config: powermake.Config, location: str | None):
+    location = location or "./install"
+
     for header in powermake.get_files("./src/**/*.h"):
         public_path = build_common.public_path_for_header(header)
         if public_path is not None:
@@ -94,6 +97,11 @@ def on_install(config: powermake.Config, location: str | None):
     config.add_exported_headers("external/volk/volk.h")
 
     powermake.default_on_install(config, location)
+
+    shaders_dir = os.path.join(location, "shaders", "pigment", "std")
+    os.makedirs(shaders_dir, exist_ok=True)
+    for shader in powermake.get_files("./shaders/*.slang"):
+        shutil.copy2(shader, shaders_dir)
 
 
 powermake.run(

@@ -132,8 +132,8 @@ int main(void)
     PSampleCount samples = pigment_get_sample_count(renderer);
 
     PShaderStageDesc stages[] = {
-        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) test_vert_spv, .code_size = (uint32_t) sizeof(test_vert_spv)},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) test_frag_spv, .code_size = (uint32_t) sizeof(test_frag_spv)},
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = test_vert_spv,   .entry_point = "vertexMain", .code_size = (uint32_t) sizeof(test_vert_spv)},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = test_frag_spv, .entry_point = "fragmentMain", .code_size = (uint32_t) sizeof(test_frag_spv)},
     };
     PPipelineDesc pipeline_desc = {
         .layout                 = layout,

@@ -33,7 +33,7 @@ extern "C" {
 typedef struct PMaterials PMaterials;
 typedef struct PLights PLights;
 
-typedef struct PIGMENT_ALIGN(16) PInstanceData {
+typedef struct PInstanceData {
     PMat4 transform;
     uint32_t material_id;
 } PInstanceData;

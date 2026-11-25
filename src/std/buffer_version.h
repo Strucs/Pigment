@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#include "pigment/defines.h"
+#include "pigment/buffers.h"
 
 /**
  * @brief Immutable GPU data prepared for one or more recording workers.
@@ -45,7 +45,7 @@ typedef struct PStdBufferVersion PStdBufferVersion;
  *
  * @return Buffer address, or 0 on invalid input.
  */
-PIGMENT_API uint64_t pigment_std_buffer_version_address(Pigment* pigment, const PStdBufferVersion* version, PCommandBuffer* cmd);
+PIGMENT_API PBufferAddress pigment_std_buffer_version_address(Pigment* pigment, const PStdBufferVersion* version, PCommandBuffer* cmd);
 
 /**
  * @brief Get the number of records in a prepared version.

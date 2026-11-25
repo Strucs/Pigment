@@ -22,8 +22,8 @@
 
 #include <string.h>
 
-#include "default_vert_spv.h"
-#include "default_frag_spv.h"
+#include "default_shader_vert_spv.h"
+#include "default_shader_frag_spv.h"
 #include "light_gizmo_vert_spv.h"
 #include "light_gizmo_frag_spv.h"
 #include "skybox_vert_spv.h"
@@ -107,8 +107,8 @@ PPipelineDesc default_graphic_pipeline_desc(Pigment* pigment, PStdBindless* bind
     desc.layout = default_pipeline_layout(pigment, bindless);
 
     static const PShaderStageDesc stages[] = {
-        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) default_vert_spv, .code_size = (uint32_t) default_vert_spv_size},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) default_frag_spv, .code_size = (uint32_t) default_frag_spv_size},
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = default_shader_vert_spv,   .entry_point = P_STD_VERTEX_ENTRY_POINT, .code_size = (uint32_t) default_shader_vert_spv_size},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = default_shader_frag_spv, .entry_point = P_STD_FRAGMENT_ENTRY_POINT, .code_size = (uint32_t) default_shader_frag_spv_size},
     };
 
     desc.stages             = stages;
@@ -156,8 +156,8 @@ PPipelineDesc default_light_gizmo_pipeline_desc(Pigment* pigment, PStdBindless* 
     desc.layout = default_light_gizmo_pipeline_layout(pigment, bindless);
 
     static const PShaderStageDesc stages[] = {
-        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) light_gizmo_vert_spv, .code_size = (uint32_t) light_gizmo_vert_spv_size},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) light_gizmo_frag_spv, .code_size = (uint32_t) light_gizmo_frag_spv_size},
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = light_gizmo_vert_spv,   .entry_point = P_STD_VERTEX_ENTRY_POINT, .code_size = (uint32_t) light_gizmo_vert_spv_size},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = light_gizmo_frag_spv, .entry_point = P_STD_FRAGMENT_ENTRY_POINT, .code_size = (uint32_t) light_gizmo_frag_spv_size},
     };
 
     desc.stages             = stages;
@@ -204,8 +204,8 @@ PPipelineDesc default_skybox_pipeline_desc(Pigment* pigment, PStdBindless* bindl
     desc.layout = default_skybox_pipeline_layout(pigment, bindless);
 
     static const PShaderStageDesc stages[] = {
-        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) skybox_vert_spv, .code_size = (uint32_t) skybox_vert_spv_size},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) skybox_frag_spv, .code_size = (uint32_t) skybox_frag_spv_size},
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = skybox_vert_spv,   .entry_point = P_STD_VERTEX_ENTRY_POINT, .code_size = (uint32_t) skybox_vert_spv_size},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = skybox_frag_spv, .entry_point = P_STD_FRAGMENT_ENTRY_POINT, .code_size = (uint32_t) skybox_frag_spv_size},
     };
 
     desc.stages             = stages;
@@ -252,8 +252,8 @@ PPipelineDesc default_crt_pipeline_desc(Pigment* pigment, PStdBindless* bindless
     desc.layout = default_crt_pipeline_layout(pigment, bindless);
 
     static const PShaderStageDesc stages[] = {
-        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) crt_vert_spv, .code_size = (uint32_t) crt_vert_spv_size},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) crt_frag_spv, .code_size = (uint32_t) crt_frag_spv_size},
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = crt_vert_spv,   .entry_point = P_STD_VERTEX_ENTRY_POINT, .code_size = (uint32_t) crt_vert_spv_size},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = crt_frag_spv, .entry_point = P_STD_FRAGMENT_ENTRY_POINT, .code_size = (uint32_t) crt_frag_spv_size},
     };
 
     desc.stages             = stages;

@@ -34,7 +34,7 @@ extern "C" {
  */
 typedef struct PMaterials PMaterials;
 
-typedef struct PIGMENT_ALIGN(16) PMaterialDesc {
+typedef struct PMaterialDesc {
     PVec4 base_color_factor;
     PVec4 emissive_factor;
 

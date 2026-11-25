@@ -2,7 +2,28 @@ import os
 
 import powermake
 
-from scripts import build_common
+from scripts import build_common, build_slang
+
+SLANG_SHADERS: list[build_slang.SlangShader] = [
+    build_slang.SlangShader(
+        source=f"shaders/{module}.slang",
+        entry_point=f"pigment.std.{module}.{entry_point}",
+        stage=stage,
+        name=f"{module}_{suffix}",
+        include_dirs=["shaders"],
+        profile=(
+            "spirv_1_5+nonuniformqualifier"
+            if stage == "fragment"
+            and module in ("default_shader", "skybox", "crt", "ndc")
+            else None
+        ),
+    )
+    for module in ("default_shader", "light_gizmo", "skybox", "crt", "ndc")
+    for stage, entry_point, suffix in (
+        ("vertex", "vertexMain", "vert"),
+        ("fragment", "fragmentMain", "frag"),
+    )
+]
 
 
 def build_pigment(config: powermake.Config, shared: bool) -> str:
@@ -10,11 +31,7 @@ def build_pigment(config: powermake.Config, shared: bool) -> str:
     shaders_dir = os.path.join(os.path.dirname(config.lib_build_directory), "shaders")
 
     build_common.copy_public_headers(include_dir)
-    build_common.build_shaders(
-        "./shaders/*",
-        shaders_dir,
-        ["src/std/pipeline_loader.c", "src/std/canvas/canvas.c"],
-    )
+    build_slang.build_shaders(config, SLANG_SHADERS, shaders_dir)
 
     config.add_includedirs(
         include_dir,

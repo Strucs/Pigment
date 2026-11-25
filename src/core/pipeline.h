@@ -150,8 +150,8 @@ typedef struct PSpecializationInfo {
  */
 typedef struct PShaderStageDesc {
     PShaderStageFlags stage;    // Exactly one P_SHADER_STAGE_* bit.
-    const uint32_t* code;
-    uint32_t code_size;         // SPIR-V size in bytes.
+    const void* code;           // Shader code.
+    uint32_t code_size;         // Code size in bytes.
     const char* entry_point;    // NULL = "main".
     const PSpecializationInfo* specialization;
 } PShaderStageDesc;

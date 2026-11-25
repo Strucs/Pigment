@@ -35,7 +35,7 @@ typedef enum PLightType {
     P_LIGHT_TYPE_SPOT        = 3,
 } PLightType;
 
-typedef struct PIGMENT_ALIGN(16) PLightDesc {
+typedef struct PLightDesc {
     PVec3 position;
     uint32_t type;
 

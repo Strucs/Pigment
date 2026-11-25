@@ -1,5 +1,4 @@
 ---
-Language: C
 AccessModifierOffset: 4
 AlignArrayOfStructures: Right
 AlignConsecutiveAssignments:

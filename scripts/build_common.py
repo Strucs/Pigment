@@ -1,10 +1,7 @@
 import os
 import shutil
-import subprocess
 
 import powermake
-
-from scripts import spv_to_header
 
 INTERNAL_HEADERS = {"structs.h", "internal.h", "std_internal.h"}
 
@@ -44,30 +41,6 @@ def public_path_for_header(file: str) -> str | None:
     return None
 
 
-def compile_shader_to_spv(src: str, dst: str, deps: list[str]) -> bool:
-    if os.path.exists(dst):
-        dst_mtime = os.path.getmtime(dst)
-        sources_mtime = max(os.path.getmtime(p) for p in [src, __file__] + deps)
-        if dst_mtime >= sources_mtime:
-            return False
-    target_spv = "spv1.5" if os.path.splitext(src)[1] == ".frag" else "spv1.6"
-    command = [
-        "glslc",
-        src,
-        "-o",
-        dst,
-        "--target-env=vulkan1.3",
-        f"--target-spv={target_spv}",
-    ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        print(result.stdout)
-        print(result.stderr)
-        raise SystemExit(f"glslc failed for {src}")
-    print(f"[shader] {src} -> {dst}")
-    return True
-
-
 def copy_public_headers(include_dir: str):
     for file in powermake.get_files("./src/**/*.h"):
         target_path = public_path_for_header(file)
@@ -81,41 +54,6 @@ def copy_public_headers(include_dir: str):
     if os.path.exists(volk_header):
         powermake.utils.makedirs(include_dir)
         shutil.copy2(volk_header, os.path.join(include_dir, "volk.h"))
-
-
-def build_shaders(
-    src_pattern: str, shaders_dst_dir: str, touch_files: list[str]
-) -> bool:
-    all_files = list(powermake.get_files(src_pattern))
-    shader_files = [
-        f
-        for f in all_files
-        if os.path.splitext(f)[1]
-        in (".vert", ".frag", ".comp", ".geom", ".tesc", ".tese", ".mesh", ".task")
-    ]
-    if not shader_files:
-        return False
-
-    powermake.utils.makedirs(shaders_dst_dir)
-    shader_includes = [
-        f for f in all_files if os.path.splitext(f)[1] in (".glsl", ".h")
-    ]
-
-    any_shader_rebuilt = False
-    for file in shader_files:
-        base = os.path.basename(file)
-        name, ext = os.path.splitext(base)
-        dst = os.path.join(shaders_dst_dir, f"{name}_{ext[1:]}.spv")
-        if compile_shader_to_spv(file, dst, shader_includes):
-            any_shader_rebuilt = True
-        spv_to_header.generate(dst, shaders_dst_dir)
-
-    if any_shader_rebuilt:
-        for c_file in touch_files:
-            if os.path.exists(c_file):
-                os.utime(c_file, None)
-
-    return True
 
 
 def is_msvc(config: powermake.Config) -> bool:

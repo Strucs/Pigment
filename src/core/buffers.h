@@ -23,6 +23,11 @@ extern "C" {
 
 #include "defines.h"
 
+/**
+ * @brief GPU address of a buffer.
+ */
+typedef uint64_t PBufferAddress;
+
 typedef enum PBufferUsage {
     P_BUFFER_USAGE_VERTEX         = 1U << 0,
     P_BUFFER_USAGE_INDEX          = 1U << 1,
@@ -73,7 +78,7 @@ PIGMENT_API PBuffer* pigment_create_buffer(Pigment* pigment, const PBufferDesc* 
 PIGMENT_API void pigment_destroy_buffer(Pigment* pigment, PBuffer* buffer);
 
 PIGMENT_API void* pigment_buffer_mapped(PBuffer* buffer);
-PIGMENT_API uint64_t pigment_buffer_address(PBuffer* buffer);
+PIGMENT_API PBufferAddress pigment_buffer_address(PBuffer* buffer);
 PIGMENT_API uint64_t pigment_buffer_size(PBuffer* buffer);
 
 PIGMENT_API void pigment_buffer_flush(Pigment* pigment, PBuffer* buffer, uint64_t offset, uint64_t size);

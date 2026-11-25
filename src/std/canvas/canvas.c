@@ -16,6 +16,8 @@
 
 #include "canvas.h"
 
+#include "std_internal.h"
+
 #include "pigment/pigment.h"
 
 #include "pigment/std/bindless.h"
@@ -29,7 +31,7 @@
 #define DEFAULT_INITIAL_INSTANCES 4096
 #define FULL_UV ((const float[4]) {0.0f, 0.0f, 1.0f, 1.0f})
 
-typedef struct PIGMENT_ALIGN(16) PStdCanvasInstance {
+typedef struct PStdCanvasInstance {
     float transform[4][4];
     float color[4];
     float uv_rect[4];
@@ -38,7 +40,7 @@ typedef struct PIGMENT_ALIGN(16) PStdCanvasInstance {
 } PStdCanvasInstance;
 
 typedef struct PStdCanvasPushConstants {
-    uint64_t instance_buffer_address;
+    PBufferAddress instance_buffer_address;
 } PStdCanvasPushConstants;
 
 typedef struct PStdCanvasBlendSlot {
@@ -151,8 +153,8 @@ PStdCanvas* pigment_std_create_canvas(Pigment* pigment, const PStdCanvasConfig* 
     }
 
     static const PShaderStageDesc stages[] = {
-        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = (const uint32_t*) ndc_vert_spv, .code_size = (uint32_t) ndc_vert_spv_size},
-        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = (const uint32_t*) ndc_frag_spv, .code_size = (uint32_t) ndc_frag_spv_size},
+        {  .stage = P_SHADER_STAGE_VERTEX_BIT, .code = ndc_vert_spv,   .entry_point = P_STD_VERTEX_ENTRY_POINT, .code_size = (uint32_t) ndc_vert_spv_size},
+        {.stage = P_SHADER_STAGE_FRAGMENT_BIT, .code = ndc_frag_spv, .entry_point = P_STD_FRAGMENT_ENTRY_POINT, .code_size = (uint32_t) ndc_frag_spv_size},
     };
 
     PFormat color_format = config->color_format;
@@ -289,7 +291,7 @@ void pigment_std_draw_canvas(Pigment* pigment, PCommandBuffer* cmd, const PStdCa
     }
     PDescriptorSet* set = pigment_std_bindless_version_set(pigment, batch->bindless, cmd);
     pigment_bind_pipeline(pigment, cmd, batch->pipeline);
-    pigment_cmd_bind_descriptor_sets(pigment, cmd, batch->pipeline, 0, &set, 1, NULL, 0);
+    pigment_cmd_bind_descriptor_sets(pigment, cmd, batch->pipeline, PIGMENT_BINDLESS_SET, &set, 1, NULL, 0);
     pigment_cmd_set_cull(pigment, cmd, P_CULL_MODE_NONE, P_FRONT_FACE_COUNTER_CLOCKWISE);
     pigment_cmd_set_depth(pigment, cmd, P_FALSE, P_FALSE, P_COMPARE_OP_ALWAYS);
     PStdCanvasPushConstants push = {

@@ -128,7 +128,7 @@ void destroy_buffer_versions(Pigment* pigment, PStdBufferVersions* buffers)
     *buffers = (PStdBufferVersions) {0};
 }
 
-uint64_t pigment_std_buffer_version_address(Pigment* pigment, const PStdBufferVersion* version, PCommandBuffer* cmd)
+PBufferAddress pigment_std_buffer_version_address(Pigment* pigment, const PStdBufferVersion* version, PCommandBuffer* cmd)
 {
     if(pigment == NULL || version == NULL || cmd == NULL)
     {

@@ -23,7 +23,7 @@
 
 static PResult pipeline_build_from_desc(Pigment* pigment, const PPipelineDesc* desc, PPipelineBuild** out);
 static void pipeline_build_destroy(Pigment* pigment, PPipelineBuild* build);
-static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size);
+static VkShaderModule create_shader_module(Pigment* pigment, const void* code, uint32_t shader_size);
 static PResult shader_stage_build_from_desc(Pigment* pigment, const PShaderStageDesc* desc, PShaderStageBuild* build, VkPipelineShaderStageCreateInfo* out_stage);
 static void shader_stage_build_destroy(Pigment* pigment, PShaderStageBuild* build);
 static VkPipelineVertexInputStateCreateInfo configure_vertex_input_state_create_info(const VkVertexInputBindingDescription* bindings, uint32_t binding_count, const VkVertexInputAttributeDescription* attributes, uint32_t attribute_count);
@@ -825,14 +825,14 @@ void pigment_bind_pipeline(Pigment* pigment, PCommandBuffer* cmd, PPipeline* pip
     }
 }
 
-static VkShaderModule create_shader_module(Pigment* pigment, const uint32_t* code, uint32_t shader_size)
+static VkShaderModule create_shader_module(Pigment* pigment, const void* code, uint32_t shader_size)
 {
     VkShaderModule shader_module;
 
     VkShaderModuleCreateInfo create_info = {
         .sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = shader_size,
-        .pCode    = code
+        .pCode    = (const uint32_t*) code
     };
 
     if(vkCreateShaderModule(pigment->device->logical_device, &create_info, &pigment->vk_alloc, &shader_module) != VK_SUCCESS)
