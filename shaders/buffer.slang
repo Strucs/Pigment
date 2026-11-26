@@ -20,6 +20,11 @@ namespace pigment.std {
     public struct Buffer<T, let access : Access = Access.Read> {
         private Ptr<T, access, AddressSpace.Device> address;
 
+        public Ptr<T, access, AddressSpace.Device> ptr_at(uint index)
+        {
+            return address + index;
+        }
+
         public __subscript(uint index)->T
         {
             get {

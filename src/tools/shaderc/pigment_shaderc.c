@@ -21,51 +21,85 @@
 #include <stdlib.h>
 #include <string.h>
 
-uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_size, PShaderType type, const char* file_name, uint32_t* spv_size)
+PShadercCompiler* pigment_shaderc_create(void)
 {
-    shaderc_compiler_t compiler         = NULL;
-    shaderc_compile_options_t options   = NULL;
-    shaderc_compilation_result_t result = NULL;
-    uint32_t* spv                       = NULL;
-
-    compiler = shaderc_compiler_initialize();
+    PShadercCompiler* compiler = shaderc_compiler_initialize();
     if(compiler == NULL)
     {
         fprintf(stderr, "pigment_shaderc: failed to initialize shader compiler.\n");
-        goto FREE;
     }
 
-    options = shaderc_compile_options_initialize();
+    return compiler;
+}
+
+void pigment_shaderc_destroy(PShadercCompiler* compiler)
+{
+    if(compiler != NULL)
+    {
+        shaderc_compiler_release(compiler);
+    }
+}
+
+uint32_t* pigment_shaderc_compile_glsl(
+    PShadercCompiler* compiler,
+    const char* source_code,
+    uint32_t source_size,
+    PShaderStageFlags stage,
+    const char* file_name,
+    uint32_t* spv_size
+)
+{
+    if(spv_size == NULL)
+    {
+        return NULL;
+    }
+    *spv_size = 0;
+    if(compiler == NULL || source_code == NULL)
+    {
+        return NULL;
+    }
+
+    shaderc_compile_options_t options = shaderc_compile_options_initialize();
     if(options == NULL)
     {
         fprintf(stderr, "pigment_shaderc: failed to initialize shader compile options.\n");
-        goto FREE;
+        return NULL;
     }
 
+    shaderc_compilation_result_t result = NULL;
+    uint32_t* spv                       = NULL;
     shaderc_shader_kind kind;
-    switch(type)
+    switch(stage)
     {
-        case P_SHADER_TYPE_VERTEX:
+        case P_SHADER_STAGE_VERTEX_BIT:
             kind = shaderc_glsl_vertex_shader;
             break;
-        case P_SHADER_TYPE_FRAGMENT:
+        case P_SHADER_STAGE_FRAGMENT_BIT:
             kind = shaderc_glsl_fragment_shader;
             break;
-        case P_SHADER_TYPE_MESH:
+        case P_SHADER_STAGE_COMPUTE_BIT:
+            kind = shaderc_glsl_compute_shader;
+            break;
+        case P_SHADER_STAGE_MESH_BIT:
             kind = shaderc_glsl_mesh_shader;
             shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
             break;
-        case P_SHADER_TYPE_TASK:
+        case P_SHADER_STAGE_TASK_BIT:
             kind = shaderc_glsl_task_shader;
             shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
             break;
         default:
-            fprintf(stderr, "pigment_shaderc: unsupported shader type.\n");
+            fprintf(stderr, "pigment_shaderc: expected one supported shader stage.\n");
             goto FREE;
     }
-    const char* input_name = file_name ? file_name : "default";
 
-    result = shaderc_compile_into_spv(compiler, source_code, source_size, kind, input_name, "main", options);
+    const char* input_name = file_name ? file_name : "default";
+    result                 = shaderc_compile_into_spv(compiler, source_code, source_size, kind, input_name, "main", options);
+    if(result == NULL)
+    {
+        fprintf(stderr, "pigment_shaderc: failed to allocate shader compilation result.\n");
+        goto FREE;
+    }
 
     if(shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success)
     {
@@ -73,19 +107,27 @@ uint32_t* pigment_shaderc_compile_glsl(const char* source_code, uint32_t source_
         goto FREE;
     }
 
-    *spv_size             = (uint32_t) shaderc_result_get_length(result);
-    const uint32_t* bytes = (const uint32_t*) shaderc_result_get_bytes(result);
+    size_t size = shaderc_result_get_length(result);
+    if(size > UINT32_MAX)
+    {
+        fprintf(stderr, "pigment_shaderc: SPIR-V result exceeds the maximum size.\n");
+        goto FREE;
+    }
 
-    spv = (uint32_t*) malloc(*spv_size);
+    spv = malloc(size);
     if(spv != NULL)
     {
-        memcpy(spv, bytes, *spv_size);
+        memcpy(spv, shaderc_result_get_bytes(result), size);
+        *spv_size = (uint32_t) size;
     }
 
 FREE:
-    shaderc_result_release(result);
+    if(result != NULL)
+    {
+        shaderc_result_release(result);
+    }
+
     shaderc_compile_options_release(options);
-    shaderc_compiler_release(compiler);
 
     return spv;
 }
