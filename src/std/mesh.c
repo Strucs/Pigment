@@ -164,9 +164,10 @@ PBufferAddress pigment_std_mesh_vertex_address(PMeshBuffers* mesh)
 
 void pigment_std_mesh_use(Pigment* pigment, PCommandBuffer* cmd, PMeshBuffers* mesh)
 {
-    if(pigment == NULL || cmd == NULL || mesh == NULL || mesh->vertex_buffer == NULL)
+    if(pigment == NULL || cmd == NULL || mesh == NULL)
     {
         return;
     }
     pigment_cmd_use_buffer(pigment, cmd, mesh->vertex_buffer);
+    pigment_cmd_use_buffer(pigment, cmd, mesh->index_buffer);
 }

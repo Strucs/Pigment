@@ -78,11 +78,11 @@ PIGMENT_API void pigment_std_destroy_mesh(Pigment* pigment, PMeshBuffers* mesh);
 PIGMENT_API PBufferAddress pigment_std_mesh_vertex_address(PMeshBuffers* mesh);
 
 /**
- * @brief Stamp the mesh's vertex buffer as used by `cmd`.
+ * @brief Record the use of the mesh's vertex and index buffers in `cmd`.
  *
  * @param pigment Pigment instance.
  * @param cmd Command buffer.
- * @param mesh Mesh to stamp.
+ * @param mesh Mesh whose buffers are used.
  */
 PIGMENT_API void pigment_std_mesh_use(Pigment* pigment, PCommandBuffer* cmd, PMeshBuffers* mesh);
 
